@@ -61,7 +61,7 @@ outcomes must be recorded as such rather than called recovery success.
 
 Sources: [NVIDIA NVAPI GPU interfaces](https://docs.nvidia.com/nvapi/group__gpu.html),
 [NVIDIA SMI restart documentation](https://docs.nvidia.com/deploy/nvidia-smi/index.html).
-Execution results will be added only after the restart has actually been tested.
+The completed local test is recorded below.
 
 ### Prepared recovery controls
 
@@ -86,3 +86,50 @@ request is uncertain until the original process exits, even if queries look
 healthy. Poll attempts are limited, but individual Windows PnP/CIM calls do not
 have a hard timeout; this is not a guaranteed recovery mechanism for a hung
 kernel/hardware state.
+
+## Completed targeted restart and compute follow-up
+
+[gpu-driver-restart-result.json](gpu-driver-restart-result.json) records one
+targeted request on this card. The vendor tool printed `Driver restarted
+successfully` and `All done.` The independent worker was ready beforehand;
+its later check found problem code 0 and performed no enable action. Windows
+boot-session comparison was unchanged. No firmware or selector write was made.
+
+The first controller attempt aborted before issuing a restart because Windows
+PowerShell 5.1 converted a null backup-path argument for `File.Replace` into an
+invalid path. Commit `eae6ced` corrected this with `NullString.Value`; isolated
+file replacement and read-only GPU preflight passed before the actual request.
+
+The actual run exposed a separate process-reporting limitation: its unretained
+process handles produced null exit codes. Consequently the original controller
+recorded `HealthRecovered=false` even though PnP was OK and the kernel driver
+was running. That result and the missing restart exit code remain in the
+published evidence. Commit `f306a93` retains handles before waiting; Windows
+PowerShell tests verified exit codes 0 and 7 and a real read-only NVIDIA identity
+query. The GPU restart was not repeated to test this reporting correction.
+
+Separate follow-up checks recorded two healthy PnP/kernel/NVML snapshots, both
+with NVIDIA query exit code 0. The original request process had exited before
+the retained lock was manually cleared. Fresh ordinary processes then produced:
+
+| Check | Result |
+|---|---|
+| CUDA smoke | All 655,360 integer outputs exact; cleanup completed |
+| NVAPI/CUDA metadata | 7680 cores, 30 raw subpipes, 60 CUDA SMs; unchanged architecture and unsupported GSP query |
+| FP32 pedantic GEMM | 7 complete outputs verified; 30.395 nominal TF/s |
+| FP16 input / FP32 accumulation GEMM | 7 complete outputs verified; 76.294 nominal TF/s |
+| BF16 input / FP32 accumulation GEMM | 7 complete outputs verified; 76.460 nominal TF/s |
+
+The GEMM checks cover 352,321,536 FP32 values using the same uniform fixtures as
+the stock baseline. Rates remain workload measurements, not evidence of changed
+hardware limits. Full results:
+[CUDA](gpu-smoke-after-driver-restart.json),
+[NVAPI](gpu-nvapi-after-driver-restart.json), and
+[cuBLAS](gpu-cublas-after-driver-restart.json).
+Run `python research/ada-4070ti/check_restart_results.py` to verify the saved
+output hashes and source hashes offline.
+
+This establishes a vendor-reported restart followed by usable compute on this
+host without a PC reboot. It does not prove a particular driver unload sequence,
+preservation of an active application's CUDA context, recovery from an injected
+GPU fault, selector persistence, or an unlock. No such fault was injected.
