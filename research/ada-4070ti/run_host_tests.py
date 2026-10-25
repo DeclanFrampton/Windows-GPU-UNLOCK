@@ -75,6 +75,15 @@ def main():
          # The Linux fixture intentionally narrows byte writes, negates an
          # unsigned checksum and shadows an optional integration variable.
          ['/I' + str(port / 'vendor'), '/wd4244', '/wd4146', '/wd4456']),
+        ('capture-cases', [HERE / 'host_capture_cases.c', diagnostic / 'src/core.c',
+                           diagnostic / 'src/sample.c', diagnostic / 'src/platform.c'],
+         include + ['/I' + str(diagnostic / 'tests'), '/FI' + str(build / 'host_build_id.h')]),
+        ('platform-cases', [HERE / 'host_platform_cases.c', diagnostic / 'src/core.c',
+                            diagnostic / 'src/platform.c'],
+         include + ['/I' + str(diagnostic / 'tests')]),
+        ('parser-cases', [HERE / 'host_parser_cases.c', port / 'vendor/vbios_610.c'],
+         ['/I' + str(root / 'tests'), '/I' + str(port / 'vendor'),
+          '/wd4244', '/wd4146', '/wd4456']),
     ]
     summaries = []
     for label, sources, flags in targets:
@@ -91,6 +100,8 @@ def main():
             'reviewed_source_commit': provenance['commit'],
             'source_inputs_checked': len(provenance['files']),
             'compiler_version': env.get('VCTOOLSVERSION'),
+            'research_source_sha256': {p.name: sha(p) for p in
+                [Path(__file__), *sorted(HERE.glob('host_*_cases.c'))]},
             'firmware_built': False, 'hardware_accessed': False,
             'targets': summaries}
     (build / 'host-results.json').write_text(json.dumps(data, indent=2) + '\n', encoding='utf-8')

@@ -79,3 +79,60 @@ Initial compiler-environment quoting was corrected before the successful run.
 The runner writes artifacts/capture/logs only under this folder's ignored
 `build/` tree. All services in the application test are fake function pointers;
 no Windows device handles, driver loading, MMIO or PCI access is performed.
+
+## Additional capture and parser cases
+
+The runner now also compiles three local harnesses against the pinned upstream
+fixtures, without changing the external checkout. The local files include the
+upstream test sources to reuse their fake protocol callbacks; renamed upstream
+`main` functions are not called by the extra harnesses.
+[extended-host-results.json](extended-host-results.json) records all six targets.
+
+| Additional harness | Result and observation |
+|---|---|
+| [host_capture_cases.c](host_capture_cases.c) | 10 capture-failure scenarios, 2,832 assertions, all pass |
+| [host_platform_cases.c](host_platform_cases.c) | 5 graph cases, 13 malformed PE cases and 1 overlap characterization; 103 assertions, all pass |
+| [host_parser_cases.c](host_parser_cases.c) | 14 extra signature/descriptor checks, all pass |
+
+The 10 capture cases inject final PCI failure/drift, final chip failure/drift and
+a changed PROM signature during copying; register cases use zero/all-ones chip,
+a later `badf` sentinel and failed/changed final chip. Every incomplete PROM
+emits `sha256:null` and `hex:null`; attempts stay bounded at 258/259. Register
+failures stop at 1, 2 or 23 reads as expected. All cases retain
+`unlock_eligibility:false`. This validates containment against these fake
+callbacks, not MMIO read safety or bus behavior on real hardware.
+
+### Characterized observation limits
+
+The five graph cases reproduce `complete:true` while respectively:
+
+- The target has a retrievable path but is absent from the enumerated handles.
+- Driver binding is unavailable.
+- Loaded image is unavailable.
+- The image has an unsupported machine type, yielding `code:null`.
+- An ownership agent is outside the enumerated inventory, yielding `agent:null`.
+
+The graph still reports `atomic_snapshot:false` and `release_authorized:false`.
+These passing characterization assertions document existing behavior, not a fix
+or a successful hardware qualification. A consumer needing an exact ownership
+proof must check resolved target/edge identities and required driver code fields
+in addition to graph enumeration status. An API returning success is insufficient.
+
+The PE boundary tests reject invalid machine/magic, empty/oversized executable
+sections, inconsistent relocation directory pairs and malformed block sizes.
+One deliberately unusual **loaded-memory** fixture places an eight-byte DIR64
+relocation at RVA `0x1fc`, crossing code start `0x200`. `LoadedCodeView` accepts
+it and counts zero code relocations because its test considers the relocation's
+starting address. Thus `relocations_in_code:0` means no counted relocation starts
+in code, not proof that no relocation overlaps code. This test does not show an
+exploitable path, alter a driver or apply a relocation; no production parser was
+changed. Any future consumer needing overlap exclusion should validate the
+whole relocation span and supported relocation type.
+
+The ROM tests cover signature version 15, unsupported version 16, missing mask
+bits, oversized masks, zero signature size, null output and multiplication
+overflow. A synthetic descriptor with two signatures parses successfully while
+its image geometry differs from the exact hardware profile. Parsing validates
+structure, not authenticity, execution safety or `GuAd104Prepare` admission.
+No board-owned ROM was read or supplied. No sanitizer or real-firmware coverage
+is claimed by these assertion-based checks.
