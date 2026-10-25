@@ -134,3 +134,57 @@ python research/ada-4070ti/check_gpu_results.py
 
 Numerical coverage here uses unit input operands and seeded accumulators. It is
 not a general numerical-accuracy validation over arbitrary matrices or formats.
+
+## FP16 accumulation: numerical boundary and matched-shape control
+
+[gpu_precision_probe.py](gpu_precision_probe.py) ran a one-warp recurrence with
+FP16 inputs and either FP16 or FP32 accumulator/output registers. Runtime seed
+16 and four chain offsets spaced by 16 were used. All 512 output values per
+case were checked for finiteness and consistency within their chain.
+[gpu-precision-result.json](gpu-precision-result.json) records the observations.
+
+| Iterations | Ideal chain values | FP16 accumulation observed | FP32 accumulation |
+|---|---|---|---|
+| 768 | 12304, 12320, 12336, 12352 | matches all | matches all |
+| 1000 | 16016, 16032, 16048, 16064 | matches all | matches all |
+| 1024 | 16400, 16416, 16432, 16448 | **16384 for every chain** | matches all |
+| 1536 | 24592, 24608, 24624, 24640 | **16384 for every chain** | matches all |
+
+The initial long FP16 timing attempt failed its exact-output check and produced
+no accepted timing result. Even representability of the ideal final sum does
+not establish exact intermediate MMA arithmetic. NVIDIA specifies minimum half
+precision for FP16 accumulators and leaves internal accumulation order/rounding
+unspecified ([PTX MMA precision rules](https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#warp-level-matrix-instructions-mma)).
+The observed plateau is a property of this recurrence on this card/driver, not
+proof of a hardware defect, speed-selector state or a general FP16 error bound.
+An initial PTX initialization form was also rejected by JIT compilation; the
+accepted source uses register operands and explicit rounding for packed addition.
+
+[gpu_accumulation_probe.py](gpu_accumulation_probe.py) therefore uses **768**
+iterations for its accepted timing comparison, preserving exact-output checks.
+Both modes have the same PTX matrix shape and nominal MMA count, with alternating
+mode order across seven pairs and varied per-launch seeds. Nominal work is
+12,079,595,520 FLOPs per launch. All 491,520 values are verified per timed launch;
+the FP16 output occupies 983,040 bytes and FP32 occupies 1,966,080 bytes.
+
+This is matched nominal work, not identical machine work: accumulator register
+counts, output bytes and potentially compiler scheduling/occupancy differ. Short
+kernel timing, background activity and imperfect ordering balance also affect
+the ratio. No machine-code disassembly or selector readout was obtained.
+Results from three fresh processes are retained in `gpu-accumulation-result-*.json`.
+They must not be used to calculate an unlock percentage.
+
+| Accepted short control, nominal TFLOP/s | Process 1 | Process 2 | Process 3 |
+|---|---:|---:|---:|
+| FP16 input / FP16 accumulation | 61.350 | 65.017 | 53.865 |
+| FP16 input / FP32 accumulation | 40.730 | 40.871 | 45.552 |
+| Rate ratio | 1.506 | 1.591 | 1.183 |
+
+The ratio varies substantially; a precise hardware-rate limitation cannot be
+deduced from this short synthetic control. Its useful findings are the observed
+numerical recurrence boundary, a working exact-output comparison below that
+boundary and the need for a more representative library workload.
+[check_accumulation_results.py](check_accumulation_results.py) independently
+recalculates the timing arithmetic and CPU byte-pattern hashes for both the
+precision cases and all three control processes.
+[gpu-accumulation-summary.json](gpu-accumulation-summary.json) records that check.
