@@ -1,7 +1,7 @@
 # Live Windows driver investigation
 
 Date: 2026-10-25. Desktop/application disruption was explicitly authorized;
-the execution boundary remains no planned PC reboot or firmware/selector write.
+the execution boundary remains no planned PC reboot, firmware upload or direct selector write.
 No remote push is authorized. Earlier ordinary-compute evidence is in
 [CUBLAS-BASELINE.md](CUBLAS-BASELINE.md).
 
@@ -62,3 +62,27 @@ outcomes must be recorded as such rather than called recovery success.
 Sources: [NVIDIA NVAPI GPU interfaces](https://docs.nvidia.com/nvapi/group__gpu.html),
 [NVIDIA SMI restart documentation](https://docs.nvidia.com/deploy/nvidia-smi/index.html).
 Execution results will be added only after the restart has actually been tested.
+
+### Prepared recovery controls
+
+[gpu_driver_restart.ps1](gpu_driver_restart.ps1) defaults to a read-only
+preflight. It passed the exact PnP/PCI/initial-health checks on this machine.
+`-Execute` requires an elevated process and permits one targeted vendor restart.
+A create-new lock prevents concurrent tests and remains after an uncertain
+outcome for manual inspection. Exact PnP instance identifiers remain private
+under ignored `build/`; published evidence omits their unique suffixes.
+
+[gpu_restart_recovery.ps1](gpu_restart_recovery.ps1) runs independently from the
+desktop/controller and confirms elevation before the request. It exits if the
+controller cancels or finishes. After 45 seconds it may enable the exact
+originally enabled device only if the device is explicitly disabled (problem
+code 22) and the original restart process is no longer present. It does not
+overlap an enable with a still-running restart. There are no automatic reset
+retries, driver removal/installation or reboot actions.
+
+JSON state/readiness publication is atomic. Command completion, observed device
+health and subsequent CUDA correctness are distinct outcomes. A timed-out
+request is uncertain until the original process exits, even if queries look
+healthy. Poll attempts are limited, but individual Windows PnP/CIM calls do not
+have a hard timeout; this is not a guaranteed recovery mechanism for a hung
+kernel/hardware state.
