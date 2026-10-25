@@ -32,7 +32,7 @@ $restartIssued=$false
 function Publish-Json($Path,$Value) {
     $temporary=$Path+'.new'
     [IO.File]::WriteAllText($temporary,($Value | ConvertTo-Json -Depth 8),[Text.UTF8Encoding]::new($false))
-    if ([IO.File]::Exists($Path)) { [IO.File]::Replace($temporary,$Path,$null) }
+    if ([IO.File]::Exists($Path)) { [IO.File]::Replace($temporary,$Path,[NullString]::Value) }
     else { [IO.File]::Move($temporary,$Path) }
 }
 $directory = Join-Path $PSScriptRoot ('build\driver-restart-' + [guid]::NewGuid().ToString('N'))

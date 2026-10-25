@@ -11,7 +11,7 @@ if ($state.InstanceId -notlike 'PCI\VEN_10DE&DEV_2782&SUBSYS_51321462&REV_A1\*' 
 function Publish-Json($Path,$Value) {
     $temporary=$Path+'.new'
     [IO.File]::WriteAllText($temporary,($Value | ConvertTo-Json -Depth 8),[Text.UTF8Encoding]::new($false))
-    if ([IO.File]::Exists($Path)) { [IO.File]::Replace($temporary,$Path,$null) }
+    if ([IO.File]::Exists($Path)) { [IO.File]::Replace($temporary,$Path,[NullString]::Value) }
     else { [IO.File]::Move($temporary,$Path) }
 }
 Publish-Json (Join-Path $OutputDirectory 'recovery-ready.json') @{ Ready=$true; Elevated=$true; Pid=$PID }
