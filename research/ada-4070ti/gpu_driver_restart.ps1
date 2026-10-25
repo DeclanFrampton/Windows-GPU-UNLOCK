@@ -71,6 +71,9 @@ try {
         -RedirectStandardOutput (Join-Path $directory 'restart-stdout.txt') `
         -RedirectStandardError (Join-Path $directory 'restart-stderr.txt')
     $restartIssued=$true
+    # Retain the native handle before waiting; Windows PowerShell otherwise
+    # may return a null ExitCode for a process that has already exited.
+    $resetHandle=$reset.Handle
     Publish-Json (Join-Path $directory 'restart-issued.json') @{ ResetPid=$reset.Id }
     if ($reset.WaitForExit(20000)) {
         $report.RestartCommandCompleted=$true; $report.RestartExitCode=$reset.ExitCode
@@ -92,6 +95,7 @@ try {
             '-i',$targetBus,'--query-gpu=name,pci.device_id,pci.sub_device_id','--format=csv,noheader,nounits') `
             -RedirectStandardOutput $out -RedirectStandardError $err
         $nvmlOk=$false
+        $queryHandle=$query.Handle
         if ($query.WaitForExit(5000)) {
             $query.Refresh()
             if ($query.ExitCode -eq 0) {
