@@ -13,6 +13,9 @@ The [host-only follow-up](HOST-TESTS.md) reproduces the diagnostic/parser mock
 tests and adds synthetic failure/topology cases. It characterizes incomplete
 graph/code observations without booting firmware or reading this card's ROM.
 
+[Further offline execution](OFFLINE-FOLLOWUP.md) adds guard-backed deterministic
+ROM mutations and records their bounded CPU-only results.
+
 ## What this machine contributes
 
 [inventory.json](inventory.json) is the existing Windows inventory collector's

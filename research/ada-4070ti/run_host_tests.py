@@ -63,6 +63,10 @@ def main():
     build.mkdir(exist_ok=True)
     (build / 'host_build_id.h').write_text(
         '#define PROBE_BUILD_ID "host-only-synthetic-4e7fefcc"\n', encoding='ascii')
+    (build / 'quiet_parser.h').write_text(
+        '#define GPU_UNLOCK_DIAGNOSTIC_H\n'
+        '#define GU_NOTE(...) ((void)0)\n#define GU_ERROR(...) ((void)0)\n'
+        '#define GU_DIAG(result) (result)\n', encoding='ascii')
     include = ['/I' + str(port / 'vendor/edk2/Include'),
                '/I' + str(port / 'vendor/edk2/Include/X64')]
     common = [compiler, '/nologo', '/W4', '/WX', '/Od', '/std:c11', '/UNDEBUG',
@@ -87,6 +91,9 @@ def main():
         ('parser-cases', [HERE / 'host_parser_cases.c', port / 'vendor/vbios_610.c'],
          ['/I' + str(root / 'tests'), '/I' + str(port / 'vendor'),
           '/wd4244', '/wd4146', '/wd4456']),
+        ('guarded-rom-cases', [HERE / 'host_guarded_rom_cases.c', port / 'vendor/vbios_610.c'],
+         ['/I' + str(root / 'tests'), '/I' + str(port / 'vendor'),
+          '/FI' + str(build / 'quiet_parser.h'), '/wd4244', '/wd4146', '/wd5105']),
     ]
     summaries = []
     for label, sources, flags in targets:
