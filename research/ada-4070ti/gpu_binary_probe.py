@@ -56,6 +56,8 @@ def prepare():
 
 
 class BinaryCuda(Cuda):
+    loaded_metadata = {}
+
     def load(self, ptx, name):
         manifest = json.loads(MANIFEST.read_text())
         digest = hashlib.sha256(ptx.encode('ascii')).hexdigest()
@@ -71,6 +73,22 @@ class BinaryCuda(Cuda):
         self.call('cuModuleLoadData', c.byref(module), image)
         self.modules.append(module)
         self.call('cuModuleGetFunction', c.byref(function), module, name.encode('ascii'))
+        self.lib.cuFuncGetAttribute.argtypes = [c.POINTER(c.c_int), c.c_int, c.c_void_p]
+        self.lib.cuFuncGetAttribute.restype = c.c_int
+        self.lib.cuOccupancyMaxActiveBlocksPerMultiprocessor.argtypes = [
+            c.POINTER(c.c_int), c.c_void_p, c.c_int, c.c_size_t]
+        self.lib.cuOccupancyMaxActiveBlocksPerMultiprocessor.restype = c.c_int
+        metadata = {}
+        for label, attribute in [('registers', 4), ('local_bytes_per_thread', 3),
+                                 ('static_shared_bytes', 1), ('binary_version', 6)]:
+            value = c.c_int()
+            self.call('cuFuncGetAttribute', c.byref(value), attribute, function)
+            metadata[label] = value.value
+        blocks = c.c_int()
+        self.call('cuOccupancyMaxActiveBlocksPerMultiprocessor', c.byref(blocks), function, 256, 0)
+        metadata['predicted_max_active_blocks_per_sm_at_256_threads'] = blocks.value
+        metadata['limit'] = 'Resource-based occupancy prediction; not measured achieved occupancy.'
+        self.loaded_metadata[mode] = metadata
         return function
 
 
@@ -80,12 +98,14 @@ def run():
     import contextlib
     import io
     probe.Cuda = BinaryCuda
+    BinaryCuda.loaded_metadata = {}
     output = io.StringIO()
     with contextlib.redirect_stdout(output):
         probe.main()
     report = json.loads(output.getvalue())
     report['scope'] = 'exact offline-compiled cubin accumulation comparison; no selector inference'
     report['binary_manifest_sha256'] = sha(MANIFEST)
+    report['loaded_function_metadata'] = BinaryCuda.loaded_metadata
     report['executed_cubin_sha256'] = {mode: item['cubin_sha256'] for mode, item in
                                       json.loads(MANIFEST.read_text())['kernels'].items()}
     report['research_source_sha256'][Path(__file__).name] = sha(Path(__file__))
