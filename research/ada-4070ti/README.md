@@ -9,6 +9,10 @@ uses the same GPU/subsystem IDs on a different platform and VBIOS. Its published
 evidence was checked offline. The source constraints below describe this
 Windows-GPU-UNLOCK baseline, not an absence of Ada work elsewhere.
 
+The [host-only follow-up](HOST-TESTS.md) reproduces the diagnostic/parser mock
+tests and adds synthetic failure/topology cases. It characterizes incomplete
+graph/code observations without booting firmware or reading this card's ROM.
+
 ## What this machine contributes
 
 [inventory.json](inventory.json) is the existing Windows inventory collector's

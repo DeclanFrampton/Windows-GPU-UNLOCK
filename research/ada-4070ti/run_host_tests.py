@@ -10,6 +10,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import struct
 
 HERE = Path(__file__).resolve().parent
 
@@ -48,11 +49,13 @@ def main():
     env_result = subprocess.run(
         '"' + str(comspec) + '" /d /s /c ""' + str(vcvars) + '" >nul && set"',
         capture_output=True, text=True, timeout=60, check=True)
-    env = os.environ.copy()
+    env = {key.upper(): value for key, value in os.environ.items()}
     for line in env_result.stdout.splitlines():
         if '=' in line and not line.startswith('='):
             key, value = line.split('=', 1)
             env[key.upper()] = value
+    for key in ('CL', '_CL_', 'LINK', '_LINK_'):
+        env.pop(key, None)
     compiler = Path(env['VCTOOLSINSTALLDIR']) / 'bin/Hostx64/x64/cl.exe'
     port = root / 'windows/ad104-msi'
     diagnostic = port / 'diagnostic'
@@ -62,7 +65,7 @@ def main():
         '#define PROBE_BUILD_ID "host-only-synthetic-4e7fefcc"\n', encoding='ascii')
     include = ['/I' + str(port / 'vendor/edk2/Include'),
                '/I' + str(port / 'vendor/edk2/Include/X64')]
-    common = [compiler, '/nologo', '/W4', '/WX', '/Od', '/std:c11',
+    common = [compiler, '/nologo', '/W4', '/WX', '/Od', '/std:c11', '/UNDEBUG',
               '/D_CRT_SECURE_NO_WARNINGS', '/TC']
     targets = [
         ('upstream-host', [diagnostic / 'tests/host_tests.c',
@@ -93,8 +96,16 @@ def main():
         run(common + flags + ['/Fo' + str(objects) + os.sep,
                              '/Fe' + str(exe)] + sources,
             HERE, env, label + '-compile', build)
+        # Refuse to execute anything other than an x64 Windows console PE.
+        image = exe.read_bytes()
+        pe = struct.unpack_from('<I', image, 0x3c)[0]
+        if (image[:2] != b'MZ' or image[pe:pe+4] != b'PE\0\0' or
+            struct.unpack_from('<H', image, pe+4)[0] != 0x8664 or
+            struct.unpack_from('<H', image, pe+24+68)[0] != 3):
+            raise RuntimeError(label + ' is not an x64 console executable')
         result = run([exe], HERE, env, label, build)
         summaries.append({'target': label, 'exit_code': result.returncode,
+                          'pe_subsystem': 'Windows console (3)',
                           'summary': result.stdout.strip(), 'binary_sha256': sha(exe)})
     data = {'scope': 'Windows console executables; synthetic UEFI callbacks and ROMs only',
             'reviewed_source_commit': provenance['commit'],

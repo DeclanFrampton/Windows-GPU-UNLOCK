@@ -26,20 +26,20 @@ in `complete`. Driver-binding/image lookup failures and unavailable code details
 are represented separately; a successful graph walk can still have missing code.
 It always emits `atomic_snapshot:false` and `release_authorized:false`.
 Consumers must check the required fields individually; neither `complete:true`
-nor a code hash can authorize display release. We will characterize missing
-target/owner IDs and malformed loaded-code cases with synthetic handles.
+nor a code hash can authorize display release. Missing target/owner IDs and
+malformed loaded-code cases were characterized with synthetic handles below.
 
 ## Execution boundary and status
 
-The planned runner compiles ordinary Windows console executables with mocked
-UEFI services and synthetic ROM arrays. It will not invoke either upstream
+The runner compiles ordinary Windows console executables with mocked UEFI
+services and synthetic ROM arrays. It does not invoke either upstream
 `Build.ps1`, produce an EFI, install/load a driver or use a device interface.
-ROM patch tests, if exercised, modify synthetic process memory only. External
+ROM patch tests modify synthetic process memory only. External
 source remains pinned and unmodified. Build artifacts stay in an ignored local
 `build/` directory; only research sources, summaries and hashes are committed.
 
-This first checkpoint records source inspection only. Test execution and results
-will be appended in a later commit after the host binaries have actually run.
+The first commit recorded source inspection only. Subsequent execution checkpoints
+and results follow, each committed locally without a remote push.
 
 ## Baseline execution checkpoint
 
@@ -69,7 +69,10 @@ python research/ada-4070ti/run_host_tests.py ../gpu-unlock-ada-research `
   --vcvars 'C:/Program Files (x86)/Microsoft Visual Studio/2019/BuildTools/VC/Auxiliary/Build/vcvars64.bat'
 ```
 
-Builds use `/W4 /WX`, assertions enabled. The Linux parser fixture needs explicit
+Builds use `/W4 /WX`. The final runner clears inherited `CL`, `_CL_`, `LINK` and
+`_LINK_` option variables and explicitly undefines `NDEBUG` to keep assertions
+enabled. It verifies each binary is an x64 Windows console PE (subsystem 3)
+before executing it. The Linux parser fixture needs explicit
 MSVC warning exemptions for byte narrowing (4244), unsigned checksum negation
 (4146) and an optional integration variable shadow (4456). The diagnostic tests
 do not use these exemptions. VS 18's setup script failed on this installation;
@@ -136,3 +139,46 @@ its image geometry differs from the exact hardware profile. Parsing validates
 structure, not authenticity, execution safety or `GuAd104Prepare` admission.
 No board-owned ROM was read or supplied. No sanitizer or real-firmware coverage
 is claimed by these assertion-based checks.
+
+## Python analyzer cross-check and final rerun
+
+[check_host_analyzer.py](check_host_analyzer.py) verifies the same upstream input
+hashes before importing the reviewed pure-JSON `analyze.py`. It feeds the host
+application's synthetic capture and the 15 new capture/graph outputs to that
+analyzer. No GPU module or upstream command-line entry point is imported/run.
+Eight test methods pass, with additional subcases for corrupted/short PROM,
+wrong sample counts/offsets/final chip, malformed code/graph edges, mismatched
+build IDs, target counts and claimed release/write authority.
+
+The 10 partial captures remain explicitly incomplete. All five limited graph
+captures are accepted as `platform_graph_complete:true`, including the absent
+target case. Four have no verified code capture; the absent-target case has one.
+All keep `unlock_ready:false` and `hardware_support_validated:false`.
+Their `stable_fingerprint` values are identical because that field covers the
+target inventory subset, not the platform ownership graph. It must not be
+interpreted as proof that ownership is stable across captures.
+
+[host-analyzer-results.json](host-analyzer-results.json) records these cases.
+[final-host-results.json](final-host-results.json) supersedes the earlier local
+execution snapshots for the current runner; all six console targets passed again
+after the compiler-option review correction. The source hashes embedded in those
+results bind the local harness versions. No hardware support is established.
+
+After the runner command above, execute:
+
+```powershell
+python research/ada-4070ti/check_host_analyzer.py ../gpu-unlock-ada-research
+```
+
+### Consequence for a future capture plan
+
+A proposed capture consumer should separately report target resolution, edge
+resolution, required driver-code availability, register/PROM completeness and
+identity stability. Keep these as observations with no write eligibility.
+If exact relocation-free code is required, validate relocation span/type rather
+than only counting starting addresses. A future generic sampler also needs
+reviewed resource discovery before changing the present exact BDF/BAR guard.
+These are implementation requirements for later work, not a reason to boot the
+current probe or relax its admission checks.
+
+Compiler-option isolation was applied and all affected targets were rerun.
