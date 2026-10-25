@@ -4,6 +4,11 @@ Date: 2026-10-25. Source baseline: `849f996` (current main when cloned).
 Status: **inventory collected; unlock not attempted; Ada support not established**.
 This is a research contribution, not a new hardware profile or execution guide.
 
+**Follow-up:** [an existing external AD104 Windows reference](EXTERNAL-AD104.md)
+uses the same GPU/subsystem IDs on a different platform and VBIOS. Its published
+evidence was checked offline. The source constraints below describe this
+Windows-GPU-UNLOCK baseline, not an absence of Ada work elsewhere.
+
 ## What this machine contributes
 
 [inventory.json](inventory.json) is the existing Windows inventory collector's
@@ -62,9 +67,9 @@ Use [COMPATIBILITY.en.md](../../docs/COMPATIBILITY.en.md) and
 | Benchmark selection | [build.ps1](../../benchmark/build.ps1) accepts `3090`, `3090ti`, `3070ti`; the matching CUDA sources select a fixed model at `0000:01:00.0` | Existing benchmark executables are not a 4070 Ti baseline tool; no benchmark was built or run here |
 
 These are source constraints, not a hardware observation that Ada is permanently
-incompatible or that it needs an unlock. Whether this mechanism applies to Ada,
-whether this card has any analogous limitation, and whether a change would improve
-performance are **open questions**.
+incompatible or that this machine needs an unlock. External evidence now exists
+for an AD104 Windows reference; applicability to this particular VBIOS/platform
+and any performance benefit on this machine remain **open questions**.
 
 ## CUDA benchmark portability is a separate question
 
