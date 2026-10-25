@@ -20,6 +20,9 @@ ROM mutations and records their bounded CPU-only results.
 tests and read-only telemetry on this 4070 Ti after the owner's explicit GPU-use
 authorization. These measurements do not establish unlock support.
 
+[Live driver investigation](LIVE-DRIVER.md) records documented NVAPI queries and
+the separately controlled restart/recovery investigation.
+
 ## What this machine contributes
 
 [inventory.json](inventory.json) is the existing Windows inventory collector's
