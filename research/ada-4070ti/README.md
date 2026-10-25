@@ -16,6 +16,10 @@ graph/code observations without booting firmware or reading this card's ROM.
 [Further offline execution](OFFLINE-FOLLOWUP.md) adds guard-backed deterministic
 ROM mutations and records their bounded CPU-only results.
 
+**Actual GPU execution:** [GPU-FINDINGS.md](GPU-FINDINGS.md) records stock CUDA
+tests and read-only telemetry on this 4070 Ti after the owner's explicit GPU-use
+authorization. These measurements do not establish unlock support.
+
 ## What this machine contributes
 
 [inventory.json](inventory.json) is the existing Windows inventory collector's
