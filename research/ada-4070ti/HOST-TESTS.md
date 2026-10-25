@@ -160,9 +160,10 @@ interpreted as proof that ownership is stable across captures.
 
 [host-analyzer-results.json](host-analyzer-results.json) records these cases.
 [final-host-results.json](final-host-results.json) supersedes the earlier local
-execution snapshots for the current runner; all six console targets passed again
+execution snapshots for the six-target checkpoint; all six console targets passed again
 after the compiler-option review correction. The source hashes embedded in those
 results bind the local harness versions. No hardware support is established.
+The later seven-target run is documented in [OFFLINE-FOLLOWUP.md](OFFLINE-FOLLOWUP.md).
 
 After the runner command above, execute:
 

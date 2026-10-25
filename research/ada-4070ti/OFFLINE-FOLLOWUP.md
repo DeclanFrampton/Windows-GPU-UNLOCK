@@ -46,3 +46,62 @@ and input-write check for truncations. It is deterministic bounded mutation,
 not coverage-guided fuzzing, a sanitizer run, exhaustive format validation,
 real-ROM analysis or a claim about hardware safety. Errors are caught inside
 the console test process; no firmware or GPU transaction is attempted.
+
+## Separate raw-field observations
+
+[capture_observations.py](capture_observations.py) is a standard-library-only
+research supplement to the upstream capture analyzer. It emits separate fields
+for reported register/PROM completeness, target index resolution, recorded edge
+index resolution and coverage of recorded GPU-agent code bytes. Code hashes are
+recomputed when bytes exist. It does not replace the upstream schema/consistency
+checks or interpret UEFI open roles.
+
+That distinction is necessary: the pinned `UefiSpec.h` documentation for
+`OpenProtocol` explicitly permits `ControllerHandle == NULL` for agents outside
+the UEFI Driver Model. An application-exclusive open need not have a
+`DriverBinding` code record. A null slot or missing code therefore describes
+literal recorded-field coverage, **not failure of a required ownership rule**.
+The tool does not label a capture ownership-complete or decide which code or
+controller fields a role requires. Unknown/no edges remain unknown rather than
+vacuously complete. `open_roles_interpreted` is always false.
+
+Fifteen self-contained tests cover missing/null/duplicate fields, correct and
+incorrect code hashes, code-budget omission, optional-controller and application
+roles, unknown roles, non-mutation of input and absence of execution authority.
+Even the fully populated synthetic control cannot return hardware support,
+atomicity, release authorization or unlock readiness.
+
+[run_observation_cases.py](run_observation_cases.py) then applies the supplement
+to 16 fixtures produced by the C host tests. Results are in
+[capture-observation-results.json](capture-observation-results.json):
+
+| Synthetic graph | Target index resolved | Recorded GPU-agent code coverage |
+|---|---|---|
+| Agent absent from enumeration | true | false |
+| Binding missing | true | false |
+| Image missing | true | false |
+| Code malformed | true | false |
+| Target absent from enumeration | false | true |
+
+All five still carry the upstream-reported graph completeness flag. Separating
+the dimensions exposes why the flag cannot stand in for the other observations.
+The remaining fixtures include the baseline and ten partial capture failures;
+their incomplete register/PROM fields remain incomplete. These are synthetic
+results, not observations from this B550 machine.
+
+After the console runner in HOST-TESTS.md:
+
+```powershell
+python -m unittest discover -s research/ada-4070ti -p test_capture_observations.py
+python research/ada-4070ti/run_observation_cases.py
+python research/ada-4070ti/capture_observations.py research/ada-4070ti/build/host-capture.json
+```
+
+The last command prints a sanitized summary to stdout; it writes no report and
+does not upload data. It treats origin and supplied completeness flags as
+unauthenticated claims, and never produces a write-enabled profile. The original
+eight-method upstream-analyzer cross-check also passed again against the newly
+generated fixtures.
+
+The report describes literal coverage observations; no production driver,
+firmware or admission policy changed.
