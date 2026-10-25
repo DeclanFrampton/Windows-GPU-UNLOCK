@@ -23,6 +23,10 @@ authorization. These measurements do not establish unlock support.
 [Live driver investigation](LIVE-DRIVER.md) records documented NVAPI queries and
 the separately controlled restart/recovery investigation.
 
+[Exact-binary tensor characterization](BINARY-TENSOR-RESULT.md) adds inspected
+machine instructions, resource queries and a three-process batched control
+with a measured 1.957–1.964x accumulation-rate ratio on the stock driver.
+
 ## What this machine contributes
 
 [inventory.json](inventory.json) is the existing Windows inventory collector's
