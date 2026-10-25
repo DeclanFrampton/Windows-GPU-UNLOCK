@@ -40,3 +40,42 @@ source remains pinned and unmodified. Build artifacts stay in an ignored local
 
 This first checkpoint records source inspection only. Test execution and results
 will be appended in a later commit after the host binaries have actually run.
+
+## Baseline execution checkpoint
+
+The baseline has now run on Windows using MSVC 14.29.30133 (VS 2019 Build Tools).
+[run_host_tests.py](run_host_tests.py) verifies 68 upstream file hashes against
+[host-source-provenance.json](host-source-provenance.json), then compiles three
+ordinary console programs. It does not invoke upstream build/install scripts.
+
+| Program | Observed result |
+|---|---|
+| Diagnostic application with fake UEFI services | 5,530 checks passed |
+| Platform graph and loaded-image parser mocks | 179 checks passed |
+| VBIOS/FWSEC parser with synthetic fixture | Passed, including every length 0–4095, valid expansion-chain variants and malformed ranges |
+
+[baseline-host-results.json](baseline-host-results.json) preserves the local
+compiler version, results and executable hashes. Hashes identify this run's
+artifacts, not a promise of reproducible MSVC binaries. Upstream's printed phrase
+"full EFI application executed against host mocks" describes calling `UefiMain`
+inside a normal console test; no EFI image was produced or executed by firmware.
+The parser test's optional real-ROM argument was not supplied. Its patch routine
+operates only on synthetic in-process arrays.
+
+Reproduce with a separately obtained checkout of the pinned fork:
+
+```powershell
+python research/ada-4070ti/run_host_tests.py ../gpu-unlock-ada-research `
+  --vcvars 'C:/Program Files (x86)/Microsoft Visual Studio/2019/BuildTools/VC/Auxiliary/Build/vcvars64.bat'
+```
+
+Builds use `/W4 /WX`, assertions enabled. The Linux parser fixture needs explicit
+MSVC warning exemptions for byte narrowing (4244), unsigned checksum negation
+(4146) and an optional integration variable shadow (4456). The diagnostic tests
+do not use these exemptions. VS 18's setup script failed on this installation;
+the working VS 2019 environment was used without changing either installation.
+Initial compiler-environment quoting was corrected before the successful run.
+
+The runner writes artifacts/capture/logs only under this folder's ignored
+`build/` tree. All services in the application test are fake function pointers;
+no Windows device handles, driver loading, MMIO or PCI access is performed.
