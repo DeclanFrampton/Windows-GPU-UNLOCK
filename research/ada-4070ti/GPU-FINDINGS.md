@@ -5,6 +5,10 @@ freeing competing GPU applications. This phase uses the stock CUDA driver for
 bounded user-space compute, without raw PCI/MMIO, firmware, driver installation,
 reset or clock/power configuration changes. Nothing is pushed remotely.
 
+**Representative library workload:** [CUBLAS-BASELINE.md](CUBLAS-BASELINE.md)
+records 4096×4096 GEMM on this GPU with FP32, FP16 and BF16 input modes and
+full-output validation. The register probes below are separate experiments.
+
 ## Hardware-derived observations
 
 | Observed field | Value |
