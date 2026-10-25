@@ -10,14 +10,43 @@ installation or boot configuration change was made.
 
 | 4096×4096 GEMM, seven event-timed samples | Median ms | TFLOP/s |
 |---|---:|---:|
-| FP32 input/output, pedantic FP32 compute | 4.501632 | 30.5306 |
-| FP16 input, FP32 accumulation/output | 1.773920 | 77.4780 |
-| BF16 input, FP32 accumulation/output | 1.824448 | 75.3322 |
+| FP32 input/output, pedantic FP32 compute | 4.501632 | 30.5309 |
+| FP16 input, FP32 accumulation/output | 1.773920 | 77.4775 |
+| BF16 input, FP32 accumulation/output | 1.824448 | 75.3318 |
 
 Raw evidence: [gpu-cublas-result-1.json](gpu-cublas-result-1.json).
 The CUDA API, library/source hashes, mode settings and point telemetry are
 recorded. The cuBLAS version getter returned 120600. Point temperatures after
 the modes were 35 C; this is not a peak-temperature measurement.
+
+## Three-process baseline
+
+Two additional fresh processes used the same source, DLLs and numerical policy.
+Raw evidence: [process 2](gpu-cublas-result-2.json),
+[process 3](gpu-cublas-result-3.json).
+
+| TFLOP/s, process medians | Process 1 | Process 2 | Process 3 | Median of medians |
+|---|---:|---:|---:|---:|
+| FP32 pedantic | 30.531 | 29.374 | 29.750 | **29.750** |
+| FP16 / FP32 accumulation | 77.478 | 75.525 | 76.729 | **76.729** |
+| BF16 / FP32 accumulation | 75.332 | 75.802 | 73.806 | **75.332** |
+
+All **63 timed output matrices** passed the complete CPU-pattern hash check,
+covering **1,056,964,608 FP32 output values** across the processes. Pilot matrices
+also passed. All recorded cleanup calls succeeded. Temperature point samples
+across the complete runs were **31–47 C**, including after warmup; samples after
+each mode alone do not describe the highest observed point, much less a peak.
+The configured power limit remained 285 W in every recorded point sample.
+
+[gpu-cublas-summary.json](gpu-cublas-summary.json) records the summary.
+[check_cublas_results.py](check_cublas_results.py) independently recalculates
+medians/TFLOP/s, validates configurations, source/library hashes and identity
+point samples, and generates all seven complete expected CPU matrix hashes.
+It reads files only, with no GPU or library loading:
+
+```powershell
+python research/ada-4070ti/check_cublas_results.py
+```
 
 ## Method and numerical checks
 
