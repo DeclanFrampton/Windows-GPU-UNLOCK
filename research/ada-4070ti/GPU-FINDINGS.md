@@ -103,3 +103,34 @@ python research/ada-4070ti/gpu_tensor_probe.py
 Instruction semantics: [NVIDIA PTX ISA, warp-level MMA](https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#warp-level-matrix-instructions-mma).
 CUDA uses an ordinary private logical context; destroying that context is not a
 physical GPU reset.
+
+## Three-process repeatability of the FP32-accumulation probe
+
+Two additional fresh processes used the same source and launch configuration.
+[gpu-tensor-result-2.json](gpu-tensor-result-2.json) and
+[gpu-tensor-result-3.json](gpu-tensor-result-3.json) preserve their raw samples.
+
+| Nominal TFLOP/s, process medians | Process 1 | Process 2 | Process 3 | Median of medians |
+|---|---:|---:|---:|---:|
+| FP16 input / FP32 accumulation | 69.779 | 72.305 | 66.504 | **69.779** |
+| BF16 input / FP32 accumulation | 71.810 | 71.764 | 69.932 | **71.764** |
+
+These 42 timed launches verified **20,643,840 FP32 output values**, in addition
+to the pilot and warmup checks. Point temperature readings across the three
+processes were 32–34 C. Process-to-process spread and per-launch outliers confirm
+that these short runs are not a tightly controlled peak-throughput measurement.
+
+[check_gpu_results.py](check_gpu_results.py) recalculates event medians, nominal
+work/rates and source/configuration agreement without accessing the GPU. It also
+independently constructs the expected final CPU byte patterns and matches every
+recorded final output hash, including the smoke result. This is a check of the
+recorded evidence, not a re-creation of the earlier GPU execution. It verifies
+matching GPU/driver/VBIOS/power-limit point samples across these runs.
+[gpu-results-summary.json](gpu-results-summary.json) contains the summary.
+
+```powershell
+python research/ada-4070ti/check_gpu_results.py
+```
+
+Numerical coverage here uses unit input operands and seeded accumulators. It is
+not a general numerical-accuracy validation over arbitrary matrices or formats.
