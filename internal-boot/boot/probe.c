@@ -251,6 +251,23 @@ static VOID ObserveResources(CAPTURE *c,EFI_HANDLE handle,EFI_PCI_IO_PROTOCOL *i
     } else Problem(c,"ad104-resource-format",EFI_UNSUPPORTED);
   } else Problem(c,"ad104-resource-unavailable-or-changed",EFI_NOT_READY);
   if(raw && c->Table->BootServices->FreePool(raw)!=EFI_SUCCESS)Problem(c,"ad104-resource-free",EFI_DEVICE_ERROR);
+  /* Get/Supported are query operations. Never call Set/Enable/Disable here. */
+  if(!io->Attributes || !ProbeUnchanged(c,handle,io,cfg,loc)) {
+    Problem(c,"ad104-attributes-precheck",EFI_NOT_READY);return;
+  }
+  UINT64 current=0,supported=0;
+  EFI_STATUS got=io->Attributes(io,EfiPciIoAttributeOperationGet,0,&current);
+  EFI_STATUS support=io->Attributes(io,EfiPciIoAttributeOperationSupported,0,&supported);
+  if(!ProbeUnchanged(c,handle,io,cfg,loc)) {
+    Problem(c,"ad104-attributes-changed",EFI_NOT_READY);return;
+  }
+  Text(c,"ad104-pci-attributes get-status=0x");Hex(c,got,16);
+  Text(c," supported-status=0x");Hex(c,support,16);
+  if(got==EFI_SUCCESS && support==EFI_SUCCESS) {
+    Text(c," current=0x");Hex(c,current,16);
+    Text(c," supported=0x");Hex(c,supported,16);
+  }
+  Text(c," query-only=1 unlock-eligibility=0");End(c);
 }
 #endif
 #ifdef GU_PROBE_AD104_MSI
