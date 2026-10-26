@@ -211,6 +211,9 @@ static VOID ProbeAd104Bar(CAPTURE *c,EFI_PCI_IO_PROTOCOL *io,EFI_FILE_PROTOCOL *
     0x1183a4,0x625f04,0x1fa7c8,0x1fa82c,0x1fa830,0x824148,0x8241e0,0x840100};
   UINTN location[4];UINT8 *page=NULL;UINT32 values[22],chip=0,signature=0;
   EFI_STATUS s;
+  Text(c,"ad104-admission command=0x");Hex(c,cfg[1]&0xffffU,4);
+  Text(c," memory-enabled=");Hex(c,(cfg[1]>>1)&1U,1);
+  Text(c," bus-master-enabled=");Hex(c,(cfg[1]>>2)&1U,1);End(c);
   if(!io->GetLocation || io->GetLocation(io,&location[0],&location[1],&location[2],&location[3])!=EFI_SUCCESS ||
      location[0]>65535 || location[1]>255 || location[2]>31 || location[3]>7 || !ProbeEnvelope(c,io,cfg)) {
     Problem(c,"ad104-envelope",EFI_UNSUPPORTED);return;

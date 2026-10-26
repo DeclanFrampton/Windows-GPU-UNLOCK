@@ -51,6 +51,7 @@ int main(void) {
   Check(AdRun(A_OK)==EFI_SUCCESS,"AD104 bus 0B capture succeeds in mock");
   Check(S.RegReads==23 && S.PromReads==PROM_DWORDS+1,"22 registers, final chip and bounded PROM");
   Check(Logged("capture-complete=1") && Logged("unlock-eligibility=0"),"complete observation never unlock eligibility");
+  Check(Logged("ad104-admission command=0x0002 memory-enabled=1 bus-master-enabled=0"),"admission reports the sampled command bits");
   Check(Dumps==2 && RootOpens==2,"only caller launch root receives PROM and image");
   const int early[]={A_SUBSYSTEM,A_REVISION,A_BDF_DRIFT,A_BAD_BUS,A_BAD_SEGMENT,A_BAD_DEVICE,A_BAD_FUNCTION,
     G_BME,G_MEM_OFF,G_BAD_BAR,G_BAD_RESOURCE,G_MULTI,G_BAD_CHECKSUM,G_PROTOCOL_CHANGED};
@@ -59,6 +60,8 @@ int main(void) {
     Check(!S.RegReads && !S.PromReads,"refused envelope performs zero MMIO");
   }
   Check(AdRun(A_BAD_CHIP)==EFI_NOT_READY && S.RegReads==1 && !S.PromReads,"chip mismatch stops all further reads");
+  Check(AdRun(G_BME)==EFI_NOT_READY && !S.RegReads && !S.PromReads,"active bus mastering still refuses all MMIO");
+  Check(Logged("bus-master-enabled=1") && Logged("ad104-envelope"),"BME refusal records command evidence");
   for(int index=1;index<=22;index++)for(int mode=A_REG_ERROR;mode<=A_SENTINEL;mode++) {
     FaultIndex=index;Check(AdRun(mode)==EFI_NOT_READY,"register error or sentinel invalidates capture");
     Check(!S.PromReads && !Logged("capture-complete=1"),"register failure precedes PROM");
