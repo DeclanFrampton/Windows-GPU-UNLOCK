@@ -17,8 +17,12 @@ system boot partition is MBR/NTFS rather than a GPT ESP. `-WindowsMbr` identifie
 that current system boot partition without converting, mounting, formatting or
 modifying it. This option is confined to the diagnostic build.
 
-These changes remove software preparation assumptions. They have **host/build
-verification only**, not a physical boot or Windows-recovery result.
+These changes remove software preparation assumptions. The first physical
+diagnostic boot on 2026-10-26 produced a partial capture and refused AD104
+MMIO/PROM reads because bus mastering was enabled. See
+[the first-boot findings](AD104-FIRST-BOOT.en.md) and the accompanying
+[sanitized evidence](ad104-first-boot-evidence.json). Automatic Windows return
+and complete GPU capture are not established by that log.
 
 ## AD104 read admission
 
@@ -116,4 +120,8 @@ Host-only checks:
   verifier (no imports/IAT/delay imports). Its local manifest marks hardware
   testing false. No generated EFI or proprietary boot image is committed.
 
-No diagnostic was booted, no USB was staged, and no unlock was attempted.
+The build manifest describes the artifact at build time; its hardware-testing
+flag remains false and is not a live test ledger. Subsequently, the artifact
+was staged on a separately authorized spare USB and booted by the user. The
+first-boot report records that physical result separately from the host checks.
+No unlock was attempted, and the capture admission guard remains unchanged.

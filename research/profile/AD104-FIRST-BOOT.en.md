@@ -12,6 +12,10 @@ ignored host archive and each copy's SHA-256 matched its USB source. All 32
 image sizes matched their diagnostic records. Raw firmware images and the
 machine's full protocol graph are not included here.
 
+The [sanitized evidence summary](ad104-first-boot-evidence.json) records the
+observed values and integrity checks without raw firmware or machine paths.
+This follows the earlier [4070 Ti research contribution, PR #26](https://github.com/impacifist/Windows-GPU-UNLOCK/pull/26).
+
 The USB EFI SHA-256 remained
 `ce222b6034453da0a53532a39d36afdc6f2741bd0ca482d45ec19aa5ba6880f4`.
 
@@ -31,6 +35,11 @@ The USB EFI SHA-256 remained
 - Firmware exposed one GOP with a 1024 x 768 framebuffer. The log also
   contains driver bindings and protocol ownership observations for offline
   analysis; their presence alone does not identify a safe release procedure.
+- The log enumerates 33 driver bindings, including one with a null image
+  handle, and records 32 image dumps. The implementation's dump ceiling is
+  100, not 32. These are driver-binding image snapshots, not a dump of every
+  loaded image or the complete system firmware; repeated image handles can
+  also produce duplicate snapshots. Coverage needs ownership analysis.
 - Initial handoff preparation returned success and the loaded-image graph
   includes Windows Boot Manager. The log ends at the diagnostic result before
   the Windows start call; it does not prove which boot path eventually returned
