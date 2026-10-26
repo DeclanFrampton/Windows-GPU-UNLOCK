@@ -2,6 +2,26 @@
 
 [English](AD104-OWNER-CHILD-PLAN.en.md) | 한국어
 
+## 정정 및 구현된 후보
+
+아래의 기존 DisconnectController 제안은 폐기되었습니다. EDK II의
+[CoreDisconnectController](https://github.com/tianocore/edk2/blob/master/MdeModulePkg/Core/Dxe/Hand/DriverSupport.c)는
+선택한 자식이 유일한 자식이면 자식 없는 부모 Stop을 이어서 호출할 수 있습니다.
+NULL이 아닌 자식만 지정해도 자식 콜백을 격리하지 못합니다. 이는 참조 구현의
+발견이며 이 OEM 코어의 정확한 구현을 입증하지는 않습니다.
+
+새 선택적 후보는 새로 고정한 바인딩의 `Stop(binding, gpu, 1, &child)`를 직접
+호출합니다. 로컬 DriverBinding.h는 시작된 컨트롤러와 생성된 유효 자식이라는
+조건하에 직접 호출을 허용합니다. 현재 BY_DRIVER/유일 BY_CHILD_CONTROLLER 관계,
+탐색된 유효 핸들, 정확한 이미지/코드/Stop 지문과 두 번의 사전 상태 비교를
+요구합니다. Start는 호출하지 않으며 과거 Start 실행은 현재 관계에서 추론하고
+별도로 추적한 것은 아닙니다.
+
+[열두 번째 시험 계약](AD104-TWELFTH-BOOT.ko.md)을 참조하세요. 구현, RAM 수명주기
+검사 193개와 네이티브 빌드는 완료했지만 실제 실행은 하지 않았습니다. USB 준비는
+새 직접 호출/GOP 제거 위험 경계 수락을 기다립니다. 아래는 정정 이유를 위한
+이전 조사 제안입니다.
+
 상태: 조사 계약입니다. 구현, USB 준비 또는 실제 소유자 콜백 실행을 주장하지
 않습니다. [열한 번째 결과](AD104-ELEVENTH-RESULT.ko.md)는 소비자 해제를 입증하지만
 PCI command `0007`과 소유자/자식 관계는 남아 있습니다.

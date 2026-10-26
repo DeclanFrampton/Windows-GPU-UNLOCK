@@ -23,8 +23,8 @@ static EFI_STATUS TextGopCollect(EFI_SYSTEM_TABLE *t,EFI_HANDLE child,TEXT_DISPL
      out->Mode.FrameBufferBase!=0xd0000000ULL || out->Mode.FrameBufferSize!=0x300000)return EFI_UNSUPPORTED;
   return EFI_SUCCESS;
 }
-static EFI_STATUS TextDisplayCollect(EFI_SYSTEM_TABLE *t,EFI_HANDLE child,TEXT_DISPLAY *out) {
-  EFI_STATUS s=TextGopCollect(t,child,out);if(s!=EFI_SUCCESS)return s;
+static EFI_STATUS TextPcdCollect(EFI_SYSTEM_TABLE *t,TEXT_DISPLAY *out) {
+  EFI_STATUS s;
   OUT_STATE p={0};
   if(t->BootServices->LocateProtocol(&OutPcdGuid,NULL,(VOID **)&p.Pcd)!=EFI_SUCCESS || !p.Pcd)return EFI_NOT_READY;
   p.GetBool=p.Pcd->GetBool;p.Next=p.Pcd->GetNextToken;p.Size=p.Pcd->GetSize;
@@ -35,10 +35,16 @@ static EFI_STATUS TextDisplayCollect(EFI_SYSTEM_TABLE *t,EFI_HANDLE child,TEXT_D
   BOOLEAN value=TRUE;UINTN steps=0;s=OutToken(&p,&value,&steps);
   if(s!=EFI_SUCCESS || value || !PcdVerifyCaptured(t,&p) || p.Pcd->GetBool!=p.GetBool ||
      p.Pcd->GetNextToken!=p.Next || p.Pcd->GetSize!=p.Size)return EFI_NOT_READY;
-  TEXT_DISPLAY after={0};s=TextGopCollect(t,child,&after);
-  if(s!=EFI_SUCCESS || after.Gop!=out->Gop || !PfEqual(&after.Methods,&out->Methods,sizeof(out->Methods)) ||
-     !PfEqual(&after.Mode,&out->Mode,sizeof(out->Mode)) || !PfEqual(&after.Info,&out->Info,sizeof(out->Info)))return EFI_NOT_READY;
   out->Pcd=p.Pcd;out->GetBool=p.GetBool;out->Next=p.Next;out->Size=p.Size;
   return EFI_SUCCESS;
 }
+static EFI_STATUS TextDisplayCollect(EFI_SYSTEM_TABLE *t,EFI_HANDLE child,TEXT_DISPLAY *out) {
+  EFI_STATUS s=TextGopCollect(t,child,out);if(s!=EFI_SUCCESS)return s;
+  s=TextPcdCollect(t,out);if(s!=EFI_SUCCESS)return s;
+  TEXT_DISPLAY after={0};s=TextGopCollect(t,child,&after);
+  if(s!=EFI_SUCCESS || after.Gop!=out->Gop || !PfEqual(&after.Methods,&out->Methods,sizeof(out->Methods)) ||
+     !PfEqual(&after.Mode,&out->Mode,sizeof(out->Mode)) || !PfEqual(&after.Info,&out->Info,sizeof(out->Info)))return EFI_NOT_READY;
+  return EFI_SUCCESS;
+}
+
 #endif

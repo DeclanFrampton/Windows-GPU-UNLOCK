@@ -66,7 +66,7 @@ done:
   return s;
 }
 typedef struct {EFI_HANDLE Handle,Agent,Controller;EFI_GUID Protocol;UINT32 Attributes;} PF_EDGE;
-static EFI_STATUS PfGraphMissing(EFI_SYSTEM_TABLE *t,EFI_HANDLE gpu,PF_STATE *state,UINTN missingMask) {
+static EFI_STATUS PfGraphKnown(EFI_SYSTEM_TABLE *t,EFI_HANDLE gpu,PF_STATE *state,UINTN missingMask,EFI_HANDLE knownChild) {
   EFI_BOOT_SERVICES *bs=t->BootServices;
   EFI_GUID text={0x387477c2,0x69c7,0x11d2,{0x8e,0x39,0,0xa0,0xc9,0x69,0x72,0x3b}};
   EFI_GUID edid={0x1c0c34f6,0xd380,0x41fa,{0xa0,0x49,0x8a,0xd0,0x6c,0x1a,0x66,0xaa}};
@@ -81,7 +81,11 @@ static EFI_STATUS PfGraphMissing(EFI_SYSTEM_TABLE *t,EFI_HANDLE gpu,PF_STATE *st
   }
   if(entries && bs->FreePool(entries)!=EFI_SUCCESS)s=EFI_DEVICE_ERROR;
   if(s!=EFI_SUCCESS)return s;
-  if(children!=1 || !state->Child || state->Child==gpu || t->ConsoleOutHandle!=t->ConsoleInHandle ||
+  if(missingMask&2) {
+    if(children || !knownChild)return EFI_NOT_READY;
+    state->Child=knownChild;
+  }
+  if((!(missingMask&2) && children!=1) || !state->Child || state->Child==gpu || t->ConsoleOutHandle!=t->ConsoleInHandle ||
      t->ConsoleOutHandle!=t->StandardErrorHandle || t->ConsoleOutHandle==gpu ||
      t->ConsoleOutHandle==state->Child)return EFI_UNSUPPORTED;
   PF_EDGE expected[]={
@@ -125,6 +129,9 @@ static EFI_STATUS PfGraphMissing(EFI_SYSTEM_TABLE *t,EFI_HANDLE gpu,PF_STATE *st
   if(s!=EFI_SUCCESS)return s;
   for(UINTN k=0;k<8;k++)if(!(missingMask&(1U<<k)) && !found[k])return EFI_NOT_FOUND;
   return EFI_SUCCESS;
+}
+static EFI_STATUS PfGraphMissing(EFI_SYSTEM_TABLE *t,EFI_HANDLE gpu,PF_STATE *state,UINTN missingMask) {
+  return PfGraphKnown(t,gpu,state,missingMask,NULL);
 }
 static EFI_STATUS PfGraphForState(EFI_SYSTEM_TABLE *t,EFI_HANDLE gpu,PF_STATE *state,BOOLEAN edidDetached) {
   return PfGraphMissing(t,gpu,state,edidDetached?(1U<<5):0);

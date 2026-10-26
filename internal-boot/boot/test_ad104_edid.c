@@ -24,7 +24,7 @@ BOOLEAN GuTextOutputDisabled;
 /* Test the real lifecycle/graph engine separately from the display collector,
  * which has dedicated real-collector tests in test_text_display.c. */
 #define GU_TEXT_DISPLAY_H
-typedef struct {UINTN Stable;VOID *Pcd;EFI_GRAPHICS_OUTPUT_PROTOCOL *Gop;EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE Mode;} TEXT_DISPLAY;
+typedef struct {UINTN Stable;VOID *Pcd;EFI_GRAPHICS_OUTPUT_PROTOCOL *Gop;EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE Mode;VOID *GetBool,*Next,*Size;} TEXT_DISPLAY;
 static EFI_STATUS TextDisplayCollect(EFI_SYSTEM_TABLE *t,EFI_HANDLE child,TEXT_DISPLAY *out) {
   (void)t;(void)child;out->Stable=1;out->Pcd=(VOID *)40;
 #ifdef GU_AD104_CONSUMERS_TEST
@@ -34,6 +34,9 @@ static EFI_STATUS TextDisplayCollect(EFI_SYSTEM_TABLE *t,EFI_HANDLE child,TEXT_D
   if(Stage>=2 && GopFault==10)out->Stable=2;
 #endif
   return EdFault==19?EFI_NOT_READY:EFI_SUCCESS;
+}
+static EFI_STATUS TextPcdCollect(EFI_SYSTEM_TABLE *t,TEXT_DISPLAY *out) {
+  (void)t;out->Pcd=(VOID *)40;return EFI_SUCCESS;
 }
 static int QuietReady,EarlyDrained;
 #endif

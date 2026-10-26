@@ -60,13 +60,14 @@ static VOID EdDescribe(CAPTURE *c,const ED_STATE *s,const char *stage) {
   Text(c," framebuffer-bytes=0x");Hex(c,s->Display.Mode.FrameBufferSize,16);End(c);
 #endif
 }
-static EFI_STATUS EdCollectMask(EFI_SYSTEM_TABLE *t,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *io,
-                            const PF_PIN *pins,BOOLEAN post,UINTN removedMask,ED_STATE *out) {
+static EFI_STATUS EdCollectMode(EFI_SYSTEM_TABLE *t,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *io,
+                            const PF_PIN *pins,BOOLEAN post,UINTN removedMask,EFI_HANDLE knownChild,BOOLEAN noGop,ED_STATE *out) {
   UINT8 *z=(VOID *)out;for(UINTN i=0;i<sizeof(*out);i++)z[i]=0;
   EFI_STATUS first=PfDrivers(t,pins,&out->Drivers);
   #ifdef GU_AD104_TEXT_TEST
-  if(first==EFI_SUCCESS)first=PfGraphMissing(t,gpu,&out->Drivers,post?removedMask:0);
-  EFI_STATUS display=out->Drivers.Child?TextDisplayCollect(t,out->Drivers.Child,&out->Display):EFI_NOT_READY;
+  if(first==EFI_SUCCESS)first=PfGraphKnown(t,gpu,&out->Drivers,post?removedMask:0,knownChild);
+  EFI_STATUS display=noGop?TextPcdCollect(t,&out->Display):
+    (out->Drivers.Child?TextDisplayCollect(t,out->Drivers.Child,&out->Display):EFI_NOT_READY);
   if(first==EFI_SUCCESS)first=display;
   if(out->Drivers.Base[1] && pins[1].Size>=0x7178) {
     const volatile UINT8 *base=out->Drivers.Base[1];
@@ -80,7 +81,8 @@ static EFI_STATUS EdCollectMask(EFI_SYSTEM_TABLE *t,EFI_HANDLE gpu,EFI_PCI_IO_PR
       if(first==EFI_SUCCESS)first=EFI_NOT_READY;
   } else if(first==EFI_SUCCESS)first=EFI_NOT_READY;
 #else
-  if(first==EFI_SUCCESS)first=PfGraphMissing(t,gpu,&out->Drivers,post?removedMask:0);
+  (void)noGop;
+  if(first==EFI_SUCCESS)first=PfGraphKnown(t,gpu,&out->Drivers,post?removedMask:0,knownChild);
 #endif
   /* Continue independent observations even when the graph is unexpected. */
   EFI_PCI_IO_PROTOCOL *fresh=NULL;UINTN loc[4]={0};
@@ -112,6 +114,10 @@ static EFI_STATUS EdCollectMask(EFI_SYSTEM_TABLE *t,EFI_HANDLE gpu,EFI_PCI_IO_PR
   if(!out->Input || !out->Reset || !out->Read || !out->Wait || !out->Output || !out->Error)
     if(first==EFI_SUCCESS)first=EFI_UNSUPPORTED;
   return first;
+}
+static EFI_STATUS EdCollectMask(EFI_SYSTEM_TABLE *t,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *io,
+                            const PF_PIN *pins,BOOLEAN post,UINTN removedMask,ED_STATE *out) {
+  return EdCollectMode(t,gpu,io,pins,post,removedMask,NULL,FALSE,out);
 }
 static EFI_STATUS EdCollect(EFI_SYSTEM_TABLE *t,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *io,
                             const PF_PIN *pins,BOOLEAN post,ED_STATE *out) {
@@ -168,6 +174,9 @@ static EFI_STATUS EdKey(EFI_SYSTEM_TABLE *t,CHAR16 wanted,const CHAR16 *prompt) 
 #include "edid-step.h"
 #endif
 #endif
+#ifdef GU_AD104_OWNER_CHILD_TEST
+#include "owner-child.h"
+#endif
 static EFI_STATUS EdRun(CAPTURE *c,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *io,const PF_PIN *pins) {
   EFI_SYSTEM_TABLE *t=c->Table;static ED_STATE a,b,p,q;
   if(EdAttempted)return EFI_ALREADY_STARTED;
@@ -179,7 +188,11 @@ static EFI_STATUS EdRun(CAPTURE *c,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *io,const 
 #ifdef GU_AD104_TEXT_TEST
 #ifdef GU_AD104_GOP_TEST
   #ifdef GU_AD104_CONSUMERS_TEST
+#ifdef GU_AD104_OWNER_CHILD_TEST
+  s=EdKey(t,'G',L"OWNER CHILD TEST: text, GOP consumer, EDID, then DIRECT IMG29 one-child Stop. No parent Stop. Recovery unproven.\r\nG permits all FOUR stages. GOP may be freed; legacy video may reset. Wait five seconds then tap uppercase V every two seconds up to one minute. No second prompt.\r\n");
+#else
   s=EdKey(t,'G',L"CONSUMER TEST: text THEN GOP consumer THEN EDID detach. PCI owner retained. Recovery unproven.\r\nUppercase G permits all THREE stages. Wait five seconds then tap uppercase V every two seconds up to one minute. No second prompt. Any other key stops.\r\n");
+#endif
 #else
   s=EdKey(t,'G',L"DISPLAY TEST: PCD captured. Text detach THEN one GOP-consumer detach. PCI owner retained. Recovery unproven.\r\nPress uppercase G to permit BOTH stages. Then wait five seconds and tap uppercase V every two seconds up to one minute until Windows starts.\r\nNo second prompt; screen may blank. Any other key stops.\r\n");
 #endif
@@ -225,6 +238,9 @@ static EFI_STATUS EdRun(CAPTURE *c,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *io,const 
   s=ConsumerEdidStep(c,gpu,io,pins,&b,&q);
   if(s!=EFI_SUCCESS)return s;
   b=q;
+#ifdef GU_AD104_OWNER_CHILD_TEST
+  return OwnerChildStep(c,gpu,io,pins,&b);
+#endif
 #endif
 #endif
 #ifdef GU_AD104_TEXT_TEST

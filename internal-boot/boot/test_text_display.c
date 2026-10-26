@@ -31,5 +31,8 @@ int main(void) {
   for(int f=1;f<=5;f++){DisplaySetup(f);memset(&out,0,sizeof(out));Check(TextDisplayCollect(&T,(VOID *)2,&out)!=EFI_SUCCESS,"getter-side mode/interface/info/code drift or true predicate rejected");}
   DisplaySetup(0);Captured=FALSE;Check(TextDisplayCollect(&T,(VOID *)2,&out)!=EFI_SUCCESS && !GetterCalls,"missing capture never queries predicate");
   DisplaySetup(0);T.ConOut=T.StdErr=NULL;Check(TextDisplayCollect(&T,(VOID *)2,&out)==EFI_SUCCESS,"post collector never requires text output");
+  DisplaySetup(0);memset(&out,0,sizeof(out));Bs.HandleProtocol=NULL;Gop.Mode=(VOID *)1;
+  Check(TextPcdCollect(&T,&out)==EFI_SUCCESS && GetterCalls==1 && !out.Gop && !out.Mode.Info,
+        "PCD-only collector cannot query or dereference freed GOP");
   printf("PASS text display checks: %d checks, RAM-only mocks\n",Checks);return 0;
 }

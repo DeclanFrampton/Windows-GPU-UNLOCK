@@ -2,6 +2,27 @@
 
 English | [한국어](AD104-OWNER-CHILD-PLAN.ko.md)
 
+## Correction and implemented candidate
+
+The original DisconnectController proposal below is superseded. EDK II's
+[CoreDisconnectController](https://github.com/tianocore/edk2/blob/master/MdeModulePkg/Core/Dxe/Hand/DriverSupport.c)
+can append zero-child parent Stop when the selected child is the only child.
+Thus a non-NULL child does not isolate the child callback. This is a reference
+implementation finding, not proof of this OEM core's exact code.
+
+The new optional candidate directly invokes the freshly pinned binding's
+`Stop(binding, gpu, 1, &child)`. The bundled DriverBinding.h permits direct calls
+subject to valid started-controller/created-child restrictions. Fresh BY_DRIVER
+and sole BY_CHILD_CONTROLLER relationships, valid enumerated handles, exact
+image/code/Stop pins and two matching precollections establish the checked
+runtime prerequisites. No Start is called and historical Start execution is
+inferred from those current relationships, not independently traced.
+
+See [twelfth test contract](AD104-TWELFTH-BOOT.en.md). The implementation, 193
+RAM lifecycle checks and native build are complete; hardware execution is not.
+USB staging awaits acceptance of the new direct-call/GOP-removal risk boundary.
+The earlier investigation proposal is retained below to explain the correction.
+
 Status: investigation contract only. No implementation, staging or physical owner
 callback is claimed. The [eleventh result](AD104-ELEVENTH-RESULT.en.md) establishes
 consumer removal; it leaves PCI command `0007` and owner/child relationships active.

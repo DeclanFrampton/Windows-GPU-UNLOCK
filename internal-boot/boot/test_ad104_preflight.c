@@ -22,15 +22,16 @@ static EFI_SYSTEM_TABLE T;
 static PF_PIN Pins[4];static char Hashes[4][65];
 static EFI_DRIVER_BINDING_PROTOCOL Drivers[5];static EFI_LOADED_IMAGE_PROTOCOL Images[4];
 static UINT8 Data[4][0x8000];static PF_EDGE Edges[8];
-static int Checks,Fault,Missing,ExtraMissing,ThirdMissing,FourthMissing;
+static int Checks,Fault,Missing,ExtraMissing,ThirdMissing,FourthMissing,FifthMissing;
+static int HideChild;
 static void Check(int ok,const char *s){Checks++;if(!ok){fprintf(stderr,"FAIL %s fault=%d missing=%d\n",s,Fault,Missing);exit(1);}}
 static EFI_STATUS EFIAPI FreeMock(VOID *p){free(p);return EFI_SUCCESS;}
 static EFI_STATUS EFIAPI LocateMock(EFI_LOCATE_SEARCH_TYPE type,EFI_GUID *g,VOID *key,UINTN *n,EFI_HANDLE **out) {
   (void)key;
   if(type==ByProtocol && !PfEqual(g,&BindGuidL,sizeof(*g)))return EFI_NOT_FOUND;
-  *n=type==AllHandles?8:5;
+  *n=type==AllHandles?(HideChild?7:8):5;
   *out=malloc(*n*sizeof(EFI_HANDLE));if(!*out)return EFI_OUT_OF_RESOURCES;
-  for(UINTN i=0;i<*n;i++)(*out)[i]=(VOID *)(UINTN)(type==AllHandles?(i<3?i+1:i+7):i+10);
+  for(UINTN i=0;i<*n;i++)(*out)[i]=(VOID *)(UINTN)(type==AllHandles?(HideChild?(i==0?1:i==1?3:i+8):(i<3?i+1:i+7)):i+10);
   return EFI_SUCCESS;
 }
 static EFI_STATUS EFIAPI HandleMock(EFI_HANDLE h,EFI_GUID *g,VOID **out) {
@@ -52,7 +53,7 @@ static EFI_STATUS EFIAPI ProtocolsMock(EFI_HANDLE h,EFI_GUID ***out,UINTN *n) {
 static EFI_STATUS EFIAPI OpensMock(EFI_HANDLE h,EFI_GUID *g,EFI_OPEN_PROTOCOL_INFORMATION_ENTRY **out,UINTN *n) {
   *out=calloc(10,sizeof(**out));if(!*out)return EFI_OUT_OF_RESOURCES;
   *n=0;
-  for(UINTN i=0;i<8;i++)if((int)i!=Missing && (int)i!=ExtraMissing && (int)i!=ThirdMissing && (int)i!=FourthMissing && Edges[i].Handle==h && PfEqual(g,&Edges[i].Protocol,sizeof(*g))) {
+  for(UINTN i=0;i<8;i++)if((int)i!=Missing && (int)i!=ExtraMissing && (int)i!=ThirdMissing && (int)i!=FourthMissing && (int)i!=FifthMissing && Edges[i].Handle==h && PfEqual(g,&Edges[i].Protocol,sizeof(*g))) {
     (*out)[(*n)++]=(EFI_OPEN_PROTOCOL_INFORMATION_ENTRY){Edges[i].Agent,Edges[i].Controller,Edges[i].Attributes,1};
   }
   if(Fault==5 && h==(VOID *)1)(*out)[(*n)++]=(EFI_OPEN_PROTOCOL_INFORMATION_ENTRY){(VOID *)99,h,16,1};
@@ -61,7 +62,7 @@ static EFI_STATUS EFIAPI OpensMock(EFI_HANDLE h,EFI_GUID *g,EFI_OPEN_PROTOCOL_IN
   return EFI_SUCCESS;
 }
 static void Setup(int fault,int missing) {
-  Fault=fault;Missing=missing;ExtraMissing=ThirdMissing=FourthMissing=-1;memset(&Bs,0,sizeof(Bs));memset(&T,0,sizeof(T));
+  HideChild=0;Fault=fault;Missing=missing;ExtraMissing=ThirdMissing=FourthMissing=FifthMissing=-1;memset(&Bs,0,sizeof(Bs));memset(&T,0,sizeof(T));
   Bs.LocateHandleBuffer=LocateMock;Bs.HandleProtocol=HandleMock;Bs.ProtocolsPerHandle=ProtocolsMock;
   Bs.OpenProtocolInformation=OpensMock;Bs.FreePool=FreeMock;T.BootServices=&Bs;
   T.ConsoleInHandle=T.ConsoleOutHandle=T.StandardErrorHandle=(VOID *)3;
