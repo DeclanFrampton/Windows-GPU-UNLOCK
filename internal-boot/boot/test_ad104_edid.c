@@ -15,6 +15,9 @@ static EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL Output;
 static UINT32 Config[64];
 #ifdef GU_AD104_GOP_TEST
 static int GopFault,ProtocolReads;
+#ifdef GU_AD104_CONSUMERS_TEST
+static int ConsumerFault,ConsumerFlushes;
+#endif
 #endif
 #ifdef GU_AD104_TEXT_TEST
 BOOLEAN GuTextOutputDisabled;
@@ -24,8 +27,11 @@ BOOLEAN GuTextOutputDisabled;
 typedef struct {UINTN Stable;VOID *Pcd;EFI_GRAPHICS_OUTPUT_PROTOCOL *Gop;EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE Mode;} TEXT_DISPLAY;
 static EFI_STATUS TextDisplayCollect(EFI_SYSTEM_TABLE *t,EFI_HANDLE child,TEXT_DISPLAY *out) {
   (void)t;(void)child;out->Stable=1;out->Pcd=(VOID *)40;
+#ifdef GU_AD104_CONSUMERS_TEST
+  if(Stage==3 && ConsumerFault==10)out->Stable=2;
+#endif
 #ifdef GU_AD104_GOP_TEST
-  if(Stage==2 && GopFault==10)out->Stable=2;
+  if(Stage>=2 && GopFault==10)out->Stable=2;
 #endif
   return EdFault==19?EFI_NOT_READY:EFI_SUCCESS;
 }
@@ -41,8 +47,8 @@ static EFI_STATUS EFIAPI EdHandle(EFI_HANDLE h,EFI_GUID *g,VOID **out) {
   EFI_GUID companion={0xe1e4a857,0xc970,0x4075,{0xa4,0xda,0xe9,0xc4,0x1b,0x69,0xad,0xfc}};
   if(h==(VOID *)2 && (PfEqual(g,&text,sizeof(*g)) || PfEqual(g,&companion,sizeof(*g)))) {
     BOOLEAN extra=PfEqual(g,&companion,sizeof(*g));*out=NULL;
-    if(Stage==2 && GopFault==11)return EFI_DEVICE_ERROR;
-    if((Stage==2 && !(GopFault==4 && extra)) || (GopFault==1 && extra))return EFI_UNSUPPORTED;
+    if(Stage>=2 && GopFault==11)return EFI_DEVICE_ERROR;
+    if((Stage>=2 && !(GopFault==4 && extra)) || (GopFault==1 && extra))return EFI_UNSUPPORTED;
     if(!extra)ProtocolReads++;
     UINTN shift=GopFault==12 && ProtocolReads>=2?0x1000:0;
     *out=(VOID *)(UINTN)((extra?(GopFault==2?0x10102:0x10101):0x10000)+shift);return EFI_SUCCESS;
@@ -71,9 +77,16 @@ static EFI_STATUS EFIAPI Attributes(EFI_PCI_IO_PROTOCOL *io,EFI_PCI_IO_PROTOCOL_
   Check(0,"attribute write forbidden");return EFI_UNSUPPORTED;
 }
 static EFI_STATUS EFIAPI Write(EFI_FILE_PROTOCOL *f,UINTN *n,VOID *p) {
-  (void)f;(void)n;(void)p;Writes++;return EdFault==1 || (EdFault==15 && Stage)?EFI_DEVICE_ERROR:EFI_SUCCESS;
+  (void)f;(void)n;(void)p;Writes++;
+#ifdef GU_AD104_CONSUMERS_TEST
+  if(Stage==3 && ConsumerFault==8)return EFI_DEVICE_ERROR;
+#endif
+return EdFault==1 || (EdFault==15 && Stage)?EFI_DEVICE_ERROR:EFI_SUCCESS;
 }
 static EFI_STATUS EFIAPI FlushFile(EFI_FILE_PROTOCOL *f){(void)f;Flushes++;
+#ifdef GU_AD104_CONSUMERS_TEST
+  if(Stage==2 && ++ConsumerFlushes==2 && ConsumerFault==9)return EFI_DEVICE_ERROR;
+#endif
 #ifdef GU_AD104_GOP_TEST
   if(GopFault==8 && Stage==2)return EFI_DEVICE_ERROR;
 #endif
@@ -115,6 +128,20 @@ static EFI_STATUS EFIAPI Stall(UINTN us){(void)us;
   return EFI_SUCCESS;}
 static EFI_STATUS EFIAPI Disconnect(EFI_HANDLE child,EFI_HANDLE agent,EFI_HANDLE deeper) {
 #ifdef GU_AD104_GOP_TEST
+#ifdef GU_AD104_CONSUMERS_TEST
+  if(Calls==2) {
+    Check(child==(VOID *)2 && agent==(VOID *)10 && !deeper,"only IMG08 EDID third");
+    Check(ConsumerEdidAttempted && Flushes>=4,"third intent persisted");
+    Calls++;Stage=3;
+    if(ConsumerFault==1)return EFI_DEVICE_ERROR;
+    FourthMissing=ConsumerFault==3?-1:5;Data[0][0x546a]=ConsumerFault==4?1:0;
+    if(ConsumerFault==5)*(UINT64 *)(Data[0]+0x5530)=0;
+    if(ConsumerFault==6)Config[1]=3;
+    if(ConsumerFault==7)FourthMissing=6;
+    if(ConsumerFault==11)Input.WaitForKey=(VOID *)2;
+    return ConsumerFault==2?EFI_DEVICE_ERROR:EFI_SUCCESS;
+  }
+#endif
   if(Calls==1) {
     Check(child==(VOID *)2 && agent==(VOID *)12 && !deeper,"only IMG17 consumer after text");
     Check(GuTextOutputDisabled && GopAttempted && Flushes>=3,"quiet one-shot GOP intent persisted");
@@ -161,6 +188,9 @@ static CAPTURE *EdSetup(int fault) {
   Setup(0,-1);EdFault=fault;EdAttempted=FALSE;Writes=Flushes=Calls=Stage=KeyPhase=Reads=Collections=0;
 #ifdef GU_AD104_GOP_TEST
   GopAttempted=FALSE;GopFault=ProtocolReads=0;
+#ifdef GU_AD104_CONSUMERS_TEST
+  ConsumerEdidAttempted=FALSE;ConsumerFault=ConsumerFlushes=0;
+#endif
 #endif
 #ifdef GU_AD104_TEXT_TEST
   GuTextOutputDisabled=FALSE;QuietReady=EarlyDrained=0;

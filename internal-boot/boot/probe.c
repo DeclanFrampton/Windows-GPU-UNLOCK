@@ -1,3 +1,6 @@
+#if defined(GU_AD104_CONSUMERS_TEST) && !defined(GU_AD104_GOP_TEST)
+#error Consumers test requires GOP test
+#endif
 /* GPL-2.0-only. Read-only GA10x capture for the 3070 Ti headless port.
  * PCI config reads, BAR0 Mem.Read, PROM hash, loaded-image dumps only. */
 #include <Uefi.h>

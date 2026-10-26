@@ -37,7 +37,7 @@ try {
  if($LASTEXITCODE -ne 0){throw 'Output mocks compile failed'}
  & ./build/capture-tests/output.exe
  if($LASTEXITCODE -ne 0){throw 'Output mocks failed'}
- foreach($name in @('pcd_producer','text_display','text_lifecycle','gop_lifecycle')) {
+ foreach($name in @('pcd_producer','text_display','text_lifecycle','gop_lifecycle','consumers_lifecycle')) {
   & $Clang @flags -Wno-unused-function "test_$name.c" ../unlock/sha256.c -o "build/capture-tests/$name.exe"
   if($LASTEXITCODE -ne 0){throw "$name mocks compile failed"}
   & "./build/capture-tests/$name.exe"

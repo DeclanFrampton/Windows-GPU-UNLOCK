@@ -164,6 +164,9 @@ static EFI_STATUS EdKey(EFI_SYSTEM_TABLE *t,CHAR16 wanted,const CHAR16 *prompt) 
 }
 #ifdef GU_AD104_GOP_TEST
 #include "gop-step.h"
+#ifdef GU_AD104_CONSUMERS_TEST
+#include "edid-step.h"
+#endif
 #endif
 static EFI_STATUS EdRun(CAPTURE *c,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *io,const PF_PIN *pins) {
   EFI_SYSTEM_TABLE *t=c->Table;static ED_STATE a,b,p,q;
@@ -175,7 +178,11 @@ static EFI_STATUS EdRun(CAPTURE *c,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *io,const 
   if(s!=EFI_SUCCESS || !EdInitial(&a))return EFI_NOT_READY;
 #ifdef GU_AD104_TEXT_TEST
 #ifdef GU_AD104_GOP_TEST
+  #ifdef GU_AD104_CONSUMERS_TEST
+  s=EdKey(t,'G',L"CONSUMER TEST: text THEN GOP consumer THEN EDID detach. PCI owner retained. Recovery unproven.\r\nUppercase G permits all THREE stages. Wait five seconds then tap uppercase V every two seconds up to one minute. No second prompt. Any other key stops.\r\n");
+#else
   s=EdKey(t,'G',L"DISPLAY TEST: PCD captured. Text detach THEN one GOP-consumer detach. PCI owner retained. Recovery unproven.\r\nPress uppercase G to permit BOTH stages. Then wait five seconds and tap uppercase V every two seconds up to one minute until Windows starts.\r\nNo second prompt; screen may blank. Any other key stops.\r\n");
+#endif
 #else
   s=EdKey(t,'T',L"TEXT TEST: PCD capture saved; display/input may be lost and recovery is unproven.\r\nPress uppercase T for ONE text disconnect. After T, wait five seconds, then tap uppercase V every two seconds until Windows starts (up to one minute).\r\nThere is no further prompt. Early queued keys are discarded; a fresh V is required after postchecks. Any other key stops.\r\n");
 #endif
@@ -214,6 +221,11 @@ static EFI_STATUS EdRun(CAPTURE *c,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *io,const 
 #ifdef GU_AD104_GOP_TEST
   s=GopStep(c,gpu,io,pins,&a,&p,&b);
   if(s!=EFI_SUCCESS)return s;
+#ifdef GU_AD104_CONSUMERS_TEST
+  s=ConsumerEdidStep(c,gpu,io,pins,&b,&q);
+  if(s!=EFI_SUCCESS)return s;
+  b=q;
+#endif
 #endif
 #ifdef GU_AD104_TEXT_TEST
   s=EdKey(t,'V',NULL);
@@ -223,10 +235,22 @@ static EFI_STATUS EdRun(CAPTURE *c,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *io,const 
   EdStatus(c,"input-after",s);
   /* Input callbacks may themselves change shared state: check again. */
 #ifdef GU_AD104_GOP_TEST
-  post=EdCollectMask(t,gpu,io,pins,TRUE,0x1c,&p);
+  post=EdCollectMask(t,gpu,io,pins,TRUE,
+#ifdef GU_AD104_CONSUMERS_TEST
+    0x3c,
+#else
+    0x1c,
+#endif
+    &p);
   EFI_STATUS protocols=GopProtocols(t,b.Drivers.Child,TRUE,NULL);
   EdStatus(c,"final-protocols",protocols);
-  if(s!=EFI_SUCCESS || post!=EFI_SUCCESS || protocols!=EFI_SUCCESS || !GopPost(&b,&p))s=EFI_NOT_READY;
+  if(s!=EFI_SUCCESS || post!=EFI_SUCCESS || protocols!=EFI_SUCCESS || !
+#ifdef GU_AD104_CONSUMERS_TEST
+    ConsumerEdidPost(&b,&p)
+#else
+    GopPost(&b,&p)
+#endif
+    )s=EFI_NOT_READY;
 #else
   post=EdCollect(t,gpu,io,pins,TRUE,&p);
   if(s!=EFI_SUCCESS || post!=EFI_SUCCESS || !EdPost(&a,&p))s=EFI_NOT_READY;
