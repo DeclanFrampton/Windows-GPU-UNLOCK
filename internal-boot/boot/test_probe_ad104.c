@@ -4,12 +4,12 @@
 
 enum {A_OK=100,A_SUBSYSTEM,A_REVISION,A_BAD_CHIP,A_REG_ERROR,A_SENTINEL,A_PROM_ERROR,
       A_PROM_SIGNATURE,A_FINAL_CHIP,A_FINAL_CFG,A_BDF_DRIFT,A_BAD_BUS,A_BAD_SEGMENT,A_BAD_DEVICE,A_BAD_FUNCTION,
-      A_PROM_COPY_SIGNATURE,A_FINAL_BDF};
+      A_PROM_COPY_SIGNATURE,A_FINAL_BDF,A_DEVICE};
 static int AdMode,FaultIndex;
 static EFI_STATUS EFIAPI AdRead(EFI_PCI_IO_PROTOCOL *io,EFI_PCI_IO_PROTOCOL_WIDTH w,UINT32 at,UINTN n,VOID *data) {
   EFI_STATUS s=GenericRead(io,w,at,n,data);
   if(s==EFI_SUCCESS && at==0 && w==EfiPciIoWidthUint32) {
-    UINT32 *v=data;v[0]=0x278210deU;
+    UINT32 *v=data;v[0]=AdMode==A_DEVICE?0x278310deU:0x278210deU;
     if(n==64) {
       v[11]=AdMode==A_SUBSYSTEM?0x51331462U:0x51321462U;
       if(AdMode==A_REVISION)v[2]^=1;
@@ -58,6 +58,12 @@ int main(void) {
     Check(Logged("ad104-metadata-only=1") && Logged("ad104-metadata-only-no-mmio"),"metadata mode is explicit");
     Check(Logged("bus-master-enabled=1"),"active BME is observed, never changed");
     Check(!Logged("prom bytes=") && !Logged("capture-complete=1"),"no ROM bytes or complete marker");
+  }
+  const int identities[]={A_DEVICE,A_SUBSYSTEM,A_REVISION};
+  for(UINTN i=0;i<3;i++) {
+    Check(AdRun(identities[i])==EFI_NOT_READY,"metadata wrong identity refused");
+    Check(Logged("ad104-metadata-identity") && !Logged("ad104-metadata-only=1"),"wrong identity never labeled AD104 metadata");
+    Check(!S.RegReads && !S.PromReads,"wrong identity performs no MMIO");
   }
   printf("PASS AD104 metadata: %d checks, invalid ROM pointers never dereferenced\n",Checks);
   return 0;

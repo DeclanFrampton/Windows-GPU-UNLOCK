@@ -42,5 +42,9 @@ try {
  if($LASTEXITCODE -eq 0 -or $out -notmatch 'MBR Windows volume selection is diagnostic-only'){throw 'MBR accepted outside diagnostic mode'}
  $ErrorActionPreference='Stop'
  $global:LASTEXITCODE=0
+ $out=& $Clang @flags -DGU_PROBE_AD104_METADATA -fsyntax-only probe.c 2>&1 | Out-String
+ if($LASTEXITCODE -eq 0 -or $out -notmatch 'AD104 metadata requires'){throw 'Metadata accepted without AD104 guard'}
+ $global:LASTEXITCODE=0
+ 'PASS metadata-without-AD104 compile combination rejected'
  'PASS 16 incompatible/non-diagnostic build combinations rejected'
 } finally {Pop-Location}

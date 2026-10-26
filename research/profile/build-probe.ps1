@@ -70,7 +70,8 @@ try {
  if($LASTEXITCODE -ne 0){throw 'Probe link failed'}
  & $Python -I ../unlock/verify_pe.py "$out/BOOTX64.EFI" "$out/PROBE.map" --output "$out/pe-verification.json"
  if($LASTEXITCODE -ne 0){throw 'Probe PE verification failed'}
- [ordered]@{Mode=if($Ad104Msi){'ad104-msi-read-only-probe-then-windows-usb'}else{'generic-read-only-probe-then-windows-usb'};
+ [ordered]@{Mode=if($Ad104Metadata){'ad104-msi-metadata-only-then-windows-usb'}elseif($Ad104Msi){'ad104-msi-read-only-probe-then-windows-usb'}else{'generic-read-only-probe-then-windows-usb'};
+   CanReadGpuMmio=(!$Ad104Metadata);CanDereferenceRomImage=$false;
   WindowsBootIdentity=if($WindowsMbr){'exact-mbr-extent-and-boot-manager-hash'}else{'gpt-partition-guid'};
   CanUnlock=$false;CanDetach=$false;WritesFirmwareVariables=$false;HardwareTested=$false;Defines=$defines
   EfiSha256=(Get-FileHash -LiteralPath "$out/BOOTX64.EFI").Hash.ToLowerInvariant();BuiltUtc=[DateTime]::UtcNow.ToString('o')
