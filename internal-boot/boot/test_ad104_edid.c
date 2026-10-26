@@ -10,6 +10,17 @@ static EFI_FILE_PROTOCOL File;
 static EFI_SIMPLE_TEXT_INPUT_PROTOCOL Input;
 static EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL Output;
 static UINT32 Config[64];
+#ifdef GU_AD104_TEXT_TEST
+BOOLEAN GuTextOutputDisabled;
+/* Test the real lifecycle/graph engine separately from the display collector,
+ * which has dedicated real-collector tests in test_text_display.c. */
+#define GU_TEXT_DISPLAY_H
+typedef struct {UINTN Stable;VOID *Pcd;EFI_GRAPHICS_OUTPUT_PROTOCOL *Gop;EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE Mode;} TEXT_DISPLAY;
+static EFI_STATUS TextDisplayCollect(EFI_SYSTEM_TABLE *t,EFI_HANDLE child,TEXT_DISPLAY *out) {
+  (void)t;(void)child;out->Stable=1;out->Pcd=(VOID *)40;return EdFault==19?EFI_NOT_READY:EFI_SUCCESS;
+}
+static int QuietReady,EarlyDrained;
+#endif
 VOID Text(CAPTURE *c,const char *s){while(*s && c->Used<sizeof(c->Buffer))c->Buffer[c->Used++]=*s++;}
 VOID Hex(CAPTURE *c,UINT64 v,UINTN n){(void)v;(void)n;Text(c,"x");}
 VOID End(CAPTURE *c){Text(c,"\n");}
@@ -45,33 +56,75 @@ static EFI_STATUS EFIAPI Reset(EFI_SIMPLE_TEXT_INPUT_PROTOCOL *i,BOOLEAN b){(voi
 static EFI_STATUS EFIAPI ReadKey(EFI_SIMPLE_TEXT_INPUT_PROTOCOL *i,EFI_INPUT_KEY *k) {
   (void)i;Reads++;
   if(!KeyPhase || EdFault==3 || (EdFault==8 && KeyPhase==2))return EFI_NOT_READY;
-  k->ScanCode=0;k->UnicodeChar=(CHAR16)(KeyPhase==1?'E':'V');
+  k->ScanCode=0;k->UnicodeChar=(CHAR16)(KeyPhase==1?
+#ifdef GU_AD104_TEXT_TEST
+    'T'
+#else
+    'E'
+#endif
+    :'V');
   if(EdFault==4)k->UnicodeChar='x';
   if(EdFault==18 && KeyPhase==2)Config[1]=3;
   KeyPhase=0;return EFI_SUCCESS;
 }
 static EFI_STATUS EFIAPI Print(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *o,CHAR16 *s) {
+#ifdef GU_AD104_TEXT_TEST
+  Check(!GuTextOutputDisabled,"no text output after detach attempt");
+#endif
   (void)o;(void)s;KeyPhase=Stage?2:1;
   if(EdFault==10 && !Stage)Config[3]++;
   return EFI_SUCCESS;
 }
-static EFI_STATUS EFIAPI Stall(UINTN us){(void)us;return EFI_SUCCESS;}
+static EFI_STATUS EFIAPI Stall(UINTN us){(void)us;
+#ifdef GU_AD104_TEXT_TEST
+  if(Stage && !QuietReady){KeyPhase=2;QuietReady=1;}
+#endif
+  return EFI_SUCCESS;}
 static EFI_STATUS EFIAPI Disconnect(EFI_HANDLE child,EFI_HANDLE agent,EFI_HANDLE deeper) {
-  Check(child==(VOID *)2 && agent==(VOID *)10 && !deeper,"only exact EDID binding/child");
+  Check(child==(VOID *)2 && agent==(VOID *)
+#ifdef GU_AD104_TEXT_TEST
+    11
+#else
+    10
+#endif
+    && !deeper,"only exact requested binding/child");
   Check(Flushes>=2 && Writes>=2 && EdAttempted,"durable intent and attempted before callback");
   Calls++;Stage=1;
+#ifdef GU_AD104_TEXT_TEST
+  Check(GuTextOutputDisabled,"output disabled before firmware call");
+  Missing=2;ExtraMissing=3;KeyPhase=2;EarlyDrained=1;
+  *(UINT64 *)(Data[1]+0x7160)=0;*(UINT64 *)(Data[1]+0x7168)=0;*(UINT64 *)(Data[1]+0x7170)=0;
+  *(UINT64 *)(Data[1]+0x7040)=40;
+  if(EdFault==24)*(UINT64 *)(Data[1]+0x7160)=1;
+  if(EdFault==25)*(UINT64 *)(Data[1]+0x7040)=0;
+#else
   Missing=5;Data[0][0x546a]=0;
+#endif
   if(EdFault==11 || EdFault==12){Io.GetBarAttributes=NULL;return EdFault==12?EFI_DEVICE_ERROR:EFI_SUCCESS;}
   if(EdFault==13 || EdFault==14){Io.Pci.Read=NULL;return EdFault==14?EFI_DEVICE_ERROR:EFI_SUCCESS;}
   if(EdFault==5)return EFI_DEVICE_ERROR;
   if(EdFault==6)Missing=6;
   if(EdFault==7)Config[1]=3;
-  if(EdFault==9)Data[0][0x546a]=1;
+  if(EdFault==9)Data[0][0x546a]=
+#ifdef GU_AD104_TEXT_TEST
+    0;
+#else
+    1;
+#endif
   if(EdFault==17)Missing=-1;
   return EFI_SUCCESS;
 }
 static CAPTURE *EdSetup(int fault) {
   Setup(0,-1);EdFault=fault;EdAttempted=FALSE;Writes=Flushes=Calls=Stage=KeyPhase=Reads=Collections=0;
+#ifdef GU_AD104_TEXT_TEST
+  GuTextOutputDisabled=FALSE;QuietReady=EarlyDrained=0;
+  *(UINT64 *)(Data[1]+0x7160)=1;*(UINT64 *)(Data[1]+0x7168)=99;*(UINT64 *)(Data[1]+0x7170)=99;
+  *(UINT64 *)(Data[1]+0x6f60)=3;*(UINT64 *)(Data[1]+0x7040)=0;
+  if(fault==20)*(UINT64 *)(Data[1]+0x7160)=2;
+  if(fault==21)*(UINT64 *)(Data[1]+0x7170)=98;
+  if(fault==22)*(UINT64 *)(Data[1]+0x6f60)=4;
+  if(fault==23)*(UINT64 *)(Data[1]+0x7040)=41;
+#endif
   Bs.HandleProtocol=EdHandle;Bs.DisconnectController=Disconnect;Bs.Stall=Stall;
   memset(&Io,0,sizeof(Io));Io.Pci.Read=ReadConfig;Io.GetLocation=Location;Io.GetBarAttributes=Bar;Io.Attributes=Attributes;
   memset(Config,0,sizeof(Config));Config[0]=0x278210de;Config[1]=0x100007;Config[2]=0x030000a1;
@@ -87,6 +140,9 @@ int main(void) {
   CAPTURE *c=EdSetup(0);
   Check(EdRun(c,(VOID *)1,&Io,Pins)==EFI_SUCCESS,"one exact transition permits Windows consideration");
   Check(Calls==1 && Stage==1,"single invocation");
+#ifdef GU_AD104_TEXT_TEST
+  Check(EarlyDrained && QuietReady,"early queued V discarded and later fresh V accepted");
+#endif
   Check(EdRun(c,(VOID *)1,&Io,Pins)==EFI_ALREADY_STARTED && Calls==1,"retry forbidden");
   for(int f=1;f<=18;f++) {
     c=EdSetup(f);Check(EdRun(c,(VOID *)1,&Io,Pins)!=EFI_SUCCESS,"logging/input/callback/post failure blocks Windows");
@@ -97,5 +153,12 @@ int main(void) {
   c=EdSetup(0);Data[1][0x100]^=1;Check(EdRun(c,(VOID *)1,&Io,Pins)!=EFI_SUCCESS && !Calls,"wrong code rejected");
   c=EdSetup(0);Missing=7;Check(EdRun(c,(VOID *)1,&Io,Pins)!=EFI_SUCCESS && !Calls,"missing pre-edge rejected");
   c=EdSetup(0);T.ConIn=NULL;Check(EdRun(c,(VOID *)1,&Io,Pins)!=EFI_SUCCESS && !Calls,"no input rejected");
-  printf("PASS AD104 EDID lifecycle: %d checks, RAM-only mocks\n",Checks);return 0;
+#ifdef GU_AD104_TEXT_TEST
+  c=EdSetup(19);Check(EdRun(c,(VOID *)1,&Io,Pins)!=EFI_SUCCESS && !Calls,"missing captured display admission prevents text attempt");
+  for(int f=20;f<=25;f++) {
+    c=EdSetup(f);Check(EdRun(c,(VOID *)1,&Io,Pins)!=EFI_SUCCESS,"wrong text list/console/cache state rejected");
+    Check(Calls==(f>=24),"invalid pre-state never reaches text callback");
+  }
+#endif
+  printf("PASS " ED_LOG " lifecycle: %d checks, RAM-only mocks\n",Checks);return 0;
 }

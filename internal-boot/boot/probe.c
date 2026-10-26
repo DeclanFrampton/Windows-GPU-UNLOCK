@@ -33,6 +33,12 @@
 #if defined(GU_AD104_OUTPUT_OBSERVATION) && (!defined(GU_PROBE_AD104_PREFLIGHT) || defined(GU_AD104_EDID_TEST))
 #error Output observation requires preflight without EDID mutation
 #endif
+#if defined(GU_AD104_TEXT_TEST) && (!defined(GU_AD104_PCD_CAPTURE) || !defined(GU_DIAGNOSTIC_MBR) || defined(GU_AD104_EDID_TEST))
+#error Text test requires PCD capture and pinned MBR, without EDID test
+#endif
+#if defined(GU_AD104_PCD_CAPTURE) && !defined(GU_AD104_OUTPUT_OBSERVATION)
+#error PCD capture requires read-only output observation
+#endif
 
 #if defined(GU_PROBE_AD104_MSI) && (!defined(GU_PROBE_GENERIC) || !defined(GU_DIAGNOSTIC_ONLY) || !defined(GU_DIAGNOSTIC_PROBE) || !defined(GU_USB_MEDIA) || defined(GU_FULL_UNLOCK) || defined(GU_UEFI_PORT) || defined(GU_INTERNAL_BOOT) || defined(GU_HEADLESS_RESEARCH) || defined(GU_CONSOLE_PREPARE) || defined(GU_AUTOMATIC_BOOT) || defined(GU_EXPERIMENTAL_3090))
 #error AD104 capture is a separate read-only USB diagnostic, never an unlock profile
@@ -561,7 +567,10 @@ EFI_STATUS GuProbeGpu(EFI_SYSTEM_TABLE *t,CAPTURE *c) {
   /* Report a target that could not be captured rather than a clean success. */
   return found?cfgError:EFI_NOT_FOUND;
 }
-#ifdef GU_AD104_EDID_TEST
+#if defined(GU_AD104_EDID_TEST) || defined(GU_AD104_TEXT_TEST)
+#ifdef GU_AD104_TEXT_TEST
+BOOLEAN GuTextOutputDisabled;
+#endif
 #include "ad104-edid.h"
 EFI_STATUS GuEdidExperiment(EFI_SYSTEM_TABLE *t,EFI_FILE_PROTOCOL *log) {
   if(!t || !t->BootServices || !log || !log->Write || !log->Flush)return EFI_INVALID_PARAMETER;
@@ -583,6 +592,9 @@ EFI_STATUS GuEdidExperiment(EFI_SYSTEM_TABLE *t,EFI_FILE_PROTOCOL *log) {
   }
   if(t->BootServices->FreePool(handles)!=EFI_SUCCESS)inventory=FALSE;
   if(!inventory || found!=1)return EFI_UNSUPPORTED;
+#ifdef GU_AD104_TEXT_TEST
+  if(!PcdProducerCaptured)return EFI_NOT_READY;
+#endif
   s=EdRun(&c,gpu,target,PfPins);
   EdStatus(&c,"experiment-result",s);
   EFI_STATUS logged=EdFlush(&c);

@@ -37,6 +37,12 @@ try {
  if($LASTEXITCODE -ne 0){throw 'Output mocks compile failed'}
  & ./build/capture-tests/output.exe
  if($LASTEXITCODE -ne 0){throw 'Output mocks failed'}
+ foreach($name in @('pcd_producer','text_display','text_lifecycle')) {
+  & $Clang @flags -Wno-unused-function "test_$name.c" ../unlock/sha256.c -o "build/capture-tests/$name.exe"
+  if($LASTEXITCODE -ne 0){throw "$name mocks compile failed"}
+  & "./build/capture-tests/$name.exe"
+  if($LASTEXITCODE -ne 0){throw "$name mocks failed"}
+ }
  & $Clang @flags -Wno-unused-function test_ad104_edid.c ../unlock/sha256.c -o build/capture-tests/edid.exe
  if($LASTEXITCODE -ne 0){throw 'EDID mocks compile failed'}
  & ./build/capture-tests/edid.exe
@@ -49,6 +55,10 @@ try {
  if($LASTEXITCODE -ne 0){throw 'EDID handoff mocks compile failed'}
  & ./build/capture-tests/edid-handoff.exe
  if($LASTEXITCODE -ne 0){throw 'EDID handoff mocks failed'}
+ & $Clang @flags -DGU_DIAGNOSTIC_ONLY -DGU_USB_PROBE -DGU_AD104_TEXT_TEST test_edid_handoff.c ../unlock/sha256.c -o build/capture-tests/text-handoff.exe
+ if($LASTEXITCODE -ne 0){throw 'Text handoff mocks compile failed'}
+ & ./build/capture-tests/text-handoff.exe
+ if($LASTEXITCODE -ne 0){throw 'Text handoff mocks failed'}
  & $Clang @flags test_windows_media.c -o build/capture-tests/gpt.exe
  if($LASTEXITCODE -ne 0){throw 'GPT regression compile failed'}
  & ./build/capture-tests/gpt.exe
@@ -97,5 +107,11 @@ try {
  if($LASTEXITCODE -eq 0 -or $out -notmatch 'Output observation requires'){throw 'Output observation accepted with mutation'}
  $global:LASTEXITCODE=0
  'PASS two invalid output-observation compile combinations rejected'
+ foreach($bad in @('-DGU_AD104_PCD_CAPTURE','-DGU_AD104_TEXT_TEST')) {
+  $out=& $Clang @flags $bad -fsyntax-only probe.c 2>&1 | Out-String
+  if($LASTEXITCODE -eq 0 -or $out -notmatch 'PCD capture requires|Text test requires'){throw "Capture/text compile guard failed: $bad"}
+  $global:LASTEXITCODE=0
+ }
+ 'PASS two invalid PCD/text compile combinations rejected'
  'PASS 16 incompatible/non-diagnostic build combinations rejected'
 } finally {Pop-Location}

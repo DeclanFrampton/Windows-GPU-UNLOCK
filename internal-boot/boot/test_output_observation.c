@@ -1,7 +1,10 @@
 /* GPL-2.0-only. Real metadata collectors with RAM-only protocols. */
+#pragma push_macro("main")
+#undef main
 #define main PreflightMain
 #include "test_ad104_preflight.c"
 #undef main
+#pragma pop_macro("main")
 #include "diagnostic.h"
 #include <Protocol/SimpleTextOut.h>
 static BOOLEAN ProbeUnchanged(CAPTURE *c,EFI_HANDLE h,EFI_PCI_IO_PROTOCOL *io,const UINT32 *cfg,const UINTN *loc) {

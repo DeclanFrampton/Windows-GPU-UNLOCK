@@ -17,7 +17,7 @@
 #include "../unlock/sha256.h"
 #ifdef GU_DIAGNOSTIC_ONLY
 #include "diagnostic.h"
-#ifdef GU_AD104_EDID_TEST
+#if defined(GU_AD104_EDID_TEST) || defined(GU_AD104_TEXT_TEST)
 #include "probe.h"
 #endif
 #endif
@@ -69,6 +69,9 @@ static BOOLEAN ResearchOutputDisabled;
 #endif
 
 static VOID Say(const CHAR16 *Text) {
+#ifdef GU_AD104_TEXT_TEST
+  if(GuTextOutputDisabled)return;
+#endif
 #ifdef GU_SINGLE_RTX_CONSOLE
   if(ResearchOutputDisabled)return;
 #endif
@@ -441,12 +444,16 @@ static EFI_STATUS DetachConsole(VOID *Context) {
 #endif
 }
 #endif
-#ifdef GU_AD104_EDID_TEST
+#if defined(GU_AD104_EDID_TEST) || defined(GU_AD104_TEXT_TEST)
 static EFI_STATUS EdidThenWindows(EFI_STATUS captured,EFI_STATUS recorded) {
   if(recorded!=EFI_SUCCESS)return recorded;
   if(captured!=EFI_NOT_READY || !WindowsImage)return EFI_NOT_READY;
   EFI_STATUS s=GuEdidExperiment(Table,Log);
+#ifdef GU_AD104_TEXT_TEST
+  recorded=Record(NULL,"text-experiment-result",s);
+#else
   recorded=Record(NULL,"edid-experiment-result",s);
+#endif
   if(recorded!=EFI_SUCCESS)return recorded;
   return s==EFI_SUCCESS?Windows(NULL):s;
 }
@@ -466,8 +473,8 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE Image,EFI_SYSTEM_TABLE *St) {
   GU_CONSOLE_FLOW_OPS ops={NULL,Prepare,PrepareChoice,CaptureConsole,DetachConsole,ReadyConsoleWindows,VerifyConsole,StartConsoleWindows,Record};
   s=GuConsoleFlow(&ops);
 #elif defined(GU_DIAGNOSTIC_ONLY)
-#ifdef GU_AD104_EDID_TEST
-  Say(L"Attended AD104 EDID lifecycle test. No unlock or PCI owner release. Collecting baseline...\r\n");
+#if defined(GU_AD104_EDID_TEST) || defined(GU_AD104_TEXT_TEST)
+  Say(L"Attended AD104 consumer lifecycle test. No unlock or PCI owner release. Collecting baseline...\r\n");
 #else
   Say(L"GPU console diagnostic only. No unlock or driver detach. Collecting graph...\r\n");
 #endif
@@ -477,7 +484,7 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE Image,EFI_SYSTEM_TABLE *St) {
     /* Metadata incompleteness is not release authorization. The separate
      * EDID test must qualify its own post-state before Windows handoff. */
     EFI_STATUS recorded=Record(NULL,"diagnostic-result",s);
-#ifdef GU_AD104_EDID_TEST
+#if defined(GU_AD104_EDID_TEST) || defined(GU_AD104_TEXT_TEST)
     /* Expected metadata incompleteness is separate from experiment success.
      * No failure in this mode may fall through to firmware BootOrder. */
     s=EdidThenWindows(s,recorded);
@@ -504,7 +511,7 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE Image,EFI_SYSTEM_TABLE *St) {
     return s==EFI_SUCCESS || s==EFI_ABORTED?EFI_NOT_STARTED:s;
   }
 #endif
-#if defined(GU_DIAGNOSTIC_ONLY) && defined(GU_USB_MEDIA) && !defined(GU_AD104_EDID_TEST)
+#if defined(GU_DIAGNOSTIC_ONLY) && defined(GU_USB_MEDIA) && !defined(GU_AD104_EDID_TEST) && !defined(GU_AD104_TEXT_TEST)
   /* Observation stick: this image never releases a driver or writes GPU state,
    * so a failed capture or Windows load hands back to the firmware BootOrder. */
   if(Log){(void)Log->Close(Log);Log=NULL;}

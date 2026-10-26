@@ -66,7 +66,7 @@ done:
   return s;
 }
 typedef struct {EFI_HANDLE Handle,Agent,Controller;EFI_GUID Protocol;UINT32 Attributes;} PF_EDGE;
-static EFI_STATUS PfGraphForState(EFI_SYSTEM_TABLE *t,EFI_HANDLE gpu,PF_STATE *state,BOOLEAN edidDetached) {
+static EFI_STATUS PfGraphMissing(EFI_SYSTEM_TABLE *t,EFI_HANDLE gpu,PF_STATE *state,UINTN missingMask) {
   EFI_BOOT_SERVICES *bs=t->BootServices;
   EFI_GUID text={0x387477c2,0x69c7,0x11d2,{0x8e,0x39,0,0xa0,0xc9,0x69,0x72,0x3b}};
   EFI_GUID edid={0x1c0c34f6,0xd380,0x41fa,{0xa0,0x49,0x8a,0xd0,0x6c,0x1a,0x66,0xaa}};
@@ -109,7 +109,7 @@ static EFI_STATUS PfGraphForState(EFI_SYSTEM_TABLE *t,EFI_HANDLE gpu,PF_STATE *s
         for(UINTN r=0;r<4;r++)if(e->AgentHandle==state->Agent[r])relevant=TRUE;
         if(!relevant)continue;
         UINTN match=8;
-        for(UINTN k=0;k<8;k++)if(!(edidDetached && k==5) && expected[k].Handle==handles[h] && expected[k].Agent==e->AgentHandle &&
+        for(UINTN k=0;k<8;k++)if(!(missingMask&(1U<<k)) && expected[k].Handle==handles[h] && expected[k].Agent==e->AgentHandle &&
            expected[k].Controller==e->ControllerHandle && expected[k].Attributes==e->Attributes &&
            PfEqual(&expected[k].Protocol,ps[p],sizeof(EFI_GUID)))match=k;
         if(match==8 || found[match] || e->OpenCount!=1){s=EFI_UNSUPPORTED;break;}
@@ -123,8 +123,11 @@ static EFI_STATUS PfGraphForState(EFI_SYSTEM_TABLE *t,EFI_HANDLE gpu,PF_STATE *s
   }
   if(bs->FreePool(handles)!=EFI_SUCCESS)s=EFI_DEVICE_ERROR;
   if(s!=EFI_SUCCESS)return s;
-  for(UINTN k=0;k<8;k++)if(!(edidDetached && k==5) && !found[k])return EFI_NOT_FOUND;
+  for(UINTN k=0;k<8;k++)if(!(missingMask&(1U<<k)) && !found[k])return EFI_NOT_FOUND;
   return EFI_SUCCESS;
+}
+static EFI_STATUS PfGraphForState(EFI_SYSTEM_TABLE *t,EFI_HANDLE gpu,PF_STATE *state,BOOLEAN edidDetached) {
+  return PfGraphMissing(t,gpu,state,edidDetached?(1U<<5):0);
 }
 static EFI_STATUS PfGraph(EFI_SYSTEM_TABLE *t,EFI_HANDLE gpu,PF_STATE *state) {
   return PfGraphForState(t,gpu,state,FALSE);

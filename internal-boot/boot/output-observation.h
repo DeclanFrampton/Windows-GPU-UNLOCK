@@ -15,6 +15,9 @@ typedef struct {
   PCD_PROTOCOL_GET_SIZE Size;
 } OUT_STATE;
 static EFI_GUID OutPcdGuid=PCD_PROTOCOL_GUID;
+#ifdef GU_AD104_PCD_CAPTURE
+#include "pcd-producer.h"
+#endif
 static VOID OutCopyTextMode(EFI_SIMPLE_TEXT_OUTPUT_MODE *to,const EFI_SIMPLE_TEXT_OUTPUT_MODE *from) {
   /* OUT_STATE was zeroed: copy fields rather than firmware padding bytes. */
   to->MaxMode=from->MaxMode;to->Mode=from->Mode;to->Attribute=from->Attribute;
@@ -113,6 +116,11 @@ static VOID ObserveOutput(CAPTURE *c,const PF_STATE *before,EFI_HANDLE gpu,EFI_P
     OutOwner(c,images,count,"out-set-mode",(UINTN)a.OutMethods.SetMode);
     OutOwner(c,images,count,"gop-set-mode",(UINTN)a.GopMethods.SetMode);
     OutOwner(c,images,count,"pcd-get-bool",(UINTN)a.GetBool);
+#ifdef GU_AD104_PCD_CAPTURE
+    EFI_STATUS captured=CapturePcdProducer(c,&a,images,count);
+    Text(c,"ad104-pcd-producer status=0x");Hex(c,captured,16);End(c);
+    if(captured!=EFI_SUCCESS)Problem(c,"ad104-pcd-producer",captured);
+#endif
   } else Problem(c,"ad104-output-images",EFI_NOT_READY);
   if(images && t->BootServices->FreePool(images)!=EFI_SUCCESS)Problem(c,"ad104-output-images-free",EFI_DEVICE_ERROR);
   /* All pointers above are trusted UEFI protocol buffers. No framebuffer,
