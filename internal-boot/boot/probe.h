@@ -5,4 +5,7 @@
 #include "../unlock/machine-profile.h"
 #include "diagnostic.h"
 EFI_STATUS GuProbeGpu(EFI_SYSTEM_TABLE *t,CAPTURE *c);
+#ifdef GU_AD104_EDID_TEST
+EFI_STATUS GuEdidExperiment(EFI_SYSTEM_TABLE *t,EFI_FILE_PROTOCOL *log);
+#endif
 

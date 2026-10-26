@@ -97,6 +97,11 @@ int main(void) {
   Check(state.NullBinding==(VOID *)14 && state.Child==(VOID *)2,"shared null binding and child discovered");
   for(int f=1;f<=8;f++){Setup(f,-1);Check(PfCollect(&T,(VOID *)1,Pins,&state)!=EFI_SUCCESS,"fingerprint, code type, null binding, input or graph faults rejected");}
   for(int e=0;e<8;e++){Setup(0,e);Check(PfCollect(&T,(VOID *)1,Pins,&state)!=EFI_SUCCESS,"every missing active relationship rejected");}
+  Setup(0,5);memset(&state,0,sizeof(state));
+  Check(PfDrivers(&T,Pins,&state)==EFI_SUCCESS && PfGraphForState(&T,(VOID *)1,&state,TRUE)==EFI_SUCCESS && state.MatchedEdges==7,"post checker accepts only missing EDID edge");
+  Setup(0,-1);memset(&state,0,sizeof(state));
+  Check(PfDrivers(&T,Pins,&state)==EFI_SUCCESS && PfGraphForState(&T,(VOID *)1,&state,TRUE)!=EFI_SUCCESS,"post checker rejects remaining EDID edge");
+  for(int e=0;e<8;e++)if(e!=5){Setup(0,e);memset(&state,0,sizeof(state));Check(PfDrivers(&T,Pins,&state)==EFI_SUCCESS && PfGraphForState(&T,(VOID *)1,&state,TRUE)!=EFI_SUCCESS,"post checker rejects unrelated missing edge");}
   printf("PASS AD104 runtime preflight: %d checks, RAM-only firmware mocks\n",Checks);
   return 0;
 }

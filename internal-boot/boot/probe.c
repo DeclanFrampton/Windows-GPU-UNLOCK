@@ -27,6 +27,9 @@
 #if defined(GU_PROBE_AD104_PREFLIGHT) && !defined(GU_PROBE_AD104_RESOURCES)
 #error AD104 preflight requires observation-only resource mode
 #endif
+#if defined(GU_AD104_EDID_TEST) && (!defined(GU_PROBE_AD104_PREFLIGHT) || !defined(GU_DIAGNOSTIC_MBR))
+#error EDID test requires exact AD104 preflight and pinned MBR handoff
+#endif
 
 #if defined(GU_PROBE_AD104_MSI) && (!defined(GU_PROBE_GENERIC) || !defined(GU_DIAGNOSTIC_ONLY) || !defined(GU_DIAGNOSTIC_PROBE) || !defined(GU_USB_MEDIA) || defined(GU_FULL_UNLOCK) || defined(GU_UEFI_PORT) || defined(GU_INTERNAL_BOOT) || defined(GU_HEADLESS_RESEARCH) || defined(GU_CONSOLE_PREPARE) || defined(GU_AUTOMATIC_BOOT) || defined(GU_EXPERIMENTAL_3090))
 #error AD104 capture is a separate read-only USB diagnostic, never an unlock profile
@@ -549,3 +552,31 @@ EFI_STATUS GuProbeGpu(EFI_SYSTEM_TABLE *t,CAPTURE *c) {
   /* Report a target that could not be captured rather than a clean success. */
   return found?cfgError:EFI_NOT_FOUND;
 }
+#ifdef GU_AD104_EDID_TEST
+#include "ad104-edid.h"
+EFI_STATUS GuEdidExperiment(EFI_SYSTEM_TABLE *t,EFI_FILE_PROTOCOL *log) {
+  if(!t || !t->BootServices || !log || !log->Write || !log->Flush)return EFI_INVALID_PARAMETER;
+  static CAPTURE c;
+  c.Table=t;c.File=log;c.DumpRoot=NULL;c.Io=EFI_SUCCESS;c.Complete=FALSE;c.Used=0;c.Total=0;
+  EFI_HANDLE *handles=NULL,gpu=NULL;EFI_PCI_IO_PROTOCOL *target=NULL;UINTN count=0,found=0;
+  EFI_STATUS s=t->BootServices->LocateHandleBuffer(ByProtocol,&PciGuidL,NULL,&count,&handles);
+  if(s!=EFI_SUCCESS || !handles || !count || count>1024) {
+    if(handles)t->BootServices->FreePool(handles);return EFI_NOT_READY;
+  }
+  BOOLEAN inventory=TRUE;
+  for(UINTN i=0;i<count;i++) {
+    EFI_PCI_IO_PROTOCOL *io=NULL;UINT32 id=0,cls=0;
+    if(t->BootServices->HandleProtocol(handles[i],&PciGuidL,(VOID **)&io)!=EFI_SUCCESS ||
+       !io || !io->Pci.Read || io->Pci.Read(io,EfiPciIoWidthUint32,0,1,&id)!=EFI_SUCCESS){inventory=FALSE;continue;}
+    if((id&0xffffU)!=0x10deU)continue;
+    if(io->Pci.Read(io,EfiPciIoWidthUint32,8,1,&cls)!=EFI_SUCCESS){inventory=FALSE;continue;}
+    if((cls>>24)==3){found++;gpu=handles[i];target=io;}
+  }
+  if(t->BootServices->FreePool(handles)!=EFI_SUCCESS)inventory=FALSE;
+  if(!inventory || found!=1)return EFI_UNSUPPORTED;
+  s=EdRun(&c,gpu,target,PfPins);
+  EdStatus(&c,"experiment-result",s);
+  EFI_STATUS logged=EdFlush(&c);
+  return logged!=EFI_SUCCESS?logged:s;
+}
+#endif

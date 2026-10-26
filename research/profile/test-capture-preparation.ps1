@@ -33,10 +33,18 @@ try {
  if($LASTEXITCODE -ne 0){throw 'Preflight mocks compile failed'}
  & ./build/capture-tests/preflight.exe
  if($LASTEXITCODE -ne 0){throw 'Preflight mocks failed'}
+ & $Clang @flags -Wno-unused-function test_ad104_edid.c ../unlock/sha256.c -o build/capture-tests/edid.exe
+ if($LASTEXITCODE -ne 0){throw 'EDID mocks compile failed'}
+ & ./build/capture-tests/edid.exe
+ if($LASTEXITCODE -ne 0){throw 'EDID mocks failed'}
  & $Clang @flags -DGU_DIAGNOSTIC_ONLY -DGU_USB_PROBE test_mbr_handoff.c ../unlock/sha256.c -o build/capture-tests/mbr.exe
  if($LASTEXITCODE -ne 0){throw 'MBR mocks compile failed'}
  & ./build/capture-tests/mbr.exe
  if($LASTEXITCODE -ne 0){throw 'MBR mocks failed'}
+ & $Clang @flags -DGU_DIAGNOSTIC_ONLY -DGU_USB_PROBE test_edid_handoff.c ../unlock/sha256.c -o build/capture-tests/edid-handoff.exe
+ if($LASTEXITCODE -ne 0){throw 'EDID handoff mocks compile failed'}
+ & ./build/capture-tests/edid-handoff.exe
+ if($LASTEXITCODE -ne 0){throw 'EDID handoff mocks failed'}
  & $Clang @flags test_windows_media.c -o build/capture-tests/gpt.exe
  if($LASTEXITCODE -ne 0){throw 'GPT regression compile failed'}
  & ./build/capture-tests/gpt.exe
@@ -74,5 +82,9 @@ try {
  if($LASTEXITCODE -eq 0 -or $out -notmatch 'AD104 preflight requires'){throw 'Preflight accepted without resource observation mode'}
  $global:LASTEXITCODE=0
  'PASS preflight-without-resources compile combination rejected'
+ $out=& $Clang @flags -DGU_AD104_EDID_TEST -fsyntax-only probe.c 2>&1 | Out-String
+ if($LASTEXITCODE -eq 0 -or $out -notmatch 'EDID test requires'){throw 'EDID test accepted without exact preflight and handoff'}
+ $global:LASTEXITCODE=0
+ 'PASS EDID-without-preflight/handoff compile combination rejected'
  'PASS 16 incompatible/non-diagnostic build combinations rejected'
 } finally {Pop-Location}
