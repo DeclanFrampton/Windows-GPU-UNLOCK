@@ -4,7 +4,7 @@
     {
       "image_index": 8,
       "active_edges": 3,
-      "controller_handles": 2,
+      "opened_protocol_handles": 2,
       "outside_gpu_handles": 1,
       "protocols": [
         "1c0c34f6-d380-41fa-a049-8ad06c1a66aa",
@@ -16,7 +16,7 @@
     {
       "image_index": 14,
       "active_edges": 2,
-      "controller_handles": 1,
+      "opened_protocol_handles": 1,
       "outside_gpu_handles": 0,
       "protocols": [
         "387477c2-69c7-11d2-8e39-00a0c969723b"
@@ -26,7 +26,7 @@
     {
       "image_index": 17,
       "active_edges": 1,
-      "controller_handles": 1,
+      "opened_protocol_handles": 1,
       "outside_gpu_handles": 0,
       "protocols": [
         "9042a9de-23dc-4a38-96fb-7aded080516a"
@@ -36,7 +36,7 @@
     {
       "image_index": 29,
       "active_edges": 2,
-      "controller_handles": 1,
+      "opened_protocol_handles": 1,
       "outside_gpu_handles": 0,
       "protocols": [
         "4cf5b200-68b8-4ca5-9eec-b23e3f50029a"
