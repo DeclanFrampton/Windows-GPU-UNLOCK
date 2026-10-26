@@ -72,10 +72,30 @@ Current evidence establishes firmware topology, BAR shape, attribute masks and
 a consistent captured two-image ROM chain. The [sixth physical run](AD104-SIXTH-RESULT.en.md)
 also passed the implemented live fingerprint/topology consistency check. It
 does not satisfy the live-release, cold-state or transaction gates above.
-The next candidate is the [one-shot EDID lifecycle experiment](AD104-EDID-EXPERIMENT.en.md),
-now implemented with actual input challenges and independent post-state checks;
-[the seventh boot](AD104-SEVENTH-BOOT.en.md) remains physically untested.
+The [seventh physical run](AD104-SEVENTH-RESULT.en.md) additionally demonstrated
+the predicted EDID release, actual post-disconnect keyboard input and Windows
+return on this run. PCI command remains `0007`; BME is enabled. This is one
+consumer transition, not successful release of the display stack or PCI owner.
+The [text-driver analysis](AD104-TEXT-LIFECYCLE.en.md) identifies a conditional
+GOP SetMode call during cleanup, so merely changing the target of the EDID test
+would omit important postconditions.
 No unchanged query/preflight repeat is needed.
 An eventual live release test must explicitly describe possible lost display,
 lost input and failure to return to Windows; it must not promise recovery that
 has only been simulated.
+
+## Distance to an unlock demonstration
+
+| Gate | Current evidence |
+| --- | --- |
+| Exact identity, ownership and live discovery | Observed; EDID transition also demonstrated |
+| Remaining text/GOP consumers and PCI-owner release | Not demonstrated; text cleanup can reprogram the display |
+| Limited decode enable and cold-entry/protected-memory admission | Not demonstrated; required register evidence absent |
+| Machine-specific unlock transaction and independent state readback | Not run |
+| Windows recovery and controlled stock/post-unlock workloads | EDID-only return observed; no post-unlock workload exists |
+
+These gates are not equally difficult and cannot support a meaningful percentage,
+number of remaining boots or completion date. Cold-state admission or immutable
+hardware restrictions could still prevent an unlock. The next decision should
+follow evidence about text cleanup and its display effects, not confidence from
+an unrelated successful callback. No additional boot is requested by this report.
