@@ -1,15 +1,15 @@
 /* GPL-2.0-only. Observation-only discovery; never a release permit. */
 #include <Protocol/SimpleTextIn.h>
-typedef struct {UINTN Size,Code,Bytes,Stop;UINT32 Version;const char *Hash;} PF_PIN;
+typedef struct {UINTN Size,Code,Bytes,Stop;UINT32 Version;EFI_MEMORY_TYPE CodeType;const char *Hash;} PF_PIN;
 typedef struct {
   EFI_HANDLE Agent[4],Image[4],NullBinding,Child;
   VOID *Base[4];UINT8 SharedFlag;UINT64 PointerCounts[2];
 } PF_STATE;
 static const PF_PIN PfPins[]={
- {36864,0x1000,12802,0x1464,1,"99e4b7aff51f40e07b8fbbfe62b89f55a5d6a678edb87de5ae598b4ffd0e932b"},
- {30912,0x2a0,23699,0x11e0,0x10,"a45cc097c00d9af3619eba22e2fa0969e54475f307fc7631aab9737fc751dfae"},
- {22080,0x2a0,11997,0xa18,0x10,"1d4e4f48e37b298ce8b50d6ba7aaa968d6d0ae6633cd4bc74c96bce94aa7098d"},
- {18432,0x2a0,13965,0x7c4,0x24,"98316fea18ef529eb95c688985517b1e8bfe2071e4c105288106c152d79faa4c"}
+ {36864,0x1000,12802,0x1464,1,EfiRuntimeServicesCode,"99e4b7aff51f40e07b8fbbfe62b89f55a5d6a678edb87de5ae598b4ffd0e932b"},
+ {30912,0x2a0,23699,0x11e0,0x10,EfiBootServicesCode,"a45cc097c00d9af3619eba22e2fa0969e54475f307fc7631aab9737fc751dfae"},
+ {22080,0x2a0,11997,0xa18,0x10,EfiBootServicesCode,"1d4e4f48e37b298ce8b50d6ba7aaa968d6d0ae6633cd4bc74c96bce94aa7098d"},
+ {18432,0x2a0,13965,0x7c4,0x24,EfiBootServicesCode,"98316fea18ef529eb95c688985517b1e8bfe2071e4c105288106c152d79faa4c"}
 };
 static BOOLEAN PfEqual(const VOID *a,const VOID *b,UINTN n) {
   for(UINTN i=0;i<n;i++)if(((const UINT8 *)a)[i]!=((const UINT8 *)b)[i])return FALSE;
@@ -34,7 +34,7 @@ static EFI_STATUS PfDrivers(EFI_SYSTEM_TABLE *t,const PF_PIN *pins,PF_STATE *out
     for(UINTN role=0;role<4;role++) {
       const PF_PIN *p=&pins[role];
       if(im->ImageSize!=p->Size || d->Version!=p->Version)continue;
-      if(!im->ImageBase || im->ImageCodeType!=EfiBootServicesCode || d->DriverBindingHandle!=hs[i] ||
+      if(!im->ImageBase || im->ImageCodeType!=p->CodeType || d->DriverBindingHandle!=hs[i] ||
          p->Code>p->Size || p->Bytes>p->Size-p->Code ||
          (UINTN)im->ImageBase>MAX_UINTN-p->Size || p->Stop>=p->Size ||
          (UINTN)d->Stop!=(UINTN)im->ImageBase+p->Stop ||

@@ -240,8 +240,8 @@ static VOID ObservePreflight(CAPTURE *c,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *io,c
      t->ConIn!=input || input->Reset!=reset || input->ReadKeyStroke!=read || input->WaitForKey!=wait ||
      t->ConsoleInHandle!=keys || t->ConsoleOutHandle!=out || t->StandardErrorHandle!=error ||
      t->ConOut!=text || t->StdErr!=err || !ProbeUnchanged(c,gpu,io,cfg,loc)))s=EFI_NOT_READY;
-  Text(c,"ad104-runtime-preflight status=0x");Hex(c,s,16);
-  Text(c," release-authority=0 cold-state-known=0 input-execution-tested=0");End(c);
+  Text(c,"ad104-runtime-preflight topology-status=0x");Hex(c,s,16);
+  Text(c," release-authority=0 cold-state-known=0 input-execution-tested=0 resource-admission-separate=1");End(c);
   if(s!=EFI_SUCCESS)Problem(c,"ad104-runtime-preflight-refused",s);
 }
 #endif

@@ -66,8 +66,8 @@ static void Setup(int fault,int missing) {
   for(UINTN i=0;i<4;i++) {
     memset(Data[i],(int)i+1,sizeof(Data[i]));UINT8 digest[32];GuSha256(Data[i]+0x100,8,digest);
     for(UINTN j=0;j<32;j++){Hashes[i][j*2]="0123456789abcdef"[digest[j]>>4];Hashes[i][j*2+1]="0123456789abcdef"[digest[j]&15];}Hashes[i][64]=0;
-    Pins[i]=(PF_PIN){sizes[i],0x100,8,0x150,(UINT32)i+1,Hashes[i]};
-    memset(&Images[i],0,sizeof(Images[i]));Images[i].ImageBase=Data[i];Images[i].ImageSize=sizes[i];Images[i].ImageCodeType=EfiBootServicesCode;
+    Pins[i]=(PF_PIN){sizes[i],0x100,8,0x150,(UINT32)i+1,i==0?EfiRuntimeServicesCode:EfiBootServicesCode,Hashes[i]};
+    memset(&Images[i],0,sizeof(Images[i]));Images[i].ImageBase=Data[i];Images[i].ImageSize=sizes[i];Images[i].ImageCodeType=Pins[i].CodeType;
     memset(&Drivers[i],0,sizeof(Drivers[i]));Drivers[i].ImageHandle=(VOID *)(20+i);Drivers[i].DriverBindingHandle=(VOID *)(10+i);
     Drivers[i].Version=Pins[i].Version;Drivers[i].Stop=(EFI_DRIVER_BINDING_STOP)(Data[i]+0x150);
   }
@@ -89,12 +89,13 @@ static void Setup(int fault,int missing) {
   if(fault==2)Drivers[0].Stop=(EFI_DRIVER_BINDING_STOP)(Data[0]+0x151);
   if(fault==3)Drivers[4].ImageHandle=(VOID *)20;
   if(fault==4)T.ConsoleInHandle=(VOID *)4;
+  if(fault==8)Images[0].ImageCodeType=EfiBootServicesCode;
 }
 int main(void) {
   PF_STATE state;Setup(0,-1);
   Check(PfCollect(&T,(VOID *)1,Pins,&state)==EFI_SUCCESS,"fresh discovery accepts exact synthetic five bindings and eight edges");
   Check(state.NullBinding==(VOID *)14 && state.Child==(VOID *)2,"shared null binding and child discovered");
-  for(int f=1;f<=7;f++){Setup(f,-1);Check(PfCollect(&T,(VOID *)1,Pins,&state)!=EFI_SUCCESS,"fingerprint, null binding, input or graph faults rejected");}
+  for(int f=1;f<=8;f++){Setup(f,-1);Check(PfCollect(&T,(VOID *)1,Pins,&state)!=EFI_SUCCESS,"fingerprint, code type, null binding, input or graph faults rejected");}
   for(int e=0;e<8;e++){Setup(0,e);Check(PfCollect(&T,(VOID *)1,Pins,&state)!=EFI_SUCCESS,"every missing active relationship rejected");}
   printf("PASS AD104 runtime preflight: %d checks, RAM-only firmware mocks\n",Checks);
   return 0;
