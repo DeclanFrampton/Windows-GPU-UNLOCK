@@ -59,7 +59,8 @@ static VOID FirmwareRom(CAPTURE *c,EFI_HANDLE handle,EFI_PCI_IO_PROTOCOL *io,
   if(!NewDump(c,root,L"\\RTX3090-UNLOCK\\FIRMROM.BIN"))goto done;
   EFI_FILE_PROTOCOL *file=NULL;
   status=root->Open(root,&file,L"\\RTX3090-UNLOCK\\FIRMROM.BIN",EFI_FILE_MODE_READ|EFI_FILE_MODE_WRITE|EFI_FILE_MODE_CREATE,0);
-  if(status!=EFI_SUCCESS || !file)goto done;
+  if(status!=EFI_SUCCESS)goto done;
+  if(!file || file==root){status=EFI_DEVICE_ERROR;goto done;}
   if(!file->Write || !file->Flush || !file->Close) {
     if(file->Close)(void)file->Close(file);
     status=EFI_UNSUPPORTED;goto done;

@@ -3,6 +3,14 @@
 #include "test_probe_ad104.c"
 static UINT8 RomBytes[0x24a00];
 static int RomFault,Maps;
+static EFI_STATUS EFIAPI RomOpen(EFI_FILE_PROTOCOL *f,EFI_FILE_PROTOCOL **out,CHAR16 *name,UINT64 mode,UINT64 attrs) {
+  const CHAR16 target[]=L"\\RTX3090-UNLOCK\\FIRMROM.BIN";
+  UINTN at=0;while(target[at] && target[at]==name[at])at++;
+  if(target[at]==name[at] && (mode&EFI_FILE_MODE_CREATE) && (RomFault==22 || RomFault==23)) {
+    *out=RomFault==22?NULL:f;return EFI_SUCCESS;
+  }
+  return DumpOpen(f,out,name,mode,attrs);
+}
 static EFI_STATUS EFIAPI RomMap(UINTN *size,EFI_MEMORY_DESCRIPTOR *map,UINTN *key,UINTN *stride,UINT32 *version) {
   (void)key;Maps++;
   *stride=sizeof(*map);*version=EFI_MEMORY_DESCRIPTOR_VERSION;*size=sizeof(*map);
@@ -32,6 +40,7 @@ static EFI_STATUS RomRun(int fault,int mode) {
   RomBytes[0x2a]=0x18;RomBytes[0x30]=1;
   Pci.Pci.Read=AdRead;Pci.GetLocation=AdLocation;Pci.Mem.Read=AdMem;
   Pci.RomImage=RomBytes;Pci.RomSize=sizeof(RomBytes);Bs.GetMemoryMap=RomMap;
+  RootFile.Open=RomOpen;
   if(fault==13)Pci.RomImage=(VOID *)(UINTN)1;
   if(fault==14)Pci.RomSize=MAX_UINT64;
   if(fault==15)RomBytes[0]=0;
@@ -47,10 +56,11 @@ int main(void) {
   Check(RomRun(0,G_BME)==EFI_NOT_READY,"buffer capture never claims deep capture complete");
   Check(Logged("firmware-rom-buffer dump=FIRMROM.BIN") && Logged("unlock-eligibility=0"),"stable bounded RAM ROM saved");
   Check(!S.RegReads && !S.PromReads && !S.PromAllocs && Maps==2,"zero MMIO and two map observations");
-  for(int fault=1;fault<=21;fault++) {
+  for(int fault=1;fault<=23;fault++) {
     Check(RomRun(fault,G_BME)==EFI_NOT_READY,"invalid buffer stays incomplete");
     Check(!Logged("firmware-rom-buffer dump="),"invalid buffer never published complete");
     Check(!S.RegReads && !S.PromReads,"no MMIO on failure");
+    Check(!RootCloses,"capture root is never closed by a malformed dump handle");
   }
   const int modes[]={A_DEVICE,A_SUBSYSTEM,A_REVISION,G_MULTI,G_SHORT_WRITE,G_FLUSH,G_CLOSE,G_EXISTING_IMG,G_DUMP_READ_ERROR};
   for(UINTN i=0;i<sizeof(modes)/sizeof(modes[0]);i++) {

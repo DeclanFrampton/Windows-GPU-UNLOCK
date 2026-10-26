@@ -225,8 +225,8 @@ static VOID ProbeAd104Bar(CAPTURE *c,EFI_PCI_IO_PROTOCOL *io,EFI_FILE_PROTOCOL *
   if(cfg[0]!=0x278210deU || cfg[11]!=0x51321462U || cfg[2]!=0x030000a1U) {
     Problem(c,"ad104-metadata-identity",EFI_UNSUPPORTED);return;
   }
-  /* Inspect fields supplied by firmware, never dereference RomImage. This mode
-   * returns before GetBarAttributes, allocation or any GPU MMIO callback. */
+  /* Metadata alone never dereferences RomImage. The optional FIRMROM extension
+   * allocates and reads admitted RAM; neither path calls GPU MMIO methods. */
   Text(c,"ad104-metadata-only=1 rom-pointer-present=");Hex(c,io->RomImage?1:0,1);
   Text(c," rom-bytes=0x");Hex(c,io->RomSize,16);
   Text(c," command=0x");Hex(c,cfg[1]&0xffffU,4);
