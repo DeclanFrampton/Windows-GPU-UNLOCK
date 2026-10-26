@@ -4,6 +4,7 @@ typedef struct {UINTN Size,Code,Bytes,Stop;UINT32 Version;EFI_MEMORY_TYPE CodeTy
 typedef struct {
   EFI_HANDLE Agent[4],Image[4],NullBinding,Child;
   VOID *Base[4];UINT8 SharedFlag;UINT64 PointerCounts[2];
+  UINTN MatchedEdges,RejectionStep;
 } PF_STATE;
 static const PF_PIN PfPins[]={
  {36864,0x1000,12802,0x1464,1,EfiRuntimeServicesCode,"99e4b7aff51f40e07b8fbbfe62b89f55a5d6a678edb87de5ae598b4ffd0e932b"},
@@ -113,6 +114,7 @@ static EFI_STATUS PfGraph(EFI_SYSTEM_TABLE *t,EFI_HANDLE gpu,PF_STATE *state) {
            PfEqual(&expected[k].Protocol,ps[p],sizeof(EFI_GUID)))match=k;
         if(match==8 || found[match] || e->OpenCount!=1){s=EFI_UNSUPPORTED;break;}
         found[match]=TRUE;
+        state->MatchedEdges++;
       }
       if(entries && bs->FreePool(entries)!=EFI_SUCCESS)s=EFI_DEVICE_ERROR;
     }
@@ -127,6 +129,7 @@ static EFI_STATUS PfGraph(EFI_SYSTEM_TABLE *t,EFI_HANDLE gpu,PF_STATE *state) {
 static EFI_STATUS PfCollect(EFI_SYSTEM_TABLE *t,EFI_HANDLE gpu,const PF_PIN *pins,PF_STATE *out) {
   UINT8 *b=(VOID *)out;for(UINTN i=0;i<sizeof(*out);i++)b[i]=0;
   EFI_STATUS s=PfDrivers(t,pins,out);
-  if(s==EFI_SUCCESS)s=PfGraph(t,gpu,out);
+  if(s!=EFI_SUCCESS)out->RejectionStep=1;
+  else {s=PfGraph(t,gpu,out);if(s!=EFI_SUCCESS)out->RejectionStep=2;}
   return s;
 }

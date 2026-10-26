@@ -223,7 +223,7 @@ static BOOLEAN ProbeUnchanged(CAPTURE *c,EFI_HANDLE handle,EFI_PCI_IO_PROTOCOL *
 #ifdef GU_PROBE_AD104_PREFLIGHT
 #include "ad104-preflight.h"
 static VOID ObservePreflight(CAPTURE *c,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *io,const UINT32 *cfg) {
-  EFI_SYSTEM_TABLE *t=c->Table;PF_STATE first,second;UINTN loc[4];
+  EFI_SYSTEM_TABLE *t=c->Table;PF_STATE first={0},second={0};UINTN loc[4];
   if(!t->ConIn || !t->ConIn->Reset || !t->ConIn->ReadKeyStroke || !t->ConIn->WaitForKey ||
      !io->GetLocation || io->GetLocation(io,&loc[0],&loc[1],&loc[2],&loc[3])!=EFI_SUCCESS ||
      loc[0] || loc[1]!=11 || loc[2] || loc[3] || (cfg[1]&0xffffU)!=7) {
@@ -242,6 +242,15 @@ static VOID ObservePreflight(CAPTURE *c,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *io,c
      t->ConOut!=text || t->StdErr!=err || !ProbeUnchanged(c,gpu,io,cfg,loc)))s=EFI_NOT_READY;
   Text(c,"ad104-runtime-preflight topology-status=0x");Hex(c,s,16);
   Text(c," release-authority=0 cold-state-known=0 input-execution-tested=0 resource-admission-separate=1");End(c);
+  UINTN roles=0;for(UINTN r=0;r<4;r++)if(first.Agent[r])roles|=1U<<r;
+  Text(c,"ad104-preflight-observations roles=0x");Hex(c,roles,1);
+  Text(c," null-binding-present=");Hex(c,first.NullBinding?1:0,1);
+  Text(c," matched-edges=0x");Hex(c,first.MatchedEdges,2);
+  Text(c," first-rejection-step=0x");Hex(c,first.RejectionStep,1);
+  Text(c," second-rejection-step=0x");Hex(c,second.RejectionStep,1);
+  Text(c," shared-byte=0x");Hex(c,first.SharedFlag,2);
+  Text(c," shared-count1=0x");Hex(c,first.PointerCounts[0],16);
+  Text(c," shared-count2=0x");Hex(c,first.PointerCounts[1],16);End(c);
   if(s!=EFI_SUCCESS)Problem(c,"ad104-runtime-preflight-refused",s);
 }
 #endif
