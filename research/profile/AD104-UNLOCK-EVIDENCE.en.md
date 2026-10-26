@@ -69,10 +69,12 @@ Thirty-one Python tests pass. No new firmware was built or staged for this work.
    the stock driver, or a faster result without state evidence, proves no unlock.
 
 Current evidence establishes firmware topology, BAR shape, attribute masks and
-a consistent captured two-image ROM chain. It does not satisfy the live-release,
-cold-state or transaction gates above. The next engineering task is a narrowly
-fingerprinted runtime graph preflight plus further IMG08 shared-state analysis,
-before any driver callback is invoked. No repeat of the fifth query is needed.
+a consistent captured two-image ROM chain. The [sixth physical run](AD104-SIXTH-RESULT.en.md)
+also passed the implemented live fingerprint/topology consistency check. It
+does not satisfy the live-release, cold-state or transaction gates above.
+The next candidate is the [one-shot EDID lifecycle experiment](AD104-EDID-EXPERIMENT.en.md),
+with actual input challenges and independent post-state checks still to implement.
+No unchanged query/preflight repeat is needed.
 An eventual live release test must explicitly describe possible lost display,
 lost input and failure to return to Windows; it must not promise recovery that
 has only been simulated.
