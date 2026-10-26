@@ -12,6 +12,10 @@
 #include "probe.h"
 #include "../unlock/machine-profile.h"
 
+#if defined(GU_PROBE_AD104_METADATA) && !defined(GU_PROBE_AD104_MSI)
+#error AD104 metadata requires the guarded AD104 diagnostic
+#endif
+
 #if defined(GU_PROBE_AD104_MSI) && (!defined(GU_PROBE_GENERIC) || !defined(GU_DIAGNOSTIC_ONLY) || !defined(GU_DIAGNOSTIC_PROBE) || !defined(GU_USB_MEDIA) || defined(GU_FULL_UNLOCK) || defined(GU_UEFI_PORT) || defined(GU_INTERNAL_BOOT) || defined(GU_HEADLESS_RESEARCH) || defined(GU_CONSOLE_PREPARE) || defined(GU_AUTOMATIC_BOOT) || defined(GU_EXPERIMENTAL_3090))
 #error AD104 capture is a separate read-only USB diagnostic, never an unlock profile
 #endif
@@ -211,6 +215,16 @@ static VOID ProbeAd104Bar(CAPTURE *c,EFI_PCI_IO_PROTOCOL *io,EFI_FILE_PROTOCOL *
     0x1183a4,0x625f04,0x1fa7c8,0x1fa82c,0x1fa830,0x824148,0x8241e0,0x840100};
   UINTN location[4];UINT8 *page=NULL;UINT32 values[22],chip=0,signature=0;
   EFI_STATUS s;
+#ifdef GU_PROBE_AD104_METADATA
+  /* Inspect fields supplied by firmware, never dereference RomImage. This mode
+   * returns before GetBarAttributes, allocation or any GPU MMIO callback. */
+  Text(c,"ad104-metadata-only=1 rom-pointer-present=");Hex(c,io->RomImage?1:0,1);
+  Text(c," rom-bytes=0x");Hex(c,io->RomSize,16);
+  Text(c," command=0x");Hex(c,cfg[1]&0xffffU,4);
+  Text(c," memory-enabled=");Hex(c,(cfg[1]>>1)&1U,1);
+  Text(c," bus-master-enabled=");Hex(c,(cfg[1]>>2)&1U,1);End(c);
+  Problem(c,"ad104-metadata-only-no-mmio",EFI_NOT_READY);return;
+#endif
   Text(c,"ad104-admission command=0x");Hex(c,cfg[1]&0xffffU,4);
   Text(c," memory-enabled=");Hex(c,(cfg[1]>>1)&1U,1);
   Text(c," bus-master-enabled=");Hex(c,(cfg[1]>>2)&1U,1);End(c);

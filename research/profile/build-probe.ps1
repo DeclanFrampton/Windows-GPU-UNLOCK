@@ -5,8 +5,9 @@
 # DMA or firmware variable writes. Builds files only.
 param([Parameter(Mandatory,ParameterSetName='Gpt')][guid]$WindowsEspGuid,
  [Parameter(Mandatory,ParameterSetName='Mbr')][switch]$WindowsMbr,
- [switch]$Ad104Msi,[string]$Clang='clang',[string]$LldLink='lld-link',[string]$Python='python')
+ [switch]$Ad104Msi,[switch]$Ad104Metadata,[string]$Clang='clang',[string]$LldLink='lld-link',[string]$Python='python')
 $ErrorActionPreference='Stop'
+if($Ad104Metadata -and !$Ad104Msi){throw 'Ad104Metadata requires Ad104Msi'}
 $repo=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $boot=Join-Path $repo 'internal-boot/boot'
 function GuidC([guid]$Value){
@@ -51,10 +52,12 @@ Push-Location -LiteralPath $boot
 try {
  $out='build/probe-generic'
  if($Ad104Msi){$out='build/probe-ad104-msi'}
+ if($Ad104Metadata){$out='build/probe-ad104-metadata'}
  New-Item -ItemType Directory -Path $out -Force | Out-Null
  $sources=@('handoff.c','diagnostic.c','../efi_runtime.c','probe.c','../unlock/sha256.c')
  $defines=@('-DGU_DIAGNOSTIC_ONLY','-DGU_DIAGNOSTIC_PROBE','-DGU_PROBE_GENERIC','-DGU_USB_PROBE')
  if($Ad104Msi){$defines+=@('-DGU_PROBE_AD104_MSI','-DGU_USB_MEDIA')}
+ if($Ad104Metadata){$defines+='-DGU_PROBE_AD104_METADATA'}
  if($WindowsMbr){$defines+='-DGU_DIAGNOSTIC_MBR';if(!$Ad104Msi){$defines+='-DGU_USB_MEDIA'}}
  $objects=@()
  foreach($source in $sources) {

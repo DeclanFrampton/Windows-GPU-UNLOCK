@@ -17,6 +17,10 @@ try {
  if($LASTEXITCODE -ne 0){throw 'AD104 mocks compile failed'}
  & ./build/capture-tests/ad104.exe
  if($LASTEXITCODE -ne 0){throw 'AD104 mocks failed'}
+ & $Clang @flags -Wno-unused-function @ad104 -DGU_PROBE_AD104_METADATA test_probe_ad104.c probe.c ../unlock/sha256.c -o build/capture-tests/metadata.exe
+ if($LASTEXITCODE -ne 0){throw 'AD104 metadata mocks compile failed'}
+ & ./build/capture-tests/metadata.exe
+ if($LASTEXITCODE -ne 0){throw 'AD104 metadata mocks failed'}
  & $Clang @flags -DGU_DIAGNOSTIC_ONLY -DGU_USB_PROBE test_mbr_handoff.c ../unlock/sha256.c -o build/capture-tests/mbr.exe
  if($LASTEXITCODE -ne 0){throw 'MBR mocks compile failed'}
  & ./build/capture-tests/mbr.exe

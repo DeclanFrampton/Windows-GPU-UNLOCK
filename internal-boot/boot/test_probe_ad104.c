@@ -47,6 +47,21 @@ static EFI_STATUS AdRun(int mode) {
   return GuCaptureGraphOnVolume(&Table,&LogFile,&RootFile);
 }
 int main(void) {
+#ifdef GU_PROBE_AD104_METADATA
+  for(int mode=0;mode<3;mode++) {
+    GenericSetup(G_BME);AdMode=G_BME;
+    Pci.Pci.Read=AdRead;Pci.GetLocation=AdLocation;Pci.Mem.Read=AdMem;
+    Pci.RomImage=mode?(VOID *)(UINTN)1:NULL;
+    Pci.RomSize=mode==2?MAX_UINT64:(mode?0x100000:0);
+    Check(GuCaptureGraphOnVolume(&Table,&LogFile,&RootFile)==EFI_NOT_READY,"metadata is never a complete GPU capture");
+    Check(!S.RegReads && !S.PromReads && !S.PromAllocs,"metadata never reads MMIO, PROM or allocates a PROM buffer");
+    Check(Logged("ad104-metadata-only=1") && Logged("ad104-metadata-only-no-mmio"),"metadata mode is explicit");
+    Check(Logged("bus-master-enabled=1"),"active BME is observed, never changed");
+    Check(!Logged("prom bytes=") && !Logged("capture-complete=1"),"no ROM bytes or complete marker");
+  }
+  printf("PASS AD104 metadata: %d checks, invalid ROM pointers never dereferenced\n",Checks);
+  return 0;
+#endif
   Check(GenericRun(G_UNKNOWN,TRUE)==EFI_NOT_READY,"legacy unknown target stays refused");
   Check(AdRun(A_OK)==EFI_SUCCESS,"AD104 bus 0B capture succeeds in mock");
   Check(S.RegReads==23 && S.PromReads==PROM_DWORDS+1,"22 registers, final chip and bounded PROM");
