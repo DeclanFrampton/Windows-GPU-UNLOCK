@@ -29,6 +29,10 @@ try {
  if($LASTEXITCODE -ne 0){throw 'Resource mocks compile failed'}
  & ./build/capture-tests/resources.exe
  if($LASTEXITCODE -ne 0){throw 'Resource mocks failed'}
+ & $Clang @flags -Wno-unused-function test_ad104_preflight.c ../unlock/sha256.c -o build/capture-tests/preflight.exe
+ if($LASTEXITCODE -ne 0){throw 'Preflight mocks compile failed'}
+ & ./build/capture-tests/preflight.exe
+ if($LASTEXITCODE -ne 0){throw 'Preflight mocks failed'}
  & $Clang @flags -DGU_DIAGNOSTIC_ONLY -DGU_USB_PROBE test_mbr_handoff.c ../unlock/sha256.c -o build/capture-tests/mbr.exe
  if($LASTEXITCODE -ne 0){throw 'MBR mocks compile failed'}
  & ./build/capture-tests/mbr.exe
@@ -66,5 +70,9 @@ try {
  if($LASTEXITCODE -eq 0 -or $out -notmatch 'Resource observation is separate'){throw 'Resource and ROM modes combined'}
  $global:LASTEXITCODE=0
  'PASS combined resources/firmware-ROM compile combination rejected'
+ $out=& $Clang @flags -DGU_PROBE_AD104_PREFLIGHT -fsyntax-only probe.c 2>&1 | Out-String
+ if($LASTEXITCODE -eq 0 -or $out -notmatch 'AD104 preflight requires'){throw 'Preflight accepted without resource observation mode'}
+ $global:LASTEXITCODE=0
+ 'PASS preflight-without-resources compile combination rejected'
  'PASS 16 incompatible/non-diagnostic build combinations rejected'
 } finally {Pop-Location}

@@ -24,6 +24,9 @@
 #if defined(GU_PROBE_AD104_RESOURCES) && defined(GU_PROBE_AD104_FIRMROM)
 #error Resource observation is separate from firmware ROM capture
 #endif
+#if defined(GU_PROBE_AD104_PREFLIGHT) && !defined(GU_PROBE_AD104_RESOURCES)
+#error AD104 preflight requires observation-only resource mode
+#endif
 
 #if defined(GU_PROBE_AD104_MSI) && (!defined(GU_PROBE_GENERIC) || !defined(GU_DIAGNOSTIC_ONLY) || !defined(GU_DIAGNOSTIC_PROBE) || !defined(GU_USB_MEDIA) || defined(GU_FULL_UNLOCK) || defined(GU_UEFI_PORT) || defined(GU_INTERNAL_BOOT) || defined(GU_HEADLESS_RESEARCH) || defined(GU_CONSOLE_PREPARE) || defined(GU_AUTOMATIC_BOOT) || defined(GU_EXPERIMENTAL_3090))
 #error AD104 capture is a separate read-only USB diagnostic, never an unlock profile
@@ -217,6 +220,31 @@ static BOOLEAN ProbeUnchanged(CAPTURE *c,EFI_HANDLE handle,EFI_PCI_IO_PROTOCOL *
 #include "firmware-rom.h"
 #endif
 #ifdef GU_PROBE_AD104_RESOURCES
+#ifdef GU_PROBE_AD104_PREFLIGHT
+#include "ad104-preflight.h"
+static VOID ObservePreflight(CAPTURE *c,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *io,const UINT32 *cfg) {
+  EFI_SYSTEM_TABLE *t=c->Table;PF_STATE first,second;UINTN loc[4];
+  if(!t->ConIn || !t->ConIn->Reset || !t->ConIn->ReadKeyStroke || !t->ConIn->WaitForKey ||
+     !io->GetLocation || io->GetLocation(io,&loc[0],&loc[1],&loc[2],&loc[3])!=EFI_SUCCESS ||
+     loc[0] || loc[1]!=11 || loc[2] || loc[3] || (cfg[1]&0xffffU)!=7) {
+    Problem(c,"ad104-preflight-input-or-location",EFI_NOT_READY);return;
+  }
+  EFI_SIMPLE_TEXT_INPUT_PROTOCOL *input=t->ConIn;
+  EFI_INPUT_RESET reset=input->Reset;EFI_INPUT_READ_KEY read=input->ReadKeyStroke;EFI_EVENT wait=input->WaitForKey;
+  EFI_HANDLE keys=t->ConsoleInHandle,out=t->ConsoleOutHandle,error=t->StandardErrorHandle;
+  VOID *text=t->ConOut,*err=t->StdErr;
+  EFI_STATUS s=PfCollect(t,gpu,PfPins,&first);
+  if(s==EFI_SUCCESS)s=PfCollect(t,gpu,PfPins,&second);
+  if(s==EFI_SUCCESS && (!PfEqual(&first,&second,sizeof(first)) ||
+     first.SharedFlag!=1 || first.PointerCounts[0]!=1 || first.PointerCounts[1]!=1 ||
+     t->ConIn!=input || input->Reset!=reset || input->ReadKeyStroke!=read || input->WaitForKey!=wait ||
+     t->ConsoleInHandle!=keys || t->ConsoleOutHandle!=out || t->StandardErrorHandle!=error ||
+     t->ConOut!=text || t->StdErr!=err || !ProbeUnchanged(c,gpu,io,cfg,loc)))s=EFI_NOT_READY;
+  Text(c,"ad104-runtime-preflight status=0x");Hex(c,s,16);
+  Text(c," release-authority=0 cold-state-known=0 input-execution-tested=0");End(c);
+  if(s!=EFI_SUCCESS)Problem(c,"ad104-runtime-preflight-refused",s);
+}
+#endif
 static VOID ObserveResources(CAPTURE *c,EFI_HANDLE handle,EFI_PCI_IO_PROTOCOL *io,const UINT32 *cfg) {
   UINTN loc[4];VOID *raw=NULL;UINT64 supports=0;
   if(!io->GetLocation || !io->GetBarAttributes ||
@@ -297,6 +325,9 @@ static VOID ProbeAd104Bar(CAPTURE *c,EFI_PCI_IO_PROTOCOL *io,EFI_FILE_PROTOCOL *
 #endif
 #ifdef GU_PROBE_AD104_RESOURCES
   ObserveResources(c,handle,io,cfg);
+#endif
+#ifdef GU_PROBE_AD104_PREFLIGHT
+  ObservePreflight(c,handle,io,cfg);
 #endif
   Problem(c,"ad104-metadata-only-no-mmio",EFI_NOT_READY);return;
 #endif
