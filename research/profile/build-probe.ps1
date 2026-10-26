@@ -5,10 +5,11 @@
 # DMA or firmware variable writes. Builds files only.
 param([Parameter(Mandatory,ParameterSetName='Gpt')][guid]$WindowsEspGuid,
  [Parameter(Mandatory,ParameterSetName='Mbr')][switch]$WindowsMbr,
- [switch]$Ad104Msi,[switch]$Ad104Metadata,[switch]$Ad104FirmwareRom,[string]$Clang='clang',[string]$LldLink='lld-link',[string]$Python='python')
+ [switch]$Ad104Msi,[switch]$Ad104Metadata,[switch]$Ad104FirmwareRom,[switch]$Ad104Resources,[string]$Clang='clang',[string]$LldLink='lld-link',[string]$Python='python')
 $ErrorActionPreference='Stop'
 if($Ad104Metadata -and !$Ad104Msi){throw 'Ad104Metadata requires Ad104Msi'}
 if($Ad104FirmwareRom -and !$Ad104Metadata){throw 'Ad104FirmwareRom requires Ad104Metadata'}
+if($Ad104Resources -and (!$Ad104Metadata -or $Ad104FirmwareRom)){throw 'Ad104Resources requires metadata mode without firmware ROM capture'}
 $repo=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $boot=Join-Path $repo 'internal-boot/boot'
 function GuidC([guid]$Value){
@@ -55,12 +56,14 @@ try {
  if($Ad104Msi){$out='build/probe-ad104-msi'}
  if($Ad104Metadata){$out='build/probe-ad104-metadata'}
  if($Ad104FirmwareRom){$out='build/probe-ad104-firmrom'}
+ if($Ad104Resources){$out='build/probe-ad104-resources'}
  New-Item -ItemType Directory -Path $out -Force | Out-Null
  $sources=@('handoff.c','diagnostic.c','../efi_runtime.c','probe.c','../unlock/sha256.c')
  $defines=@('-DGU_DIAGNOSTIC_ONLY','-DGU_DIAGNOSTIC_PROBE','-DGU_PROBE_GENERIC','-DGU_USB_PROBE')
  if($Ad104Msi){$defines+=@('-DGU_PROBE_AD104_MSI','-DGU_USB_MEDIA')}
  if($Ad104Metadata){$defines+='-DGU_PROBE_AD104_METADATA'}
  if($Ad104FirmwareRom){$defines+='-DGU_PROBE_AD104_FIRMROM'}
+ if($Ad104Resources){$defines+='-DGU_PROBE_AD104_RESOURCES'}
  if($WindowsMbr){$defines+='-DGU_DIAGNOSTIC_MBR';if(!$Ad104Msi){$defines+='-DGU_USB_MEDIA'}}
  $objects=@()
  foreach($source in $sources) {
@@ -73,7 +76,8 @@ try {
  if($LASTEXITCODE -ne 0){throw 'Probe link failed'}
  & $Python -I ../unlock/verify_pe.py "$out/BOOTX64.EFI" "$out/PROBE.map" --output "$out/pe-verification.json"
  if($LASTEXITCODE -ne 0){throw 'Probe PE verification failed'}
- [ordered]@{Mode=if($Ad104FirmwareRom){'ad104-msi-firmware-rom-buffer-then-windows-usb'}elseif($Ad104Metadata){'ad104-msi-metadata-only-then-windows-usb'}elseif($Ad104Msi){'ad104-msi-read-only-probe-then-windows-usb'}else{'generic-read-only-probe-then-windows-usb'};
+ [ordered]@{Mode=if($Ad104Resources){'ad104-msi-resource-observation-then-windows-usb'}elseif($Ad104FirmwareRom){'ad104-msi-firmware-rom-buffer-then-windows-usb'}elseif($Ad104Metadata){'ad104-msi-metadata-only-then-windows-usb'}elseif($Ad104Msi){'ad104-msi-read-only-probe-then-windows-usb'}else{'generic-read-only-probe-then-windows-usb'};
+   CanQueryBarResources=[bool]$Ad104Resources;
    CanReadGpuMmio=(!$Ad104Metadata);CanDereferenceRomImage=[bool]$Ad104FirmwareRom;
   WindowsBootIdentity=if($WindowsMbr){'exact-mbr-extent-and-boot-manager-hash'}else{'gpt-partition-guid'};
   CanUnlock=$false;CanDetach=$false;WritesFirmwareVariables=$false;HardwareTested=$false;Defines=$defines

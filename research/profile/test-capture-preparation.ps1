@@ -25,6 +25,10 @@ try {
  if($LASTEXITCODE -ne 0){throw 'Firmware ROM mocks compile failed'}
  & ./build/capture-tests/firmrom.exe
  if($LASTEXITCODE -ne 0){throw 'Firmware ROM mocks failed'}
+ & $Clang @flags -Wno-unused-function @ad104 -DGU_PROBE_AD104_METADATA -DGU_PROBE_AD104_RESOURCES test_resources.c probe.c ../unlock/sha256.c -o build/capture-tests/resources.exe
+ if($LASTEXITCODE -ne 0){throw 'Resource mocks compile failed'}
+ & ./build/capture-tests/resources.exe
+ if($LASTEXITCODE -ne 0){throw 'Resource mocks failed'}
  & $Clang @flags -DGU_DIAGNOSTIC_ONLY -DGU_USB_PROBE test_mbr_handoff.c ../unlock/sha256.c -o build/capture-tests/mbr.exe
  if($LASTEXITCODE -ne 0){throw 'MBR mocks compile failed'}
  & ./build/capture-tests/mbr.exe
@@ -54,5 +58,9 @@ try {
  if($LASTEXITCODE -eq 0 -or $out -notmatch 'Firmware ROM capture requires'){throw 'Firmware ROM accepted without metadata guard'}
  $global:LASTEXITCODE=0
  'PASS firmware-ROM-without-metadata compile combination rejected'
+ $out=& $Clang @flags -DGU_PROBE_AD104_RESOURCES -fsyntax-only probe.c 2>&1 | Out-String
+ if($LASTEXITCODE -eq 0 -or $out -notmatch 'Resource observation requires'){throw 'Resources accepted without metadata guard'}
+ $global:LASTEXITCODE=0
+ 'PASS resources-without-metadata compile combination rejected'
  'PASS 16 incompatible/non-diagnostic build combinations rejected'
 } finally {Pop-Location}

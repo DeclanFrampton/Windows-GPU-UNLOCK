@@ -18,6 +18,9 @@
 #if defined(GU_PROBE_AD104_FIRMROM) && !defined(GU_PROBE_AD104_METADATA)
 #error Firmware ROM capture requires AD104 metadata-only mode
 #endif
+#if defined(GU_PROBE_AD104_RESOURCES) && !defined(GU_PROBE_AD104_METADATA)
+#error Resource observation requires AD104 metadata-only mode
+#endif
 
 #if defined(GU_PROBE_AD104_MSI) && (!defined(GU_PROBE_GENERIC) || !defined(GU_DIAGNOSTIC_ONLY) || !defined(GU_DIAGNOSTIC_PROBE) || !defined(GU_USB_MEDIA) || defined(GU_FULL_UNLOCK) || defined(GU_UEFI_PORT) || defined(GU_INTERNAL_BOOT) || defined(GU_HEADLESS_RESEARCH) || defined(GU_CONSOLE_PREPARE) || defined(GU_AUTOMATIC_BOOT) || defined(GU_EXPERIMENTAL_3090))
 #error AD104 capture is a separate read-only USB diagnostic, never an unlock profile
@@ -210,6 +213,43 @@ static BOOLEAN ProbeUnchanged(CAPTURE *c,EFI_HANDLE handle,EFI_PCI_IO_PROTOCOL *
 #ifdef GU_PROBE_AD104_FIRMROM
 #include "firmware-rom.h"
 #endif
+#ifdef GU_PROBE_AD104_RESOURCES
+static VOID ObserveResources(CAPTURE *c,EFI_HANDLE handle,EFI_PCI_IO_PROTOCOL *io,const UINT32 *cfg) {
+  UINTN loc[4];VOID *raw=NULL;UINT64 supports=0;
+  if(!io->GetLocation || !io->GetBarAttributes ||
+     io->GetLocation(io,&loc[0],&loc[1],&loc[2],&loc[3])!=EFI_SUCCESS ||
+     loc[0]>65535 || loc[1]>255 || loc[2]>31 || loc[3]>7 ||
+     !ProbeUnchanged(c,handle,io,cfg,loc)) {
+    Problem(c,"ad104-resource-precheck",EFI_NOT_READY);return;
+  }
+  EFI_STATUS s=io->GetBarAttributes(io,0,&supports,&raw);
+  Text(c,"ad104-bar0-query status=0x");Hex(c,s,16);End(c);
+  if(s==EFI_SUCCESS && raw && ProbeUnchanged(c,handle,io,cfg,loc)) {
+    /* GetBarAttributes supplies a pool-allocated ACPI descriptor list under
+     * the firmware protocol contract. Accept exactly one QWORD descriptor. */
+    EFI_ACPI_ADDRESS_SPACE_DESCRIPTOR *d=raw;
+    if(d->Desc==ACPI_ADDRESS_SPACE_DESCRIPTOR && d->Len==sizeof(*d)-3) {
+      const UINT8 *end=(const UINT8 *)(d+1);UINT8 sum=0;
+      for(UINTN i=0;i<sizeof(*d)+2;i++)sum=(UINT8)(sum+((UINT8 *)raw)[i]);
+      BOOLEAN valid=end[0]==ACPI_END_TAG_DESCRIPTOR && (!end[1] || !sum);
+      BOOLEAN shape=valid && !d->ResType && d->AddrSpaceGranularity==32 &&
+        d->AddrRangeMin==cfg[4] && d->AddrLen==0x1000000 && !d->AddrTranslationOffset &&
+        (d->AddrRangeMax==(UINT64)cfg[4]+0xffffff || d->AddrRangeMax==0xffffff);
+      Text(c,"ad104-bar0-resource descriptor-valid=");Hex(c,valid,1);
+      Text(c," envelope-shape=");Hex(c,shape,1);
+      Text(c," type=0x");Hex(c,d->ResType,2);
+      Text(c," granularity=0x");Hex(c,d->AddrSpaceGranularity,16);
+      Text(c," minimum=0x");Hex(c,d->AddrRangeMin,16);
+      Text(c," maximum=0x");Hex(c,d->AddrRangeMax,16);
+      Text(c," length=0x");Hex(c,d->AddrLen,16);
+      Text(c," translation=0x");Hex(c,d->AddrTranslationOffset,16);
+      Text(c," supports=0x");Hex(c,supports,16);
+      Text(c," observation-only=1 unlock-eligibility=0");End(c);
+    } else Problem(c,"ad104-resource-format",EFI_UNSUPPORTED);
+  } else Problem(c,"ad104-resource-unavailable-or-changed",EFI_NOT_READY);
+  if(raw && c->Table->BootServices->FreePool(raw)!=EFI_SUCCESS)Problem(c,"ad104-resource-free",EFI_DEVICE_ERROR);
+}
+#endif
 #ifdef GU_PROBE_AD104_MSI
 /* Read set reviewed against gpu-unlock-ada@4e7fefcc, AD104 sample.c.
  * No ownership changes, firmware execution, polling or write method exists.
@@ -234,6 +274,9 @@ static VOID ProbeAd104Bar(CAPTURE *c,EFI_PCI_IO_PROTOCOL *io,EFI_FILE_PROTOCOL *
   Text(c," bus-master-enabled=");Hex(c,(cfg[1]>>2)&1U,1);End(c);
 #ifdef GU_PROBE_AD104_FIRMROM
   FirmwareRom(c,handle,io,root,cfg);
+#endif
+#ifdef GU_PROBE_AD104_RESOURCES
+  ObserveResources(c,handle,io,cfg);
 #endif
   Problem(c,"ad104-metadata-only-no-mmio",EFI_NOT_READY);return;
 #endif
