@@ -12,6 +12,10 @@
 #include "probe.h"
 #include "../unlock/machine-profile.h"
 
+#if defined(GU_PROBE_AD104_MSI) && (!defined(GU_PROBE_GENERIC) || !defined(GU_DIAGNOSTIC_ONLY) || !defined(GU_DIAGNOSTIC_PROBE) || !defined(GU_USB_MEDIA) || defined(GU_FULL_UNLOCK) || defined(GU_UEFI_PORT) || defined(GU_INTERNAL_BOOT) || defined(GU_HEADLESS_RESEARCH) || defined(GU_CONSOLE_PREPARE) || defined(GU_AUTOMATIC_BOOT) || defined(GU_EXPERIMENTAL_3090))
+#error AD104 capture is a separate read-only USB diagnostic, never an unlock profile
+#endif
+
 #if defined(GU_PROBE_DUMP_PROM) && (!defined(GU_DIAGNOSTIC_ONLY) || !defined(GU_DIAGNOSTIC_PROBE) || !defined(GU_USB_MEDIA) || defined(GU_FULL_UNLOCK) || defined(GU_EXPERIMENTAL_3090))
 #error GU_PROBE_DUMP_PROM is only for the observation-only diagnostic image
 #endif
@@ -148,7 +152,11 @@ static VOID DumpProm(CAPTURE *c,EFI_FILE_PROTOCOL *root,UINT8 *page) {
  * All allocation/protocol calls finish before the final identity/config recheck. */
 static BOOLEAN ProbeEnvelope(CAPTURE *c,EFI_PCI_IO_PROTOCOL *io,const UINT32 *cfg) {
 #ifdef GU_PROBE_GENERIC
+#ifdef GU_PROBE_AD104_MSI
+  BOOLEAN identity=cfg[0]==0x278210deU && cfg[11]==0x51321462U;
+#else
   BOOLEAN identity=cfg[0]==0x220410deU || cfg[0]==0x220310deU;
+#endif
 #else
   BOOLEAN identity=cfg[0]==GU_BOARD_ID && cfg[11]==GU_BOARD_SUBSYSTEM;
 #ifdef GU_BAR0_BASE
@@ -175,17 +183,75 @@ static BOOLEAN ProbeEnvelope(CAPTURE *c,EFI_PCI_IO_PROTOCOL *io,const UINT32 *cf
   if(raw && c->Table->BootServices->FreePool(raw)!=EFI_SUCCESS)good=FALSE;
   return good;
 }
-static BOOLEAN ProbeUnchanged(CAPTURE *c,EFI_HANDLE handle,EFI_PCI_IO_PROTOCOL *io,const UINT32 *cfg) {
+static BOOLEAN ProbeUnchanged(CAPTURE *c,EFI_HANDLE handle,EFI_PCI_IO_PROTOCOL *io,const UINT32 *cfg,const UINTN *location) {
   EFI_PCI_IO_PROTOCOL *current=NULL;UINTN seg=0,bus=0,dev=0,fun=0;UINT32 now[64];
   if(c->Table->BootServices->HandleProtocol(handle,&PciGuidL,(VOID **)&current)!=EFI_SUCCESS || current!=io ||
-     !io->GetLocation || io->GetLocation(io,&seg,&bus,&dev,&fun)!=EFI_SUCCESS || seg || bus!=1 || dev || fun ||
+     !io->GetLocation || io->GetLocation(io,&seg,&bus,&dev,&fun)!=EFI_SUCCESS ||
+#ifdef GU_PROBE_AD104_MSI
+     !location || seg!=location[0] || bus!=location[1] || dev!=location[2] || fun!=location[3] ||
+#else
+     seg || bus!=1 || dev || fun ||
+#endif
      io->Pci.Read(io,EfiPciIoWidthUint32,0,64,now)!=EFI_SUCCESS)return FALSE;
+#ifndef GU_PROBE_AD104_MSI
+  (void)location;
+#endif
   for(UINTN j=0;j<64;j++)if(now[j]!=cfg[j])return FALSE;
   return TRUE;
 }
 #endif
+#ifdef GU_PROBE_AD104_MSI
+/* Read set reviewed against gpu-unlock-ada@4e7fefcc, AD104 sample.c.
+ * No ownership changes, firmware execution, polling or write method exists.
+ * Legal discovered BDFs are latched; Windows enumeration is not assumed. */
+static VOID ProbeAd104Bar(CAPTURE *c,EFI_PCI_IO_PROTOCOL *io,EFI_FILE_PROTOCOL *root,
+                         EFI_HANDLE handle,const UINT32 *cfg) {
+  static const UINT32 offsets[]={0,0x118128,0x118234,0x110100,0x1fa824,0x1fa828,
+    0x1fa7cc,0x1fa7c4,0x9a0148,0x823804,0x823814,0x823818,0x82381c,0x823820,
+    0x1183a4,0x625f04,0x1fa7c8,0x1fa82c,0x1fa830,0x824148,0x8241e0,0x840100};
+  UINTN location[4];UINT8 *page=NULL;UINT32 values[22],chip=0,signature=0;
+  EFI_STATUS s;
+  if(!io->GetLocation || io->GetLocation(io,&location[0],&location[1],&location[2],&location[3])!=EFI_SUCCESS ||
+     location[0]>65535 || location[1]>255 || location[2]>31 || location[3]>7 || !ProbeEnvelope(c,io,cfg)) {
+    Problem(c,"ad104-envelope",EFI_UNSUPPORTED);return;
+  }
+  s=c->Table->BootServices->AllocatePool(EfiBootServicesData,0x100000,(VOID **)&page);
+  if(s!=EFI_SUCCESS || !page){Problem(c,"ad104-alloc",EFI_OUT_OF_RESOURCES);return;}
+  if(!ProbeUnchanged(c,handle,io,cfg,location)){s=EFI_NOT_READY;goto done;}
+  s=io->Mem.Read(io,EfiPciIoWidthUint32,0,0,1,&values[0]);
+  if(s!=EFI_SUCCESS || values[0]!=0x194000a1U){s=EFI_UNSUPPORTED;goto done;}
+  for(UINTN i=1;i<22;i++) {
+    s=io->Mem.Read(io,EfiPciIoWidthUint32,0,offsets[i],1,&values[i]);
+    if(s!=EFI_SUCCESS || values[i]==MAX_UINT32 || (values[i]&0xffff0000U)==0xbadf0000U){s=EFI_DEVICE_ERROR;goto done;}
+  }
+  s=io->Mem.Read(io,EfiPciIoWidthUint32,0,0x300000,1,&signature);
+  if(s!=EFI_SUCCESS || (signature&0xffffU)!=0xaa55U){s=EFI_COMPROMISED_DATA;goto done;}
+  for(UINTN i=0;i<0x100000/4;i++) {
+    s=io->Mem.Read(io,EfiPciIoWidthUint32,0,0x300000+i*4,1,((UINT32 *)page)+i);
+    if(s!=EFI_SUCCESS)goto done;
+  }
+  if(((UINT32 *)page)[0]!=signature){s=EFI_NOT_READY;goto done;}
+  s=io->Mem.Read(io,EfiPciIoWidthUint32,0,0,1,&chip);
+  if(s!=EFI_SUCCESS || chip!=values[0] || !ProbeUnchanged(c,handle,io,cfg,location)) {s=EFI_NOT_READY;goto done;}
+  /* Only complete, stable observations are published as a usable capture. */
+  Text(c,"ad104-read-only-capture=1 unlock-eligibility=0");End(c);
+  for(UINTN i=0;i<22;i++) {
+    Text(c,"mmio off=0x");Hex(c,offsets[i],8);Text(c," status=0x");Hex(c,EFI_SUCCESS,16);
+    Text(c," value=0x");Hex(c,values[i],8);End(c);
+  }
+  UINT8 digest[32];GuSha256(page,0x100000,digest);
+  Text(c,"prom bytes=0x00100000 sha256=");for(UINTN i=0;i<32;i++)Hex(c,digest[i],2);End(c);
+  if(root)DumpProm(c,root,page);else s=EFI_NOT_FOUND;
+done:
+  if(s!=EFI_SUCCESS)Problem(c,"ad104-capture-incomplete",s);
+  if(c->Table->BootServices->FreePool(page)!=EFI_SUCCESS)Problem(c,"ad104-free",EFI_DEVICE_ERROR);
+}
+#endif
 static VOID ProbeBar(CAPTURE *c,EFI_PCI_IO_PROTOCOL *io,UINT32 bar,EFI_FILE_PROTOCOL *root,
                      EFI_HANDLE handle,const UINT32 *cfg) {
+#ifdef GU_PROBE_AD104_MSI
+  (void)bar;ProbeAd104Bar(c,io,root,handle,cfg);
+#else
   static const UINT32 offs[]={
     0x000000,0x108154,0x108170,0x108180,0x108354,
     0x118128,0x118234,0x110100,0x1183a4,0x1fa828,
@@ -196,7 +262,7 @@ static VOID ProbeBar(CAPTURE *c,EFI_PCI_IO_PROTOCOL *io,UINT32 bar,EFI_FILE_PROT
   if(!ProbeEnvelope(c,io,cfg)){Problem(c,"probe-unreviewed-envelope",EFI_UNSUPPORTED);return;}
   s=c->Table->BootServices->AllocatePool(EfiBootServicesData,0x100000,(VOID **)&page);
   if(s!=EFI_SUCCESS || !page){Problem(c,"prom-alloc",s==EFI_SUCCESS?EFI_OUT_OF_RESOURCES:s);return;}
-  if(!ProbeUnchanged(c,handle,io,cfg)) {
+  if(!ProbeUnchanged(c,handle,io,cfg,NULL)) {
     c->Table->BootServices->FreePool(page);Problem(c,"probe-identity-changed",EFI_NOT_READY);return;
   }
 #else
@@ -250,6 +316,7 @@ static VOID ProbeBar(CAPTURE *c,EFI_PCI_IO_PROTOCOL *io,UINT32 bar,EFI_FILE_PROT
     } else { Problem(c,"prom-read",s); }
     if(c->Table->BootServices->FreePool(page)!=EFI_SUCCESS)Problem(c,"prom-free",EFI_DEVICE_ERROR);
   } else Problem(c,"prom-alloc",s==EFI_SUCCESS?EFI_OUT_OF_RESOURCES:s);
+#endif
 }
 
 static VOID ProbeDrivers(CAPTURE *c,EFI_FILE_PROTOCOL *root) {

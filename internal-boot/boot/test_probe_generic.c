@@ -115,6 +115,7 @@ static EFI_STATUS GenericRun(int mode,BOOLEAN withRoot) {
   Check(RootCloses==0,"borrowed root is never closed");
   return s;
 }
+#ifndef GU_PROBE_TEST_REUSE
 int main(void) {
   Check(GenericRun(G_OK,TRUE)==EFI_SUCCESS,"reviewed generic envelope succeeds");
   Check(S.RegReads==16 && S.PromReads==PROM_DWORDS,"reviewed generic capture reads bounded windows");
@@ -157,3 +158,4 @@ int main(void) {
   printf("PASS generic probe checks: %d; RAM-only mock files, no hardware access\n",Checks);
   return 0;
 }
+#endif

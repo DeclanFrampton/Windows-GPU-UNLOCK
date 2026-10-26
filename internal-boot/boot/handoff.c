@@ -93,13 +93,14 @@ static EFI_STATUS PathFor(EFI_HANDLE Device,EFI_DEVICE_PATH_PROTOCOL **Out) {
   EFI_STATUS s=Table->BootServices->HandleProtocol(Device,&PathGuid,(VOID **)Out);
   return s==EFI_SUCCESS && *Out?EFI_SUCCESS:EFI_UNSUPPORTED;
 }
-static EFI_STATUS FindPartition(const EFI_GUID *Guid,EFI_HANDLE *Out) {
+static EFI_STATUS FindPartition(const EFI_GUID *Guid,EFI_HANDLE *Out,BOOLEAN WindowsVolume) {
   EFI_HANDLE *handles=NULL;UINTN count=0,matches=0;*Out=NULL;
   EFI_STATUS s=Table->BootServices->LocateHandleBuffer(ByProtocol,&FsGuid,NULL,&count,&handles);
   if(s!=EFI_SUCCESS)return s;
   for(UINTN i=0;i<count;i++) {
     EFI_DEVICE_PATH_PROTOCOL *p=NULL;
-    if(PathFor(handles[i],&p)==EFI_SUCCESS && GuPathIsPartition(p,Guid)){matches++;*Out=handles[i];}
+    if(PathFor(handles[i],&p)==EFI_SUCCESS &&
+       (WindowsVolume?GuWindowsVolumePath(p):GuPathIsPartition(p,Guid))){matches++;*Out=handles[i];}
   }
   if(handles)Table->BootServices->FreePool(handles);
   return matches==1?EFI_SUCCESS:matches?EFI_COMPROMISED_DATA:EFI_NOT_FOUND;
@@ -221,6 +222,43 @@ static EFI_STATUS LoadUnlock(VOID) {
   return EFI_SUCCESS;
 }
 #endif
+#ifdef GU_WINDOWS_MBR_SIGNATURE
+static EFI_STATUS LoadMbrWindows(EFI_HANDLE Device,EFI_DEVICE_PATH_PROTOCOL *Path,UINTN ExpectedBytes,const char *ExpectedHash) {
+  static EFI_GUID fileInfo=EFI_FILE_INFO_ID;
+  EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *fs=NULL;EFI_FILE_PROTOCOL *root=NULL,*file=NULL;
+  EFI_STATUS s=Table->BootServices->HandleProtocol(Device,&FsGuid,(VOID **)&fs);
+  if(s!=EFI_SUCCESS || !fs || !fs->OpenVolume)return EFI_UNSUPPORTED;
+  s=fs->OpenVolume(fs,&root);
+  if(s!=EFI_SUCCESS || !root || !root->Open || !root->Close) {
+    if(root && root->Close)(void)root->Close(root);
+    return EFI_UNSUPPORTED;
+  }
+  s=root->Open(root,&file,L"\\EFI\\Microsoft\\Boot\\bootmgfw.efi",EFI_FILE_MODE_READ,0);
+  if(s==EFI_SUCCESS && (!file || !file->GetInfo || !file->Read || !file->Close))s=EFI_UNSUPPORTED;
+  union {EFI_FILE_INFO info;UINT8 bytes[512];} metadata;UINTN bytes=sizeof(metadata);
+  UINT8 *data=NULL;
+  if(s==EFI_SUCCESS)s=file->GetInfo(file,&fileInfo,&bytes,&metadata);
+  if(s==EFI_SUCCESS && (bytes<sizeof(EFI_FILE_INFO) || bytes>sizeof(metadata) ||
+     metadata.info.Size<sizeof(EFI_FILE_INFO) || metadata.info.Size>bytes ||
+     metadata.info.FileSize!=ExpectedBytes || !metadata.info.FileSize ||
+     metadata.info.FileSize>8U*1024U*1024U || (metadata.info.Attribute&EFI_FILE_DIRECTORY)))s=EFI_BAD_BUFFER_SIZE;
+  if(s==EFI_SUCCESS)s=Table->BootServices->AllocatePool(EfiBootServicesData,ExpectedBytes,(VOID **)&data);
+  if(s==EFI_SUCCESS && !data)s=EFI_OUT_OF_RESOURCES;
+  if(s==EFI_SUCCESS) {
+    bytes=ExpectedBytes;s=file->Read(file,&bytes,data);
+    if(s==EFI_SUCCESS && bytes!=ExpectedBytes)s=EFI_END_OF_FILE;
+  }
+  if(file && file->Close){EFI_STATUS closed=file->Close(file);if(s==EFI_SUCCESS)s=closed;}
+  EFI_STATUS closed=root->Close(root);if(s==EFI_SUCCESS)s=closed;
+  if(s==EFI_SUCCESS && !GuHashMatches(data,ExpectedBytes,ExpectedHash))s=EFI_CRC_ERROR;
+  EFI_DEVICE_PATH_PROTOCOL *fresh=NULL;
+  if(s==EFI_SUCCESS && (PathFor(Device,&fresh)!=EFI_SUCCESS || !GuWindowsVolumePath(fresh)))s=EFI_COMPROMISED_DATA;
+  /* Load the hashed buffer, not a second filesystem read. No StartImage here. */
+  if(s==EFI_SUCCESS)s=Table->BootServices->LoadImage(FALSE,Self,Path,data,ExpectedBytes,&WindowsImage);
+  if(data && Table->BootServices->FreePool(data)!=EFI_SUCCESS && s==EFI_SUCCESS)s=EFI_DEVICE_ERROR;
+  return s;
+}
+#endif
 static EFI_STATUS Prepare(VOID *Context) {
   (void)Context;EFI_HANDLE own=NULL,windows=NULL;
 #if defined(GU_USB_PROBE) || defined(GU_USB_MEDIA)
@@ -231,10 +269,10 @@ static EFI_STATUS Prepare(VOID *Context) {
   if(s!=EFI_SUCCESS || !GuInspectPath(ownPath,NULL,NULL,&usb,NULL) || !usb)return EFI_COMPROMISED_DATA;
   own=OwnDevice;
 #else
-  EFI_STATUS s=FindPartition(&GuInternalPartition,&own);
+  EFI_STATUS s=FindPartition(&GuInternalPartition,&own,FALSE);
   if(s!=EFI_SUCCESS || own!=OwnDevice)return EFI_COMPROMISED_DATA;
 #endif
-  s=FindPartition(&GuWindowsPartition,&windows);
+  s=FindPartition(&GuWindowsPartition,&windows,TRUE);
   if(s!=EFI_SUCCESS || windows==own)return EFI_COMPROMISED_DATA;
   s=OpenLog();if(s!=EFI_SUCCESS)return s;
   s=Record(NULL,"internal-handoff-v1",EFI_SUCCESS);if(s!=EFI_SUCCESS)return s;
@@ -243,7 +281,11 @@ static EFI_STATUS Prepare(VOID *Context) {
 #endif
   EFI_DEVICE_PATH_PROTOCOL *path=NULL;
   s=FilePath(windows,L"\\EFI\\Microsoft\\Boot\\bootmgfw.efi",&path);
+#ifdef GU_WINDOWS_MBR_SIGNATURE
+  if(s==EFI_SUCCESS)s=LoadMbrWindows(windows,path,GU_WINDOWS_BOOT_BYTES,GU_WINDOWS_BOOT_SHA256);
+#else
   if(s==EFI_SUCCESS)s=Table->BootServices->LoadImage(FALSE,Self,path,NULL,0,&WindowsImage);
+#endif
   if(path)Table->BootServices->FreePool(path);
   if(s!=EFI_SUCCESS)return s;
   EFI_LOADED_IMAGE_PROTOCOL *loaded=NULL;

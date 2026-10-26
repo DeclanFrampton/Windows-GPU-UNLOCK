@@ -3,7 +3,9 @@
 # (PROM.BIN) and loaded driver images (IMGnn.BIN) to the stick it booted from, then starts
 # Windows. It compiles only as a diagnostic build: no unlock code, GPU writes, driver release,
 # DMA or firmware variable writes. Builds files only.
-param([Parameter(Mandatory)][guid]$WindowsEspGuid,[string]$Clang='clang',[string]$LldLink='lld-link',[string]$Python='python')
+param([Parameter(Mandatory,ParameterSetName='Gpt')][guid]$WindowsEspGuid,
+ [Parameter(Mandatory,ParameterSetName='Mbr')][switch]$WindowsMbr,
+ [switch]$Ad104Msi,[string]$Clang='clang',[string]$LldLink='lld-link',[string]$Python='python')
 $ErrorActionPreference='Stop'
 $repo=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $boot=Join-Path $repo 'internal-boot/boot'
@@ -11,20 +13,49 @@ function GuidC([guid]$Value){
  $b=$Value.ToByteArray();$tail=($b[8..15] | ForEach-Object {'0x{0:x2}' -f $_}) -join ','
  return ('{{0x{0:x8},0x{1:x4},0x{2:x4},{{{3}}}}}' -f [BitConverter]::ToUInt32($b,0),[BitConverter]::ToUInt16($b,4),[BitConverter]::ToUInt16($b,6),$tail)
 }
-$windows=@(Get-Partition | Where-Object {$_.Guid -and [guid]$_.Guid -eq $WindowsEspGuid})
-if($windows.Count -ne 1 -or !$windows[0].IsSystem){throw 'WindowsEspGuid must identify the current system EFI partition'}
+$mbrConfig=@()
+if($WindowsMbr) {
+ $windows=@(Get-Partition | Where-Object IsSystem)
+ if($windows.Count -ne 1){throw 'Expected one current Windows system boot partition'}
+ $part=$windows[0];$disk=Get-Disk -Number $part.DiskNumber
+ if($disk.PartitionStyle -ne 'MBR' -or !$disk.Signature -or $disk.BusType -eq 'USB' -or
+    $disk.LogicalSectorSize -ne 512 -or !$part.IsActive -or $part.MbrType -ne 7 -or
+    !$part.Size -or $part.Offset%512 -or $part.Size%512){throw 'Unreviewed MBR boot partition geometry'}
+ if((Get-ComputerInfo -Property BiosFirmwareType).BiosFirmwareType.ToString() -ne 'Uefi'){throw 'UEFI Windows boot required'}
+ $volume=Get-Volume -Partition $part
+ if(!$volume.Path){throw 'System boot volume path unavailable'}
+ $manager=Join-Path $volume.Path 'EFI\Microsoft\Boot\bootmgfw.efi'
+ $managerFile=Get-Item -LiteralPath $manager -ErrorAction Stop
+ if(!$managerFile.Length -or $managerFile.Length -gt 8MB){throw 'Unexpected boot-manager size'}
+ $managerHash=(Get-FileHash -LiteralPath $manager -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()
+ $mbrConfig=@('#ifdef GU_DIAGNOSTIC_MBR',
+  ('#define GU_WINDOWS_MBR_SIGNATURE 0x{0:x8}U' -f [uint32]$disk.Signature),
+  ('#define GU_WINDOWS_MBR_PARTITION {0}U' -f $part.PartitionNumber),
+  ('#define GU_WINDOWS_MBR_START {0}ULL' -f [uint64]($part.Offset/512)),
+  ('#define GU_WINDOWS_MBR_SIZE {0}ULL' -f [uint64]($part.Size/512)),
+  ('#define GU_WINDOWS_BOOT_BYTES {0}U' -f $managerFile.Length),
+  ('#define GU_WINDOWS_BOOT_SHA256 "'+$managerHash+'"'),'#endif')
+ # Deliberately unused GUID in the MBR diagnostic. Never a discovered ESP GUID.
+ $WindowsEspGuid=[guid]'ffffffff-ffff-ffff-ffff-ffffffffffff'
+} else {
+ $windows=@(Get-Partition | Where-Object {$_.Guid -and [guid]$_.Guid -eq $WindowsEspGuid})
+ if($windows.Count -ne 1 -or !$windows[0].IsSystem){throw 'WindowsEspGuid must identify the current system EFI partition'}
+}
 # Same local USB configuration as build-usb.ps1, so the two builds share it.
 $config=Join-Path $boot 'platform-config.h';$marker='/* Local USB configuration (build-usb.ps1). Internal partition unused under GU_USB_MEDIA. */'
 if((Test-Path -LiteralPath $config) -and (Get-Content -LiteralPath $config -TotalCount 1) -ne $marker){throw 'platform-config.h belongs to an internal Configure.ps1 setup; move it aside before a USB build'}
-@($marker,('#define GU_INTERNAL_PARTITION_INITIALIZER '+(GuidC ([guid]::Empty))),('#define GU_WINDOWS_PARTITION_INITIALIZER '+(GuidC $WindowsEspGuid))) | Set-Content -LiteralPath $config -Encoding ascii
+(@($marker,('#define GU_INTERNAL_PARTITION_INITIALIZER '+(GuidC ([guid]::Empty))),('#define GU_WINDOWS_PARTITION_INITIALIZER '+(GuidC $WindowsEspGuid)))+$mbrConfig) | Set-Content -LiteralPath $config -Encoding ascii
 $generated=Join-Path $boot 'generated.h'
 if(!(Test-Path -LiteralPath $generated)){'/* Observation build: GU_DIAGNOSTIC_ONLY excludes all unlock loading. */' | Set-Content -LiteralPath $generated -Encoding ascii}
 Push-Location -LiteralPath $boot
 try {
  $out='build/probe-generic'
+ if($Ad104Msi){$out='build/probe-ad104-msi'}
  New-Item -ItemType Directory -Path $out -Force | Out-Null
  $sources=@('handoff.c','diagnostic.c','../efi_runtime.c','probe.c','../unlock/sha256.c')
  $defines=@('-DGU_DIAGNOSTIC_ONLY','-DGU_DIAGNOSTIC_PROBE','-DGU_PROBE_GENERIC','-DGU_USB_PROBE')
+ if($Ad104Msi){$defines+=@('-DGU_PROBE_AD104_MSI','-DGU_USB_MEDIA')}
+ if($WindowsMbr){$defines+='-DGU_DIAGNOSTIC_MBR';if(!$Ad104Msi){$defines+='-DGU_USB_MEDIA'}}
  $objects=@()
  foreach($source in $sources) {
   $obj="$out/"+[IO.Path]::GetFileNameWithoutExtension($source)+'.obj'
@@ -36,9 +67,11 @@ try {
  if($LASTEXITCODE -ne 0){throw 'Probe link failed'}
  & $Python -I ../unlock/verify_pe.py "$out/BOOTX64.EFI" "$out/PROBE.map" --output "$out/pe-verification.json"
  if($LASTEXITCODE -ne 0){throw 'Probe PE verification failed'}
- [ordered]@{Mode='generic-read-only-probe-then-windows-usb';CanUnlock=$false;CanDetach=$false;WritesFirmwareVariables=$false;HardwareTested=$false;Defines=$defines
+ [ordered]@{Mode=if($Ad104Msi){'ad104-msi-read-only-probe-then-windows-usb'}else{'generic-read-only-probe-then-windows-usb'};
+  WindowsBootIdentity=if($WindowsMbr){'exact-mbr-extent-and-boot-manager-hash'}else{'gpt-partition-guid'};
+  CanUnlock=$false;CanDetach=$false;WritesFirmwareVariables=$false;HardwareTested=$false;Defines=$defines
   EfiSha256=(Get-FileHash -LiteralPath "$out/BOOTX64.EFI").Hash.ToLowerInvariant();BuiltUtc=[DateTime]::UtcNow.ToString('o')
-  Sources=@(($sources+@('diagnostic.h','media.h','probe.h')) | ForEach-Object {[ordered]@{Path=$_;Sha256=(Get-FileHash -LiteralPath $_).Hash.ToLowerInvariant()}})
+  Sources=@(($sources+@('diagnostic.h','media.h','probe.h','platform-config.h')) | ForEach-Object {[ordered]@{Path=$_;Sha256=(Get-FileHash -LiteralPath $_).Hash.ToLowerInvariant()}})
  } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath "$out/manifest.json" -Encoding utf8
- "Built generic read-only probe $out/BOOTX64.EFI; hardware untested."
+ "Built read-only probe $out/BOOTX64.EFI; hardware untested."
 } finally {Pop-Location}
