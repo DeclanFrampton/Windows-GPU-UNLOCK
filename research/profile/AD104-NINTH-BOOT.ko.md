@@ -40,7 +40,7 @@ IMG14의 로드 목록은 레코드 수 하나, 같은 비-null 첫/마지막 �
 수명 주기 호출은
 `DisconnectController(discovered_gop_child, exact_img14_binding, NULL)` 하나다.
 애플리케이션은 호출 전에 콘솔 출력을 차단하고 오류/정지/Windows 경로에서도
-유지한다. 시도 이후 안내, Say, OutputString을 호출하지 않는다. 이 제한은
+유지한다. 시도 이후 콘솔 출력을 하지 않으며 보호된 Say 호출은 OutputString 없이 반환한다. 이 제한은
 애플리케이션에 적용되며 펌웨어나 Windows 내부 호출을 통제하지는 못한다.
 
 콜백의 성공/오류와 관계없이 독립 사후 상태를 두 번 수집한다. 예상 상태는

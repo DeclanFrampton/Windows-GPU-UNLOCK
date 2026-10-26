@@ -45,8 +45,8 @@ the one-shot attempt.
 The only lifecycle call is
 `DisconnectController(discovered_gop_child, exact_img14_binding, NULL)`.
 Console output is disabled in the application before entering that call and
-stays disabled, including error/hold/Windows paths. No prompt, Say or
-OutputString call follows the attempt. This restriction applies to this
+stays disabled, including error/hold/Windows paths. No console output follows the attempt; guarded Say calls return without
+calling OutputString. This restriction applies to this
 application; it cannot constrain calls internal to firmware or Windows.
 
 Regardless of callback success/error, collect two independent post-states.
