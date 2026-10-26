@@ -2,6 +2,12 @@
 
 English | [í•œêµ­ì–´](AD104-UNLOCK-EVIDENCE.ko.md)
 
+## Latest physical result
+
+[Eleventh run](AD104-ELEVENTH-RESULT.en.md): combined text/GOP/EDID removal passed,
+8→6→5→4 edges, fresh keyboard and user-confirmed Windows return. PCI owner remains
+active, command `0007`/BME enabled. Earlier sections below describe dated observations.
+
 ## Actual graph replaces the simplified fixture
 
 The fifth capture contains 140 non-passive open records. The
@@ -89,10 +95,10 @@ has only been simulated.
 | Gate | Current evidence |
 | --- | --- |
 | Exact identity, ownership and live discovery | Observed; EDID transition also demonstrated |
-| Remaining text/GOP consumers and PCI-owner release | Not demonstrated; text cleanup can reprogram the display |
+| Remaining text/GOP consumers and PCI-owner release | Text/GOP/EDID consumers demonstrated together; PCI owner not released |
 | Limited decode enable and cold-entry/protected-memory admission | Not demonstrated; required register evidence absent |
 | Machine-specific unlock transaction and independent state readback | Not run |
-| Windows recovery and controlled stock/post-unlock workloads | EDID-only return observed; no post-unlock workload exists |
+| Windows recovery and controlled stock/post-unlock workloads | Combined consumer return observed; no post-unlock workload exists |
 
 These gates are not equally difficult and cannot support a meaningful percentage,
 number of remaining boots or completion date. Cold-state admission or immutable
