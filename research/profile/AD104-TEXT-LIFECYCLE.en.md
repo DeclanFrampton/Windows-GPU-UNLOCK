@@ -53,3 +53,9 @@ for an independent fresh boot retaining EDID, checks for mode/resource/config
 effects, actual input evidence and a reviewed hold/Windows handoff path. A
 successful EDID test does not establish this target's recoverability. No text
 detach or owner-release EFI has been prepared by this analysis.
+
+Subsequent implementation: the operator requested capturing the missing PCD
+producer and testing text detach in the same boot. The
+[ninth boot contract](AD104-NINTH-BOOT.en.md) now implements that sequence with
+same-run producer consistency checks and a quiet post-test input protocol.
+This does not provide independent prior review of the newly captured producer.
