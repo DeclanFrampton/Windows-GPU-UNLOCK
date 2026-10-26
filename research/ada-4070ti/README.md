@@ -1,8 +1,13 @@
-# RTX 4070 Ti: read-only portability research
+# RTX 4070 Ti: portability research and stock-compute experiments
 
 Date: 2026-10-25. Source baseline: `849f996` (current main when cloned).
 Status: **inventory collected; unlock not attempted; Ada support not established**.
-This is a research contribution, not a new hardware profile or execution guide.
+This is a research contribution, not a new supported hardware profile.
+The initial inventory was read-only; later experiments include GPU workloads
+and a separately authorized driver restart. Executable research tools are
+included. Read [the tool scope and review boundaries](EXECUTION-TOOLS.md)
+before considering any execution; offline evidence checks do not approve the
+hardware tools or establish their safety on another machine.
 
 **Follow-up:** [an existing external AD104 Windows reference](EXTERNAL-AD104.md)
 uses the same GPU/subsystem IDs on a different platform and VBIOS. Its published
@@ -109,8 +114,9 @@ Do not interpret an ordinary 4070 Ti result versus someone else's 3090 result
 as an unlock percentage. A causal uplift claim requires controlled same-card
 before/after evidence, which is absent here.
 
-This is a proposed follow-up only: no workload or benchmark modification is
-included in this research contribution.
+The production benchmark and EFI implementation are unchanged by this
+contribution. Separate research workloads and saved results are included;
+see the follow-up reports above for their actual scope and limitations.
 
 ## Next research that fits the current boundary
 
@@ -121,18 +127,21 @@ included in this research contribution.
    offline, with pinned source revisions. Establish whether an Ada mechanism
    exists before designing a profile. Do not infer it from CUDA capability.
 3. Review a future benchmark-only change separately. A stock Windows baseline
-   can be useful even if no Ada unlock path exists; GPU workloads have not been
-   exercised under this research-only scope.
+   can be useful even if no Ada unlock path exists. The separate stock GPU
+   experiments above are not a causal unlock comparison or support evidence.
 4. For a future diagnostic tool, require an independently reviewed non-arming
    path that does not release GOP/driver ownership, write PCI/MMIO, enable bus
    mastering, allocate device DMA or reset hardware. Do not assume a script or
    EFI is safe merely because its name includes "probe" or "preflight".
 
-No boot configuration, ESP, partition, BIOS setting, Secure Boot/BitLocker state,
-driver installation, firmware image, power/clock limit or GPU selector was
-changed. No EFI was built, staged or booted; no GPU reset, raw MMIO/PCI tool,
-PROM dump or unlock transaction was run. Local research files and Git history
-are the only intended writes. No performance or stability claim is made.
+The initial inventory/portability investigation changed no boot configuration,
+ESP, partition, BIOS setting, Secure Boot/BitLocker state, driver installation,
+firmware image, power/clock limit or GPU selector. It built, staged and booted
+no EFI and ran no reset, PROM dump or unlock transaction. These initial-scope
+statements do not describe the later stock compute and driver-restart
+experiments: their effects, results and unresolved limits are documented in
+GPU-FINDINGS.md, LIVE-DRIVER.md and BINARY-TENSOR-RESULT.md. None establishes
+an Ada unlock profile, general hardware safety or long-term stability.
 
 ## Sources and reproducibility
 
