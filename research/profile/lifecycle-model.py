@@ -13,6 +13,7 @@ class Snapshot:
     keyboard: str
     boot_image: str
     owner_fingerprint: tuple
+    bar_descriptor: tuple
 
 
 # Abstract fixture relationships, deliberately not an OEM graph/profile.
@@ -32,7 +33,8 @@ def fixture():
     config[0], config[1], config[2], config[4], config[11] = (
         0x278210de, 0x00100007, 0x030000a1, 0xfb000000, 0x51321462)
     return Snapshot(0, tuple(config), 0x718, 0x1b77b, (0, 11, 0, 0),
-                    STAGES[0], 'synthetic-keyboard', 'synthetic-boot-hash', OWNER)
+                    STAGES[0], 'synthetic-keyboard', 'synthetic-boot-hash', OWNER,
+                    (32, 0xfb000000, 0xfbffffff, 0x1000000, 0, 0))
 
 
 def predicted_snapshot(before, stage):
@@ -52,10 +54,11 @@ def predicted_snapshot(before, stage):
 def initial_ok(s):
     return (len(s.config) == 64 and s.config[0] == 0x278210de and
             s.config[11] == 0x51321462 and s.config[2] == 0x030000a1 and
-            s.config[1] & 7 == 7 and s.config[4] == 0xfb000000 and
+            s.config[1] & 0xffff == 7 and s.config[4] == 0xfb000000 and
             s.attributes == 0x718 and s.supported == 0x1b77b and
             s.bdf == (0, 11, 0, 0) and s.edges == STAGES[0] and
-            bool(s.keyboard) and bool(s.boot_image) and s.owner_fingerprint == OWNER)
+            bool(s.keyboard) and bool(s.boot_image) and s.owner_fingerprint == OWNER and
+            s.bar_descriptor == (32, 0xfb000000, 0xfbffffff, 0x1000000, 0, 0))
 
 
 def run_simulation(ops):
@@ -67,7 +70,11 @@ def run_simulation(ops):
     result = dict(simulation_only=True, runtime_authorized=False,
                   windows_authorized=False, unlock_authorized=False,
                   mutation_attempted=False, actions=[], outcome='preflight-refused')
-    before = ops.capture()
+    try:
+        before = ops.capture()
+    except Exception:
+        result['outcome'] = 'initial-capture-exception-no-attempt'
+        return result
     if not initial_ok(before):
         return result
     previous = before
@@ -76,16 +83,25 @@ def run_simulation(ops):
         result['mutation_attempted'] = True
         result['actions'].append(action)
         # Mark the attempt before the callback: errors may follow partial change.
-        if not ops.attempt(action, 0x300 if stage == 4 else 0):
+        try:
+            success = ops.attempt(action, 0x300 if stage == 4 else 0)
+        except Exception:
+            result['outcome'] = 'callback-exception-state-unknown'
+            return result
+        if not success:
             result['outcome'] = 'callback-failed-state-unknown'
             return result
-        now = ops.capture()
+        try:
+            now = ops.capture()
+        except Exception:
+            result['outcome'] = 'post-attempt-capture-exception-state-unknown'
+            return result
         expected = predicted_snapshot(before, stage)
         if (now.generation <= previous.generation or now.config != expected.config or
             now.attributes != expected.attributes or now.supported != before.supported or
             now.bdf != before.bdf or now.edges != expected.edges or
             now.keyboard != before.keyboard or now.boot_image != before.boot_image or
-            now.owner_fingerprint != before.owner_fingerprint):
+            now.owner_fingerprint != before.owner_fingerprint or now.bar_descriptor != before.bar_descriptor):
             result['outcome'] = 'postcondition-refused-no-retry'
             return result
         previous = now

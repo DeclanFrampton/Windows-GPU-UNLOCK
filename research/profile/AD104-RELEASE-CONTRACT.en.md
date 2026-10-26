@@ -29,7 +29,7 @@ partial mutation and must never be treated as an unchanged machine. The attempt
 is marked before each callback. There is no automatic rollback or retry.
 
 Each successful mock callback requires a new observation: fresh generation,
-full 256-byte configuration, attributes, supported mask, BDF, graph, keyboard,
+full 256-byte configuration, BAR descriptor, attributes, supported mask, BDF, graph, keyboard,
 pinned boot image and captured fingerprint provenance. Extra edges, partial
 closure or lost input refuse advancement. These comparisons are not an atomic
 firmware snapshot and their host implementation is not a live graph verifier.
@@ -42,10 +42,13 @@ GA102 decode policy is unchanged and is not silently reused for BME-on AD104.
 ## Verification and remaining gates
 
 Run `python -m unittest discover -s research/profile -p 'test_*.py'`.
-Twenty-three Python tests pass. The new model tests inject failures at each
+Twenty-five Python tests pass. The new model tests inject failures at each
 callback and reject successful callbacks followed by stale observations, partial
 or unexpected edges, lost keyboard, changed boot image, altered configuration,
-changed BDF/support masks, and unexpected BME/VGA state. An error in the decode
+changed BAR descriptors/BDF/support masks, and unexpected BME/VGA state. Extra
+initial command bits are refused. Callback exceptions and capture exceptions
+after an attempt return an unknown-state result and never advance; an initial
+capture exception causes zero attempts. An error in the decode
 callback stops just like an error in a release callback. Even the fully matching
 synthetic sequence returns Windows, unlock and runtime authorization as false.
 

@@ -19,11 +19,16 @@ class MockFirmware:
     def capture(self):
         current = model.predicted_snapshot(self.before, len(self.calls))
         if len(self.calls) == self.stage and self.fault:
-            return self.fault(current)
+            if self.fault == 'capture-exception':
+                raise RuntimeError('simulated capture failure')
+            if callable(self.fault):
+                return self.fault(current)
         return current
 
     def attempt(self, action, mask):
         self.calls.append((action, mask))
+        if self.fault == 'callback-exception' and len(self.calls) == self.stage:
+            raise RuntimeError('simulated callback failure')
         return self.fault != 'callback-error' or len(self.calls) != self.stage
 
 
@@ -62,6 +67,7 @@ class LifecycleModelTests(unittest.TestCase):
                   lambda s: replace(s, attributes=s.attributes ^ 0x400),
                   lambda s: replace(s, attributes=s.attributes ^ 0x18),
                   lambda s: replace(s, supported=0),
+                  lambda s: replace(s, bar_descriptor=(64, 0, 0, 0, 0, 0)),
                   lambda s: replace(s, bdf=(0, 1, 0, 0)), config_drift, bme_in_config]
         for stage in range(1, 5):
             for fault in faults:
@@ -82,3 +88,24 @@ class LifecycleModelTests(unittest.TestCase):
         result = model.run_simulation(fw)
         self.assertEqual(fw.calls, [])
         self.assertFalse(result['mutation_attempted'])
+
+    def test_extra_command_bits_refused_before_attempt(self):
+        fw = MockFirmware()
+        config = list(fw.before.config)
+        config[1] |= 0x100
+        fw.before = replace(fw.before, config=tuple(config))
+        self.assertFalse(model.run_simulation(fw)['mutation_attempted'])
+        self.assertEqual(fw.calls, [])
+
+    def test_exceptions_preserve_unknown_state_and_never_continue(self):
+        for stage in range(1, 5):
+            for fault in ('callback-exception', 'capture-exception'):
+                fw = MockFirmware(stage, fault)
+                result = model.run_simulation(fw)
+                self.assertEqual(len(fw.calls), stage)
+                self.assertTrue(result['mutation_attempted'])
+                self.assertIn('state-unknown', result['outcome'])
+                self.assertFalse(result['windows_authorized'])
+        fw = MockFirmware(0, 'capture-exception')
+        self.assertFalse(model.run_simulation(fw)['mutation_attempted'])
+        self.assertEqual(fw.calls, [])
