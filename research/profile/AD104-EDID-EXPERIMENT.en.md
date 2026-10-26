@@ -2,8 +2,9 @@
 
 English | [한국어](AD104-EDID-EXPERIMENT.ko.md)
 
-Status: design contract only. No runtime implementation or new USB test is
-provided by this document. The sixth observation EFI remains installed.
+Status: implemented in `b45ddd6`, host-tested and native-built; physical behavior
+remains untested. See [the seventh boot instructions](AD104-SEVENTH-BOOT.en.md).
+The operator explicitly accepted the unproven recovery boundary before staging.
 
 ## Question and single operation
 
@@ -23,7 +24,7 @@ return or a matching graph cannot exclude delayed effects.
 
 ## Required admission and evidence
 
-Before enabling this test, implement and test these gates together:
+The implementation must retain these gates together:
 
 1. Validate the exact GPU identity/BDF, four code fingerprints and bindings,
    null binding, eight relevant active edges, shared `1/1/1` observations,
@@ -32,7 +33,7 @@ Before enabling this test, implement and test these gates together:
    A topology match alone must not authorize the operation.
 2. Verify the exact Windows boot image and its prepared handoff. Successfully
    loading it is preparation, not evidence that it will run after mutation.
-3. Observe an actual bounded, user-entered keyboard challenge before invocation.
+3. Observe an actual user-entered keyboard challenge before invocation.
    Pointer stability alone is insufficient. Log only challenge success/status,
    never arbitrary typed keys. Timeout or unexpected input cancels invocation.
 4. Write and successfully flush the pre-state and one-shot intent to the USB
@@ -42,9 +43,15 @@ Before enabling this test, implement and test these gates together:
 5. After any callback return, including error, independently collect its status,
    graph, shared state, full PCI configuration, resource/attribute queries and
    console identity. Do not short-circuit postchecks on callback failure.
-6. Test actual keyboard input again with a bounded challenge. Require all
+6. Test actual keyboard input again with a challenge. Require all
    expected postconditions and durable result logging before considering the
    prepared Windows handoff. A failed challenge is not permission to retry.
+
+Each input challenge has a 60-second polling budget, not a hard execution
+deadline. ReadKeyStroke, OutputString, Stall or other firmware callbacks can
+themselves hang. Input queues are drained with a 32-read bound before prompting;
+only uppercase `E` before and uppercase `V` after are accepted. No typed keys
+are written to the evidence log.
 
 The predicted post-state has seven relevant active edges: only IMG08's EDID
 BY_DRIVER edge disappears. The shared byte becomes zero; both pointer edges

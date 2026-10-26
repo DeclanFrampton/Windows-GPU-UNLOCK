@@ -1,6 +1,6 @@
 # AD104: shared consumers and the unlock proof boundary
 
-English | [한국어](AD104-UNLOCK-EVIDENCE.ko.md)
+English | [í•œêµ­ì–´](AD104-UNLOCK-EVIDENCE.ko.md)
 
 ## Actual graph replaces the simplified fixture
 
@@ -73,7 +73,8 @@ a consistent captured two-image ROM chain. The [sixth physical run](AD104-SIXTH-
 also passed the implemented live fingerprint/topology consistency check. It
 does not satisfy the live-release, cold-state or transaction gates above.
 The next candidate is the [one-shot EDID lifecycle experiment](AD104-EDID-EXPERIMENT.en.md),
-with actual input challenges and independent post-state checks still to implement.
+now implemented with actual input challenges and independent post-state checks;
+[the seventh boot](AD104-SEVENTH-BOOT.en.md) remains physically untested.
 No unchanged query/preflight repeat is needed.
 An eventual live release test must explicitly describe possible lost display,
 lost input and failure to return to Windows; it must not promise recovery that
