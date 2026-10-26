@@ -1,5 +1,7 @@
 # MSI RTX 4070 Ti: first physical diagnostic capture
 
+English | [한국어](AD104-FIRST-BOOT.ko.md)
+
 On 2026-10-26 the capture-only EFI built from local commit `33670b1`
 executed on the MSI AD104 system. This is a partial observation, not an unlock
 or a complete ROM/register capture.

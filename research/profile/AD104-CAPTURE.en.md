@@ -1,5 +1,7 @@
 # MSI AD104 capture and a diagnostic MBR Windows handoff
 
+English | [한국어](AD104-CAPTURE.ko.md)
+
 Date: 2026-10-26. This adds a **capture-only** option for PCI identity
 `10de:2782`, subsystem `1462:5132`, class/revision `030000a1`, and chip ID
 `194000a1`. It does not add an unlock profile, widen `proven.json`, or make the

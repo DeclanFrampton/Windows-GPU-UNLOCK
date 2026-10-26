@@ -1,8 +1,12 @@
-# Proposed follow-up pull request
+# Follow-up pull request description
+
+English | [한국어](AD104-FOLLOWUP-PR.ko.md)
 
 Title: Add guarded MSI AD104 capture and diagnostic MBR handoff
 
 Base: upstream `main`. Head: `feature/4070ti-capture-preparation`.
+
+Published PR: [#44](https://github.com/impacifist/Windows-GPU-UNLOCK/pull/44).
 
 Related research: [#26](https://github.com/impacifist/Windows-GPU-UNLOCK/pull/26).
 This branch follows that research but does not require its stock GPU tools.
