@@ -15,6 +15,9 @@
 #if defined(GU_PROBE_AD104_METADATA) && !defined(GU_PROBE_AD104_MSI)
 #error AD104 metadata requires the guarded AD104 diagnostic
 #endif
+#if defined(GU_PROBE_AD104_FIRMROM) && !defined(GU_PROBE_AD104_METADATA)
+#error Firmware ROM capture requires AD104 metadata-only mode
+#endif
 
 #if defined(GU_PROBE_AD104_MSI) && (!defined(GU_PROBE_GENERIC) || !defined(GU_DIAGNOSTIC_ONLY) || !defined(GU_DIAGNOSTIC_PROBE) || !defined(GU_USB_MEDIA) || defined(GU_FULL_UNLOCK) || defined(GU_UEFI_PORT) || defined(GU_INTERNAL_BOOT) || defined(GU_HEADLESS_RESEARCH) || defined(GU_CONSOLE_PREPARE) || defined(GU_AUTOMATIC_BOOT) || defined(GU_EXPERIMENTAL_3090))
 #error AD104 capture is a separate read-only USB diagnostic, never an unlock profile
@@ -204,6 +207,9 @@ static BOOLEAN ProbeUnchanged(CAPTURE *c,EFI_HANDLE handle,EFI_PCI_IO_PROTOCOL *
   return TRUE;
 }
 #endif
+#ifdef GU_PROBE_AD104_FIRMROM
+#include "firmware-rom.h"
+#endif
 #ifdef GU_PROBE_AD104_MSI
 /* Read set reviewed against gpu-unlock-ada@4e7fefcc, AD104 sample.c.
  * No ownership changes, firmware execution, polling or write method exists.
@@ -226,6 +232,9 @@ static VOID ProbeAd104Bar(CAPTURE *c,EFI_PCI_IO_PROTOCOL *io,EFI_FILE_PROTOCOL *
   Text(c," command=0x");Hex(c,cfg[1]&0xffffU,4);
   Text(c," memory-enabled=");Hex(c,(cfg[1]>>1)&1U,1);
   Text(c," bus-master-enabled=");Hex(c,(cfg[1]>>2)&1U,1);End(c);
+#ifdef GU_PROBE_AD104_FIRMROM
+  FirmwareRom(c,handle,io,root,cfg);
+#endif
   Problem(c,"ad104-metadata-only-no-mmio",EFI_NOT_READY);return;
 #endif
   Text(c,"ad104-admission command=0x");Hex(c,cfg[1]&0xffffU,4);

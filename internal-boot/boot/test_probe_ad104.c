@@ -46,6 +46,7 @@ static EFI_STATUS AdRun(int mode) {
   Pci.Pci.Read=AdRead;Pci.GetLocation=AdLocation;Pci.Mem.Read=AdMem;
   return GuCaptureGraphOnVolume(&Table,&LogFile,&RootFile);
 }
+#ifndef GU_AD104_TEST_REUSE
 int main(void) {
 #ifdef GU_PROBE_AD104_METADATA
   for(int mode=0;mode<3;mode++) {
@@ -96,3 +97,4 @@ int main(void) {
   printf("PASS AD104 capture: %d checks, RAM-only callbacks\n",Checks);
   return 0;
 }
+#endif
