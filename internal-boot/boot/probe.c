@@ -21,6 +21,9 @@
 #if defined(GU_PROBE_AD104_RESOURCES) && !defined(GU_PROBE_AD104_METADATA)
 #error Resource observation requires AD104 metadata-only mode
 #endif
+#if defined(GU_PROBE_AD104_RESOURCES) && defined(GU_PROBE_AD104_FIRMROM)
+#error Resource observation is separate from firmware ROM capture
+#endif
 
 #if defined(GU_PROBE_AD104_MSI) && (!defined(GU_PROBE_GENERIC) || !defined(GU_DIAGNOSTIC_ONLY) || !defined(GU_DIAGNOSTIC_PROBE) || !defined(GU_USB_MEDIA) || defined(GU_FULL_UNLOCK) || defined(GU_UEFI_PORT) || defined(GU_INTERNAL_BOOT) || defined(GU_HEADLESS_RESEARCH) || defined(GU_CONSOLE_PREPARE) || defined(GU_AUTOMATIC_BOOT) || defined(GU_EXPERIMENTAL_3090))
 #error AD104 capture is a separate read-only USB diagnostic, never an unlock profile

@@ -31,7 +31,7 @@ def inspect(data):
         if row['code_type'] == 3:
             payload = read16(offset+22)
             compression = read16(offset+12)
-            if read16(offset+4) != 0xef1 or payload < 26 or payload >= length or compression not in (0, 1):
+            if int.from_bytes(data[offset+4:offset+8], 'little') != 0xef1 or payload < 26 or payload >= length or compression not in (0, 1):
                 raise ValueError('invalid EFI header')
             row.update(machine=read16(offset+10), subsystem=read16(offset+8),
                        compression=compression, payload_offset=payload)

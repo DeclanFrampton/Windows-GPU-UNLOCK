@@ -5,8 +5,11 @@ static int Calls,Fault;
 static EFI_STATUS EFIAPI ResourceBar(EFI_PCI_IO_PROTOCOL *io,UINT8 index,UINT64 *supports,VOID **out) {
   Calls++;if(supports)*supports=0;
   if(Fault==1){*out=NULL;return EFI_NOT_FOUND;}
+  if(Fault==4){*out=NULL;return EFI_SUCCESS;}
   EFI_STATUS s=Bar(io,index,supports,out);
   if(s==EFI_SUCCESS && Fault==2)((EFI_ACPI_ADDRESS_SPACE_DESCRIPTOR *)*out)->Desc=0;
+  if(s==EFI_SUCCESS && Fault==5)((EFI_ACPI_ADDRESS_SPACE_DESCRIPTOR *)*out)->Len=0;
+  if(s==EFI_SUCCESS && Fault==6)((UINT8 *)*out)[sizeof(EFI_ACPI_ADDRESS_SPACE_DESCRIPTOR)]=0;
   return s;
 }
 static EFI_STATUS EFIAPI ResourceRead(EFI_PCI_IO_PROTOCOL *io,EFI_PCI_IO_PROTOCOL_WIDTH w,UINT32 at,UINTN n,VOID *out) {
@@ -27,6 +30,10 @@ int main(void) {
   for(int f=1;f<=3;f++) {
     RunResource(G_BME,f);
     Check(!Logged("ad104-bar0-resource"),"error, malformed descriptor or identity drift refuses resource record");
+  }
+  for(int f=4;f<=6;f++) {
+    RunResource(G_BME,f);
+    Check(!Logged("descriptor-valid=1"),"null, bad length and bad terminator never valid");
   }
   RunResource(G_BAD_RESOURCE,0);
   Check(Logged("descriptor-valid=1 envelope-shape=0"),"resource shape mismatch is separate from descriptor validity");

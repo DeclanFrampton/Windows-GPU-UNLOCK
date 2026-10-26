@@ -62,5 +62,9 @@ try {
  if($LASTEXITCODE -eq 0 -or $out -notmatch 'Resource observation requires'){throw 'Resources accepted without metadata guard'}
  $global:LASTEXITCODE=0
  'PASS resources-without-metadata compile combination rejected'
+ $out=& $Clang @flags @ad104 -DGU_PROBE_AD104_METADATA -DGU_PROBE_AD104_RESOURCES -DGU_PROBE_AD104_FIRMROM -fsyntax-only probe.c 2>&1 | Out-String
+ if($LASTEXITCODE -eq 0 -or $out -notmatch 'Resource observation is separate'){throw 'Resource and ROM modes combined'}
+ $global:LASTEXITCODE=0
+ 'PASS combined resources/firmware-ROM compile combination rejected'
  'PASS 16 incompatible/non-diagnostic build combinations rejected'
 } finally {Pop-Location}
