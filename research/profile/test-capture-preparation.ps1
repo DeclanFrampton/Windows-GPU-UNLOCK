@@ -33,6 +33,10 @@ try {
  if($LASTEXITCODE -ne 0){throw 'Preflight mocks compile failed'}
  & ./build/capture-tests/preflight.exe
  if($LASTEXITCODE -ne 0){throw 'Preflight mocks failed'}
+ & $Clang @flags -Wno-unused-function test_output_observation.c ../unlock/sha256.c -o build/capture-tests/output.exe
+ if($LASTEXITCODE -ne 0){throw 'Output mocks compile failed'}
+ & ./build/capture-tests/output.exe
+ if($LASTEXITCODE -ne 0){throw 'Output mocks failed'}
  & $Clang @flags -Wno-unused-function test_ad104_edid.c ../unlock/sha256.c -o build/capture-tests/edid.exe
  if($LASTEXITCODE -ne 0){throw 'EDID mocks compile failed'}
  & ./build/capture-tests/edid.exe
@@ -86,5 +90,12 @@ try {
  if($LASTEXITCODE -eq 0 -or $out -notmatch 'EDID test requires'){throw 'EDID test accepted without exact preflight and handoff'}
  $global:LASTEXITCODE=0
  'PASS EDID-without-preflight/handoff compile combination rejected'
+ $out=& $Clang @flags -DGU_AD104_OUTPUT_OBSERVATION -fsyntax-only probe.c 2>&1 | Out-String
+ if($LASTEXITCODE -eq 0 -or $out -notmatch 'Output observation requires'){throw 'Output observation accepted without preflight'}
+ $global:LASTEXITCODE=0
+ $out=& $Clang @flags @ad104 -DGU_PROBE_AD104_METADATA -DGU_PROBE_AD104_RESOURCES -DGU_PROBE_AD104_PREFLIGHT -DGU_DIAGNOSTIC_MBR -DGU_AD104_OUTPUT_OBSERVATION -DGU_AD104_EDID_TEST -fsyntax-only probe.c 2>&1 | Out-String
+ if($LASTEXITCODE -eq 0 -or $out -notmatch 'Output observation requires'){throw 'Output observation accepted with mutation'}
+ $global:LASTEXITCODE=0
+ 'PASS two invalid output-observation compile combinations rejected'
  'PASS 16 incompatible/non-diagnostic build combinations rejected'
 } finally {Pop-Location}

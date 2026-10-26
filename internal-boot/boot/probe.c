@@ -30,6 +30,9 @@
 #if defined(GU_AD104_EDID_TEST) && (!defined(GU_PROBE_AD104_PREFLIGHT) || !defined(GU_DIAGNOSTIC_MBR))
 #error EDID test requires exact AD104 preflight and pinned MBR handoff
 #endif
+#if defined(GU_AD104_OUTPUT_OBSERVATION) && (!defined(GU_PROBE_AD104_PREFLIGHT) || defined(GU_AD104_EDID_TEST))
+#error Output observation requires preflight without EDID mutation
+#endif
 
 #if defined(GU_PROBE_AD104_MSI) && (!defined(GU_PROBE_GENERIC) || !defined(GU_DIAGNOSTIC_ONLY) || !defined(GU_DIAGNOSTIC_PROBE) || !defined(GU_USB_MEDIA) || defined(GU_FULL_UNLOCK) || defined(GU_UEFI_PORT) || defined(GU_INTERNAL_BOOT) || defined(GU_HEADLESS_RESEARCH) || defined(GU_CONSOLE_PREPARE) || defined(GU_AUTOMATIC_BOOT) || defined(GU_EXPERIMENTAL_3090))
 #error AD104 capture is a separate read-only USB diagnostic, never an unlock profile
@@ -225,6 +228,9 @@ static BOOLEAN ProbeUnchanged(CAPTURE *c,EFI_HANDLE handle,EFI_PCI_IO_PROTOCOL *
 #ifdef GU_PROBE_AD104_RESOURCES
 #ifdef GU_PROBE_AD104_PREFLIGHT
 #include "ad104-preflight.h"
+#ifdef GU_AD104_OUTPUT_OBSERVATION
+#include "output-observation.h"
+#endif
 static VOID ObservePreflight(CAPTURE *c,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *io,const UINT32 *cfg) {
   EFI_SYSTEM_TABLE *t=c->Table;PF_STATE first={0},second={0};UINTN loc[4];
   if(!t->ConIn || !t->ConIn->Reset || !t->ConIn->ReadKeyStroke || !t->ConIn->WaitForKey ||
@@ -255,6 +261,9 @@ static VOID ObservePreflight(CAPTURE *c,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *io,c
   Text(c," shared-count1=0x");Hex(c,first.PointerCounts[0],16);
   Text(c," shared-count2=0x");Hex(c,first.PointerCounts[1],16);End(c);
   if(s!=EFI_SUCCESS)Problem(c,"ad104-runtime-preflight-refused",s);
+#ifdef GU_AD104_OUTPUT_OBSERVATION
+  else ObserveOutput(c,&first,gpu,io,cfg,loc);
+#endif
 }
 #endif
 static VOID ObserveResources(CAPTURE *c,EFI_HANDLE handle,EFI_PCI_IO_PROTOCOL *io,const UINT32 *cfg) {
