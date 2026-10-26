@@ -13,6 +13,11 @@
 #undef NULL
 #include "diagnostic.c" /* Real Text/Hex/End/Problem and GuCaptureGraph. */
 
+#ifndef GU_BAR0_BASE
+/* Probe-only profiles pin no BAR; the probe reads it from config space. */
+#define GU_BAR0_BASE 0xf6000000ULL
+#endif
+
 #define PROM_DWORDS (0x100000U/4U)
 static EFI_GUID WantPci=EFI_PCI_IO_PROTOCOL_GUID;
 static EFI_GUID WantSfs=EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_GUID;
@@ -159,7 +164,7 @@ static void Setup(int scenario) {
 }
 static EFI_STATUS RunGraph(int scenario) {
   Setup(scenario);
-  EFI_STATUS s=GuCaptureGraph(&Table,&LogFile);
+  EFI_STATUS s=GuCaptureGraphOnVolume(&Table,&LogFile,scenario==SC_NO_SFS?NULL:&RootFile);
   printf("graph scenario=%d cfg=%d sub=%d cap=%d reg=%d prom=%d prom-alloc=%d writes=%d/%d status=0x%llx\n",
          scenario,S.CfgReads,S.SubReads,S.CapReads,S.RegReads,S.PromReads,S.PromAllocs,
          S.WriteFailures,S.WriteCalls,(unsigned long long)s);
@@ -169,7 +174,7 @@ static EFI_STATUS RunProbe(int scenario,BOOLEAN *complete) {
   Setup(scenario);
   static CAPTURE c;
   memset(&c,0,sizeof(c));
-  c.Table=&Table;c.File=&LogFile;c.Complete=TRUE;c.Io=EFI_SUCCESS;
+  c.Table=&Table;c.File=&LogFile;c.DumpRoot=&RootFile;c.Complete=TRUE;c.Io=EFI_SUCCESS;
   EFI_STATUS s=GuProbeGpu(&Table,&c);
   printf("probe scenario=%d cfg=%d reg=%d prom=%d complete=%d status=0x%llx\n",
          scenario,S.CfgReads,S.RegReads,S.PromReads,c.Complete,(unsigned long long)s);

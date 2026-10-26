@@ -59,6 +59,12 @@ VOID End(CAPTURE *c) {Text(c,"\r\n");}
 VOID Problem(CAPTURE *c,const char *where,EFI_STATUS s) {
   c->Complete=FALSE;Text(c,"incomplete reason=");Text(c,where);Field(c," status=0x",s);End(c);
 }
+static VOID FreeCapture(CAPTURE *c,VOID *data,const char *where) {
+  if(data) {
+    EFI_STATUS s=c->Table->BootServices->FreePool(data);
+    if(s!=EFI_SUCCESS)Problem(c,where,s);
+  }
+}
 /* Variable paths have a known byte size. Firmware interface paths do not;
  * for those, as in the existing wrapper, trust firmware pointers but bound
  * traversal. Log each node verbatim, including multi-instance terminators.
@@ -101,7 +107,7 @@ static VOID Variables(CAPTURE *c) {
     Field(c,"variable-status=0x",s);Field(c," attrs=0x",attrs);Field(c," bytes=0x",n);End(c);
     if(s==EFI_SUCCESS && n && n<=capacity)Path(c,(VOID *)data,n,TRUE);
     else Problem(c,"variable-read",s==EFI_SUCCESS?EFI_BAD_BUFFER_SIZE:s);
-    c->Table->BootServices->FreePool(data);
+    FreeCapture(c,data,"variable-free");
   }
 }
 static VOID Details(CAPTURE *c,EFI_HANDLE h,EFI_GUID *g) {
@@ -141,9 +147,9 @@ static VOID Details(CAPTURE *c,EFI_HANDLE h,EFI_GUID *g) {
       Field(c," height=0x",gp->Mode->Info->VerticalResolution);
       Field(c," stride=0x",gp->Mode->Info->PixelsPerScanLine);End(c);
     } else {
-#if GU_CONSOLE_AGGREGATE
+#if GU_CONSOLE_AGGREGATE || defined(GU_PROBE_GENERIC)
       /* Aggregate/pathless GOPs legitimately lack Mode->Info on this firmware;
-         record it as an observation, not a capture failure. */
+         record it as an observation, not a capture failure (generic probe: topology unknown). */
       Field(c,"gop info-bytes=0x",gp->Mode->SizeOfInfo);End(c);
 #else
       Problem(c,"gop-info",EFI_NOT_READY);
@@ -163,11 +169,11 @@ static VOID Details(CAPTURE *c,EFI_HANDLE h,EFI_GUID *g) {
     } else Problem(c,"pci-read",s);
   }
 }
-EFI_STATUS GuCaptureGraph(EFI_SYSTEM_TABLE *t,EFI_FILE_PROTOCOL *file) {
+EFI_STATUS GuCaptureGraphOnVolume(EFI_SYSTEM_TABLE *t,EFI_FILE_PROTOCOL *file,EFI_FILE_PROTOCOL *root) {
   if(!t || !t->BootServices || !t->RuntimeServices || !file || !file->Write || !file->Flush)return EFI_INVALID_PARAMETER;
   /* Single-threaded EFI application; keep the file buffer off the EFI stack. */
   static CAPTURE c;
-  c.Table=t;c.File=file;c.Complete=TRUE;c.Io=EFI_SUCCESS;c.Used=0;c.Total=0;
+  c.Table=t;c.File=file;c.DumpRoot=root;c.Complete=TRUE;c.Io=EFI_SUCCESS;c.Used=0;c.Total=0;
   Text(&c,"gpu-console-graph-v1 observational-only; no-detach no-unlock no-nvram-write\r\n");
   Field(&c,"console out=0x",(UINTN)t->ConsoleOutHandle);Field(&c," error=0x",(UINTN)t->StandardErrorHandle);
   Field(&c," input=0x",(UINTN)t->ConsoleInHandle);End(&c);
@@ -204,10 +210,10 @@ EFI_STATUS GuCaptureGraph(EFI_SYSTEM_TABLE *t,EFI_FILE_PROTOCOL *file) {
         Field(&c," controller=0x",(UINTN)opens[k].ControllerHandle);
         Field(&c," attributes=0x",opens[k].Attributes);Field(&c," count=0x",opens[k].OpenCount);End(&c);
       }
-      if(opens)bs->FreePool(opens);
+      FreeCapture(&c,opens,"opens-free");
       Details(&c,handles[i],protocols[j]);
     }
-    if(protocols)bs->FreePool(protocols);
+    FreeCapture(&c,protocols,"protocols-free");
   }
   /* Re-enumerate handle identities: detect additions/removals during capture.
    * Equal lists still do not prove atomic open records. Never authorize detach
@@ -223,10 +229,13 @@ EFI_STATUS GuCaptureGraph(EFI_SYSTEM_TABLE *t,EFI_FILE_PROTOCOL *file) {
       if(!found){Problem(&c,"handle-identity-changed",EFI_NOT_READY);break;}
     }
   }
-  if(after)bs->FreePool(after);
-  if(handles)bs->FreePool(handles);
+  FreeCapture(&c,after,"after-free");
+  FreeCapture(&c,handles,"handles-free");
   Text(&c,c.Complete?"capture-complete=1\r\n":"capture-complete=0\r\n");
   s=Flush(&c);if(s!=EFI_SUCCESS)return s;
   s=file->Flush(file);if(s!=EFI_SUCCESS)return s;
   return c.Complete?EFI_SUCCESS:EFI_NOT_READY;
+}
+EFI_STATUS GuCaptureGraph(EFI_SYSTEM_TABLE *t,EFI_FILE_PROTOCOL *file) {
+  return GuCaptureGraphOnVolume(t,file,NULL);
 }

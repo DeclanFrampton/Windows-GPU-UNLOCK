@@ -11,7 +11,7 @@
 #include "build/headless/child-contract.h"
 #elif defined(GU_AUTOMATIC_BOOT)
 #include "build/automatic/child-contract.h"
-#else
+#elif !defined(GU_DIAGNOSTIC_ONLY)
 #include "generated.h"
 #endif
 #include "../unlock/sha256.h"
@@ -36,6 +36,9 @@
 #error Full unlock and non-unlock experiments must remain separate builds
 #endif
 #endif
+#if defined(GU_USB_PROBE) && !defined(GU_DIAGNOSTIC_ONLY)
+#error GU_USB_PROBE is the read-only diagnostic probe only
+#endif
 
 static EFI_GUID LoadedGuid=EFI_LOADED_IMAGE_PROTOCOL_GUID,FsGuid=EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_GUID;
 static EFI_GUID PathGuid=EFI_DEVICE_PATH_PROTOCOL_GUID;
@@ -48,6 +51,16 @@ static EFI_HANDLE Self,OwnDevice,WindowsImage;
 static EFI_HANDLE UnlockImage;
 #endif
 static EFI_FILE_PROTOCOL *Root,*Log;
+/* Close each owned handle once, even when the first close fails. A failed
+ * close forbids StartImage; retain the first failure for the caller. */
+static EFI_STATUS CloseBootFiles(EFI_STATUS *LogStatus,EFI_STATUS *RootStatus) {
+  EFI_FILE_PROTOCOL *log=Log,*root=Root;Log=NULL;Root=NULL;
+  EFI_STATUS a=log && log->Close?log->Close(log):EFI_INVALID_PARAMETER;
+  EFI_STATUS b=root && root->Close?root->Close(root):EFI_INVALID_PARAMETER;
+  if(LogStatus)*LogStatus=a;
+  if(RootStatus)*RootStatus=b;
+  return a!=EFI_SUCCESS?a:b;
+}
 #ifdef GU_SINGLE_RTX_CONSOLE
 static BOOLEAN ResearchOutputDisabled;
 #endif
@@ -210,8 +223,8 @@ static EFI_STATUS LoadUnlock(VOID) {
 #endif
 static EFI_STATUS Prepare(VOID *Context) {
   (void)Context;EFI_HANDLE own=NULL,windows=NULL;
-#ifdef GU_USB_MEDIA
-  /* Unlock from an MBR USB stick: no partition GUID to pin, so the log/child
+#if defined(GU_USB_PROBE) || defined(GU_USB_MEDIA)
+  /* Probe or unlock from an MBR USB stick: no partition GUID to pin, so the log/child
      volume is the device this image was loaded from, and it must be USB. */
   EFI_DEVICE_PATH_PROTOCOL *ownPath=NULL;BOOLEAN usb=FALSE;
   EFI_STATUS s=PathFor(OwnDevice,&ownPath);
@@ -289,7 +302,7 @@ static EFI_STATUS FullChoice(VOID *Context,BOOLEAN *Skip) {
   }
   return EFI_SUCCESS;
 }
-static EFI_STATUS FullCapture(VOID *Context) {(void)Context;return GuCaptureGraph(Table,Log);}
+static EFI_STATUS FullCapture(VOID *Context) {(void)Context;return GuCaptureGraphOnVolume(Table,Log,Root);}
 static BOOLEAN ReleaseStarted;
 static EFI_STATUS FullRelease(VOID *Context) {
   ReleaseStarted=TRUE;
@@ -321,10 +334,10 @@ static EFI_STATUS FullWindows(VOID *Context) {
   s=GuVerifyReleased(Table,FALSE);
   s=ReportVerification(s);if(s!=EFI_SUCCESS)return s;
   s=Record(NULL,"windows-close-files-next-then-final-verify-and-StartImage",EFI_SUCCESS);if(s!=EFI_SUCCESS)return s;
-  s=Log->Close(Log);Log=NULL;
-  ScreenStatus("windows-close-log",s);if(s!=EFI_SUCCESS)return s;
-  s=Root->Close(Root);Root=NULL;
-  ScreenStatus("windows-close-root",s);if(s!=EFI_SUCCESS)return s;
+  EFI_STATUS logStatus,rootStatus;
+  s=CloseBootFiles(&logStatus,&rootStatus);
+  ScreenStatus("windows-close-log",logStatus);
+  ScreenStatus("windows-close-root",rootStatus);if(s!=EFI_SUCCESS)return s;
   Say(L"Final fresh verification, then Windows StartImage. Failures below identify the stopping stage.\r\n");
   s=GuVerifyReleased(Table,FALSE);
   if(s!=EFI_SUCCESS){ScreenStatus("windows-final-verify",s);return ReportVerification(s);}
@@ -337,8 +350,7 @@ static EFI_STATUS FullWindows(VOID *Context) {
 static EFI_STATUS Windows(VOID *Context) {
   (void)Context;
   Say(L"Starting Windows Boot Manager directly. No reset.\r\n");
-  EFI_STATUS s=Log->Close(Log);Log=NULL;if(s!=EFI_SUCCESS)return s;
-  s=Root->Close(Root);Root=NULL;if(s!=EFI_SUCCESS)return s;
+  EFI_STATUS s=CloseBootFiles(NULL,NULL);if(s!=EFI_SUCCESS)return s;
   return Table->BootServices->StartImage(WindowsImage,NULL,NULL);
 }
 #endif
@@ -346,8 +358,7 @@ static EFI_STATUS Windows(VOID *Context) {
 static EFI_STATUS ReadyConsoleWindows(VOID *Context) {
   (void)Context;
   Say(L"Console test recorded. Verifying final state, then starting Windows directly.\r\n");
-  EFI_STATUS s=Log->Close(Log);Log=NULL;if(s!=EFI_SUCCESS)return s;
-  s=Root->Close(Root);Root=NULL;return s;
+  return CloseBootFiles(NULL,NULL);
 }
 static EFI_STATUS VerifyConsole(VOID *Context) {
   (void)Context;return GuVerifyPreparedConsole(Table);
@@ -373,7 +384,7 @@ static EFI_STATUS PrepareChoice(VOID *Context,BOOLEAN *Skip) {
 #endif
 }
 static EFI_STATUS CaptureConsole(VOID *Context) {
-  (void)Context;return GuCaptureGraph(Table,Log);
+  (void)Context;return GuCaptureGraphOnVolume(Table,Log,Root);
 }
 static EFI_STATUS DetachConsole(VOID *Context) {
 #ifdef GU_SINGLE_RTX_CONSOLE
@@ -403,7 +414,7 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE Image,EFI_SYSTEM_TABLE *St) {
   Say(L"GPU console diagnostic only. No unlock or driver detach. Collecting graph...\r\n");
   s=Prepare(NULL);
   if(s==EFI_SUCCESS) {
-    s=GuCaptureGraph(Table,Log);
+    s=GuCaptureGraphOnVolume(Table,Log,Root);
     /* Partial observations never authorize unlock. Normal Windows boot is
      * permitted because this separate image has not touched GPU state. */
     EFI_STATUS recorded=Record(NULL,"diagnostic-result",s);
@@ -427,6 +438,14 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE Image,EFI_SYSTEM_TABLE *St) {
     Say(L"Nothing was changed. Returning to the firmware boot order.\r\n");
     return s==EFI_SUCCESS || s==EFI_ABORTED?EFI_NOT_STARTED:s;
   }
+#endif
+#if defined(GU_DIAGNOSTIC_ONLY) && defined(GU_USB_MEDIA)
+  /* Observation stick: this image never releases a driver or writes GPU state,
+   * so a failed capture or Windows load hands back to the firmware BootOrder. */
+  if(Log){(void)Log->Close(Log);Log=NULL;}
+  if(Root){(void)Root->Close(Root);Root=NULL;}
+  Say(L"Nothing was changed. Returning to the firmware boot order.\r\n");
+  return s==EFI_SUCCESS || s==EFI_ABORTED?EFI_NOT_STARTED:s;
 #endif
   Stop();
   return EFI_ABORTED; /* unreachable: do not fall through firmware BootOrder */
