@@ -29,6 +29,9 @@ static EFI_STATUS TextDisplayCollect(EFI_SYSTEM_TABLE *t,EFI_HANDLE child,TEXT_D
   if(t->BootServices->LocateProtocol(&OutPcdGuid,NULL,(VOID **)&p.Pcd)!=EFI_SUCCESS || !p.Pcd)return EFI_NOT_READY;
   p.GetBool=p.Pcd->GetBool;p.Next=p.Pcd->GetNextToken;p.Size=p.Pcd->GetSize;
   if(!p.GetBool || !p.Next || !p.Size || !PcdVerifyCaptured(t,&p))return EFI_NOT_READY;
+#ifdef GU_AD104_GOP_TEST
+  if(!PcdKnownText(PcdProducerImage->ImageBase,PcdProducerImage->ImageSize))return EFI_UNSUPPORTED;
+#endif
   BOOLEAN value=TRUE;UINTN steps=0;s=OutToken(&p,&value,&steps);
   if(s!=EFI_SUCCESS || value || !PcdVerifyCaptured(t,&p) || p.Pcd->GetBool!=p.GetBool ||
      p.Pcd->GetNextToken!=p.Next || p.Pcd->GetSize!=p.Size)return EFI_NOT_READY;

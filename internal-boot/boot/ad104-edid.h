@@ -1,7 +1,11 @@
 /* GPL-2.0-only. One attended consumer disconnect; no PCI owner release or unlock. */
 #ifdef GU_AD104_TEXT_TEST
 #include "text-display.h"
+#ifdef GU_AD104_GOP_TEST
+#define ED_LOG "ad104-display"
+#else
 #define ED_LOG "ad104-text"
+#endif
 #else
 #define ED_LOG "ad104-edid"
 #endif
@@ -56,12 +60,12 @@ static VOID EdDescribe(CAPTURE *c,const ED_STATE *s,const char *stage) {
   Text(c," framebuffer-bytes=0x");Hex(c,s->Display.Mode.FrameBufferSize,16);End(c);
 #endif
 }
-static EFI_STATUS EdCollect(EFI_SYSTEM_TABLE *t,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *io,
-                            const PF_PIN *pins,BOOLEAN post,ED_STATE *out) {
+static EFI_STATUS EdCollectMask(EFI_SYSTEM_TABLE *t,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *io,
+                            const PF_PIN *pins,BOOLEAN post,UINTN removedMask,ED_STATE *out) {
   UINT8 *z=(VOID *)out;for(UINTN i=0;i<sizeof(*out);i++)z[i]=0;
   EFI_STATUS first=PfDrivers(t,pins,&out->Drivers);
   #ifdef GU_AD104_TEXT_TEST
-  if(first==EFI_SUCCESS)first=PfGraphMissing(t,gpu,&out->Drivers,post?0x0c:0);
+  if(first==EFI_SUCCESS)first=PfGraphMissing(t,gpu,&out->Drivers,post?removedMask:0);
   EFI_STATUS display=out->Drivers.Child?TextDisplayCollect(t,out->Drivers.Child,&out->Display):EFI_NOT_READY;
   if(first==EFI_SUCCESS)first=display;
   if(out->Drivers.Base[1] && pins[1].Size>=0x7178) {
@@ -76,7 +80,7 @@ static EFI_STATUS EdCollect(EFI_SYSTEM_TABLE *t,EFI_HANDLE gpu,EFI_PCI_IO_PROTOC
       if(first==EFI_SUCCESS)first=EFI_NOT_READY;
   } else if(first==EFI_SUCCESS)first=EFI_NOT_READY;
 #else
-  if(first==EFI_SUCCESS)first=PfGraphForState(t,gpu,&out->Drivers,post);
+  if(first==EFI_SUCCESS)first=PfGraphMissing(t,gpu,&out->Drivers,post?removedMask:0);
 #endif
   /* Continue independent observations even when the graph is unexpected. */
   EFI_PCI_IO_PROTOCOL *fresh=NULL;UINTN loc[4]={0};
@@ -108,6 +112,16 @@ static EFI_STATUS EdCollect(EFI_SYSTEM_TABLE *t,EFI_HANDLE gpu,EFI_PCI_IO_PROTOC
   if(!out->Input || !out->Reset || !out->Read || !out->Wait || !out->Output || !out->Error)
     if(first==EFI_SUCCESS)first=EFI_UNSUPPORTED;
   return first;
+}
+static EFI_STATUS EdCollect(EFI_SYSTEM_TABLE *t,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *io,
+                            const PF_PIN *pins,BOOLEAN post,ED_STATE *out) {
+  return EdCollectMask(t,gpu,io,pins,post,
+#ifdef GU_AD104_TEXT_TEST
+    0x0c,
+#else
+    0x20,
+#endif
+    out);
 }
 static BOOLEAN EdInitial(const ED_STATE *s) {
   return s->Config[0]==0x278210deU && s->Config[11]==0x51321462U && s->Config[2]==0x030000a1U &&
@@ -148,6 +162,9 @@ static EFI_STATUS EdKey(EFI_SYSTEM_TABLE *t,CHAR16 wanted,const CHAR16 *prompt) 
   }
   return EFI_TIMEOUT;
 }
+#ifdef GU_AD104_GOP_TEST
+#include "gop-step.h"
+#endif
 static EFI_STATUS EdRun(CAPTURE *c,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *io,const PF_PIN *pins) {
   EFI_SYSTEM_TABLE *t=c->Table;static ED_STATE a,b,p,q;
   if(EdAttempted)return EFI_ALREADY_STARTED;
@@ -157,7 +174,11 @@ static EFI_STATUS EdRun(CAPTURE *c,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *io,const 
   EdDescribe(c,&a,"initial");EdStatus(c,"initial",s);
   if(s!=EFI_SUCCESS || !EdInitial(&a))return EFI_NOT_READY;
 #ifdef GU_AD104_TEXT_TEST
+#ifdef GU_AD104_GOP_TEST
+  s=EdKey(t,'G',L"DISPLAY TEST: PCD captured. Text detach THEN one GOP-consumer detach. PCI owner retained. Recovery unproven.\r\nPress uppercase G to permit BOTH stages. Then wait five seconds and tap uppercase V every two seconds up to one minute until Windows starts.\r\nNo second prompt; screen may blank. Any other key stops.\r\n");
+#else
   s=EdKey(t,'T',L"TEXT TEST: PCD capture saved; display/input may be lost and recovery is unproven.\r\nPress uppercase T for ONE text disconnect. After T, wait five seconds, then tap uppercase V every two seconds until Windows starts (up to one minute).\r\nThere is no further prompt. Early queued keys are discarded; a fresh V is required after postchecks. Any other key stops.\r\n");
+#endif
 #else
   s=EdKey(t,'E',L"EDID TEST: display/input may be lost; manual power-off may be needed.\r\nPress uppercase E within 60 seconds to attempt ONE EDID disconnect. Any other key cancels.\r\n");
 #endif
@@ -190,6 +211,10 @@ static EFI_STATUS EdRun(CAPTURE *c,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *io,const 
     EdPost(&a,&p) && EdPost(&a,&q);
   if(EdFlush(c)!=EFI_SUCCESS)return c->Io;
   if(!good)return EFI_NOT_READY;
+#ifdef GU_AD104_GOP_TEST
+  s=GopStep(c,gpu,io,pins,&a,&p,&b);
+  if(s!=EFI_SUCCESS)return s;
+#endif
 #ifdef GU_AD104_TEXT_TEST
   s=EdKey(t,'V',NULL);
 #else
@@ -197,8 +222,16 @@ static EFI_STATUS EdRun(CAPTURE *c,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *io,const 
 #endif
   EdStatus(c,"input-after",s);
   /* Input callbacks may themselves change shared state: check again. */
-  post=EdCollect(t,gpu,io,pins,TRUE,&p);EdStatus(c,"final-post",post);EdDescribe(c,&p,"final-post");
+#ifdef GU_AD104_GOP_TEST
+  post=EdCollectMask(t,gpu,io,pins,TRUE,0x1c,&p);
+  EFI_STATUS protocols=GopProtocols(t,b.Drivers.Child,TRUE,NULL);
+  EdStatus(c,"final-protocols",protocols);
+  if(s!=EFI_SUCCESS || post!=EFI_SUCCESS || protocols!=EFI_SUCCESS || !GopPost(&b,&p))s=EFI_NOT_READY;
+#else
+  post=EdCollect(t,gpu,io,pins,TRUE,&p);
   if(s!=EFI_SUCCESS || post!=EFI_SUCCESS || !EdPost(&a,&p))s=EFI_NOT_READY;
+#endif
+  EdStatus(c,"final-post",post);EdDescribe(c,&p,"final-post");
   EdStatus(c,"windows-eligible",s);
   if(EdFlush(c)!=EFI_SUCCESS)return c->Io;
   return s;

@@ -36,6 +36,9 @@
 #if defined(GU_AD104_TEXT_TEST) && (!defined(GU_AD104_PCD_CAPTURE) || !defined(GU_DIAGNOSTIC_MBR) || defined(GU_AD104_EDID_TEST))
 #error Text test requires PCD capture and pinned MBR, without EDID test
 #endif
+#if defined(GU_AD104_GOP_TEST) && !defined(GU_AD104_TEXT_TEST)
+#error GOP consumer test requires guarded text test
+#endif
 #if defined(GU_AD104_PCD_CAPTURE) && !defined(GU_AD104_OUTPUT_OBSERVATION)
 #error PCD capture requires read-only output observation
 #endif

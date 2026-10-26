@@ -37,7 +37,7 @@ try {
  if($LASTEXITCODE -ne 0){throw 'Output mocks compile failed'}
  & ./build/capture-tests/output.exe
  if($LASTEXITCODE -ne 0){throw 'Output mocks failed'}
- foreach($name in @('pcd_producer','text_display','text_lifecycle')) {
+ foreach($name in @('pcd_producer','text_display','text_lifecycle','gop_lifecycle')) {
   & $Clang @flags -Wno-unused-function "test_$name.c" ../unlock/sha256.c -o "build/capture-tests/$name.exe"
   if($LASTEXITCODE -ne 0){throw "$name mocks compile failed"}
   & "./build/capture-tests/$name.exe"
@@ -113,5 +113,9 @@ try {
   $global:LASTEXITCODE=0
  }
  'PASS two invalid PCD/text compile combinations rejected'
+ $out=& $Clang @flags -DGU_AD104_GOP_TEST -fsyntax-only probe.c 2>&1 | Out-String
+ if($LASTEXITCODE -eq 0 -or $out -notmatch 'GOP consumer test requires'){throw 'GOP test accepted without text lifecycle'}
+ $global:LASTEXITCODE=0
+ 'PASS invalid GOP-without-text build combination rejected'
  'PASS 16 incompatible/non-diagnostic build combinations rejected'
 } finally {Pop-Location}

@@ -112,3 +112,9 @@ static BOOLEAN PcdVerifyCaptured(EFI_SYSTEM_TABLE *t,const OUT_STATE *o) {
   return PfEqual(hash,PcdProducerHash,sizeof(hash));
 }
 #endif
+#ifdef GU_AD104_GOP_TEST
+static BOOLEAN PcdKnownText(const UINT8 *base,UINTN size) {
+  return size==PCD_PRODUCER_BYTES && PcdExecutable(base,size,0x4f4) &&
+    PfHash(base+0x2a0,0x236d,"cb64fe58020cf7512de99c86d8284baca00dd679109680ea1af371081e3b6367");
+}
+#endif

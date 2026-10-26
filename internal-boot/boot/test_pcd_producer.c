@@ -4,6 +4,7 @@ static BOOLEAN AllowNew;
 static BOOLEAN NewDump(CAPTURE *c,EFI_FILE_PROTOCOL *r,CHAR16 *n){(void)c;(void)r;(void)n;return AllowNew;}
 #define GU_AD104_PCD_CAPTURE
 #define GU_AD104_TEXT_TEST
+#define GU_AD104_GOP_TEST
 #define main OutputMain
 #include "test_output_observation.c"
 #undef main
@@ -69,6 +70,7 @@ int main(void) {
   Check(CapturePcdProducer(&c,&o,&image,1)==EFI_SUCCESS && PcdProducerCaptured,"one exact synthetic producer captured");
   Check(ProducerWrites==1 && ProducerFlushes==1 && ProducerCloses==1,"complete file lifecycle");
   Check(PcdVerifyCaptured(&T,&o),"same-run fingerprint retained");ProducerBytes[0x800]^=1;
+  Check(!PcdKnownText(ProducerBytes,sizeof(ProducerBytes)),"unknown synthetic producer rejected by reviewed text hash");
   Check(!PcdVerifyCaptured(&T,&o),"changed producer cannot authorize later stage");
   for(int f=1;f<=16;f++) {
     o=ProducerSetup(f,&c);Check(CapturePcdProducer(&c,&o,&image,1)!=EFI_SUCCESS && !PcdProducerCaptured,"identity/PE/stability/file failures block capture gate");

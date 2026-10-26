@@ -1,7 +1,10 @@
 /* GPL-2.0-only. Executes only RAM mocks, never firmware code. */
+#pragma push_macro("main")
+#undef main
 #define main PreflightMain
 #include "test_ad104_preflight.c"
 #undef main
+#pragma pop_macro("main")
 #include <IndustryStandard/Acpi.h>
 #include "diagnostic.h"
 static int Writes,Flushes,Calls,Stage,KeyPhase,Reads,EdFault,Collections;
@@ -10,6 +13,9 @@ static EFI_FILE_PROTOCOL File;
 static EFI_SIMPLE_TEXT_INPUT_PROTOCOL Input;
 static EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL Output;
 static UINT32 Config[64];
+#ifdef GU_AD104_GOP_TEST
+static int GopFault,ProtocolReads;
+#endif
 #ifdef GU_AD104_TEXT_TEST
 BOOLEAN GuTextOutputDisabled;
 /* Test the real lifecycle/graph engine separately from the display collector,
@@ -17,7 +23,11 @@ BOOLEAN GuTextOutputDisabled;
 #define GU_TEXT_DISPLAY_H
 typedef struct {UINTN Stable;VOID *Pcd;EFI_GRAPHICS_OUTPUT_PROTOCOL *Gop;EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE Mode;} TEXT_DISPLAY;
 static EFI_STATUS TextDisplayCollect(EFI_SYSTEM_TABLE *t,EFI_HANDLE child,TEXT_DISPLAY *out) {
-  (void)t;(void)child;out->Stable=1;out->Pcd=(VOID *)40;return EdFault==19?EFI_NOT_READY:EFI_SUCCESS;
+  (void)t;(void)child;out->Stable=1;out->Pcd=(VOID *)40;
+#ifdef GU_AD104_GOP_TEST
+  if(Stage==2 && GopFault==10)out->Stable=2;
+#endif
+  return EdFault==19?EFI_NOT_READY:EFI_SUCCESS;
 }
 static int QuietReady,EarlyDrained;
 #endif
@@ -26,6 +36,18 @@ VOID Hex(CAPTURE *c,UINT64 v,UINTN n){(void)v;(void)n;Text(c,"x");}
 VOID End(CAPTURE *c){Text(c,"\n");}
 #include "ad104-edid.h"
 static EFI_STATUS EFIAPI EdHandle(EFI_HANDLE h,EFI_GUID *g,VOID **out) {
+#ifdef GU_AD104_GOP_TEST
+  EFI_GUID text={0x387477c2,0x69c7,0x11d2,{0x8e,0x39,0,0xa0,0xc9,0x69,0x72,0x3b}};
+  EFI_GUID companion={0xe1e4a857,0xc970,0x4075,{0xa4,0xda,0xe9,0xc4,0x1b,0x69,0xad,0xfc}};
+  if(h==(VOID *)2 && (PfEqual(g,&text,sizeof(*g)) || PfEqual(g,&companion,sizeof(*g)))) {
+    BOOLEAN extra=PfEqual(g,&companion,sizeof(*g));*out=NULL;
+    if(Stage==2 && GopFault==11)return EFI_DEVICE_ERROR;
+    if((Stage==2 && !(GopFault==4 && extra)) || (GopFault==1 && extra))return EFI_UNSUPPORTED;
+    if(!extra)ProtocolReads++;
+    UINTN shift=GopFault==12 && ProtocolReads>=2?0x1000:0;
+    *out=(VOID *)(UINTN)((extra?(GopFault==2?0x10102:0x10101):0x10000)+shift);return EFI_SUCCESS;
+  }
+#endif
   if(h==(VOID *)1 && PfEqual(g,&PciGuidL,sizeof(*g))){*out=&Io;return EFI_SUCCESS;}
   return HandleMock(h,g,out);
 }
@@ -51,14 +73,25 @@ static EFI_STATUS EFIAPI Attributes(EFI_PCI_IO_PROTOCOL *io,EFI_PCI_IO_PROTOCOL_
 static EFI_STATUS EFIAPI Write(EFI_FILE_PROTOCOL *f,UINTN *n,VOID *p) {
   (void)f;(void)n;(void)p;Writes++;return EdFault==1 || (EdFault==15 && Stage)?EFI_DEVICE_ERROR:EFI_SUCCESS;
 }
-static EFI_STATUS EFIAPI FlushFile(EFI_FILE_PROTOCOL *f){(void)f;Flushes++;return EdFault==2 || (EdFault==16 && Stage)?EFI_DEVICE_ERROR:EFI_SUCCESS;}
+static EFI_STATUS EFIAPI FlushFile(EFI_FILE_PROTOCOL *f){(void)f;Flushes++;
+#ifdef GU_AD104_GOP_TEST
+  if(GopFault==8 && Stage==2)return EFI_DEVICE_ERROR;
+#endif
+  return EdFault==2 || (EdFault==16 && Stage)?EFI_DEVICE_ERROR:EFI_SUCCESS;}
 static EFI_STATUS EFIAPI Reset(EFI_SIMPLE_TEXT_INPUT_PROTOCOL *i,BOOLEAN b){(void)i;(void)b;Check(0,"no reset");return EFI_UNSUPPORTED;}
 static EFI_STATUS EFIAPI ReadKey(EFI_SIMPLE_TEXT_INPUT_PROTOCOL *i,EFI_INPUT_KEY *k) {
   (void)i;Reads++;
+#ifdef GU_AD104_GOP_TEST
+  if(GopFault==9 && Stage==2 && KeyPhase==2)return EFI_NOT_READY;
+#endif
   if(!KeyPhase || EdFault==3 || (EdFault==8 && KeyPhase==2))return EFI_NOT_READY;
   k->ScanCode=0;k->UnicodeChar=(CHAR16)(KeyPhase==1?
 #ifdef GU_AD104_TEXT_TEST
+#ifdef GU_AD104_GOP_TEST
+    'G'
+#else
     'T'
+#endif
 #else
     'E'
 #endif
@@ -81,6 +114,16 @@ static EFI_STATUS EFIAPI Stall(UINTN us){(void)us;
 #endif
   return EFI_SUCCESS;}
 static EFI_STATUS EFIAPI Disconnect(EFI_HANDLE child,EFI_HANDLE agent,EFI_HANDLE deeper) {
+#ifdef GU_AD104_GOP_TEST
+  if(Calls==1) {
+    Check(child==(VOID *)2 && agent==(VOID *)12 && !deeper,"only IMG17 consumer after text");
+    Check(GuTextOutputDisabled && GopAttempted && Flushes>=3,"quiet one-shot GOP intent persisted");
+    Calls++;Stage=2;ThirdMissing=GopFault==5?-1:4;
+    if(GopFault==6)Config[1]=3;
+    if(GopFault==7)Io.Pci.Read=NULL;
+    return GopFault==3?EFI_DEVICE_ERROR:EFI_SUCCESS;
+  }
+#endif
   Check(child==(VOID *)2 && agent==(VOID *)
 #ifdef GU_AD104_TEXT_TEST
     11
@@ -116,6 +159,9 @@ static EFI_STATUS EFIAPI Disconnect(EFI_HANDLE child,EFI_HANDLE agent,EFI_HANDLE
 }
 static CAPTURE *EdSetup(int fault) {
   Setup(0,-1);EdFault=fault;EdAttempted=FALSE;Writes=Flushes=Calls=Stage=KeyPhase=Reads=Collections=0;
+#ifdef GU_AD104_GOP_TEST
+  GopAttempted=FALSE;GopFault=ProtocolReads=0;
+#endif
 #ifdef GU_AD104_TEXT_TEST
   GuTextOutputDisabled=FALSE;QuietReady=EarlyDrained=0;
   *(UINT64 *)(Data[1]+0x7160)=1;*(UINT64 *)(Data[1]+0x7168)=99;*(UINT64 *)(Data[1]+0x7170)=99;

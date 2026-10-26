@@ -1,4 +1,4 @@
-# GPL-2.0-only. Optional Ad104EdidTest is a separate attended lifecycle mutation.
+# GPL-2.0-only. Optional EDID/text/GOP lifecycle switches perform attended consumer mutations.
 # Default: build the profile-less read-only USB probe (-DGU_PROBE_GENERIC) for a new machine.
 # The probe records every NVIDIA display controller, the console/driver graph, the 1 MiB PROM
 # (PROM.BIN) and loaded driver images (IMGnn.BIN) to the stick it booted from, then starts
@@ -6,7 +6,7 @@
 # DMA or firmware variable writes. Builds files only.
 param([Parameter(Mandatory,ParameterSetName='Gpt')][guid]$WindowsEspGuid,
  [Parameter(Mandatory,ParameterSetName='Mbr')][switch]$WindowsMbr,
- [switch]$Ad104Msi,[switch]$Ad104Metadata,[switch]$Ad104FirmwareRom,[switch]$Ad104Resources,[switch]$Ad104Preflight,[switch]$Ad104EdidTest,[switch]$Ad104OutputObservation,[switch]$Ad104PcdCapture,[switch]$Ad104TextTest,[string]$Clang='clang',[string]$LldLink='lld-link',[string]$Python='python')
+ [switch]$Ad104Msi,[switch]$Ad104Metadata,[switch]$Ad104FirmwareRom,[switch]$Ad104Resources,[switch]$Ad104Preflight,[switch]$Ad104EdidTest,[switch]$Ad104OutputObservation,[switch]$Ad104PcdCapture,[switch]$Ad104TextTest,[switch]$Ad104GopTest,[string]$Clang='clang',[string]$LldLink='lld-link',[string]$Python='python')
 $ErrorActionPreference='Stop'
 if($Ad104Metadata -and !$Ad104Msi){throw 'Ad104Metadata requires Ad104Msi'}
 if($Ad104FirmwareRom -and !$Ad104Metadata){throw 'Ad104FirmwareRom requires Ad104Metadata'}
@@ -16,6 +16,7 @@ if($Ad104EdidTest -and (!$Ad104Preflight -or !$WindowsMbr)){throw 'Ad104EdidTest
 if($Ad104OutputObservation -and (!$Ad104Preflight -or $Ad104EdidTest)){throw 'Output observation requires preflight without EDID mutation'}
 if($Ad104PcdCapture -and !$Ad104OutputObservation){throw 'PCD capture requires output observation'}
 if($Ad104TextTest -and (!$Ad104PcdCapture -or !$WindowsMbr -or $Ad104EdidTest)){throw 'Text test requires PCD capture and WindowsMbr without EDID test'}
+if($Ad104GopTest -and !$Ad104TextTest){throw 'GOP test requires text test'}
 $repo=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $boot=Join-Path $repo 'internal-boot/boot'
 function GuidC([guid]$Value){
@@ -68,6 +69,7 @@ try {
  if($Ad104OutputObservation){$out='build/probe-ad104-output'}
  if($Ad104PcdCapture){$out='build/probe-ad104-pcd'}
  if($Ad104TextTest){$out='build/probe-ad104-text'}
+ if($Ad104GopTest){$out='build/probe-ad104-gop'}
  New-Item -ItemType Directory -Path $out -Force | Out-Null
  $sources=@('handoff.c','diagnostic.c','../efi_runtime.c','probe.c','../unlock/sha256.c')
  $defines=@('-DGU_DIAGNOSTIC_ONLY','-DGU_DIAGNOSTIC_PROBE','-DGU_PROBE_GENERIC','-DGU_USB_PROBE')
@@ -80,6 +82,7 @@ try {
  if($Ad104OutputObservation){$defines+='-DGU_AD104_OUTPUT_OBSERVATION'}
  if($Ad104PcdCapture){$defines+='-DGU_AD104_PCD_CAPTURE'}
  if($Ad104TextTest){$defines+='-DGU_AD104_TEXT_TEST'}
+ if($Ad104GopTest){$defines+='-DGU_AD104_GOP_TEST'}
  if($WindowsMbr){$defines+='-DGU_DIAGNOSTIC_MBR';if(!$Ad104Msi){$defines+='-DGU_USB_MEDIA'}}
  $objects=@()
  foreach($source in $sources) {
@@ -92,13 +95,13 @@ try {
  if($LASTEXITCODE -ne 0){throw 'Probe link failed'}
  & $Python -I ../unlock/verify_pe.py "$out/BOOTX64.EFI" "$out/PROBE.map" --output "$out/pe-verification.json"
  if($LASTEXITCODE -ne 0){throw 'Probe PE verification failed'}
- [ordered]@{Mode=if($Ad104TextTest){'ad104-msi-pcd-capture-then-one-shot-text-test'}elseif($Ad104PcdCapture){'ad104-msi-pcd-producer-capture'}elseif($Ad104OutputObservation){'ad104-msi-output-and-pcd-observation'}elseif($Ad104EdidTest){'ad104-msi-one-shot-edid-lifecycle-test'}elseif($Ad104Preflight){'ad104-msi-runtime-preflight-observation-then-windows-usb'}elseif($Ad104Resources){'ad104-msi-resource-observation-then-windows-usb'}elseif($Ad104FirmwareRom){'ad104-msi-firmware-rom-buffer-then-windows-usb'}elseif($Ad104Metadata){'ad104-msi-metadata-only-then-windows-usb'}elseif($Ad104Msi){'ad104-msi-read-only-probe-then-windows-usb'}else{'generic-read-only-probe-then-windows-usb'};
-   CanQueryBarResources=[bool]$Ad104Resources;CanQueryPcdBoolean=[bool]$Ad104OutputObservation;CanCapturePcdProducer=[bool]$Ad104PcdCapture;
+ [ordered]@{Mode=if($Ad104GopTest){'ad104-msi-text-then-gop-consumer-test'}elseif($Ad104TextTest){'ad104-msi-pcd-capture-then-one-shot-text-test'}elseif($Ad104PcdCapture){'ad104-msi-pcd-producer-capture'}elseif($Ad104OutputObservation){'ad104-msi-output-and-pcd-observation'}elseif($Ad104EdidTest){'ad104-msi-one-shot-edid-lifecycle-test'}elseif($Ad104Preflight){'ad104-msi-runtime-preflight-observation-then-windows-usb'}elseif($Ad104Resources){'ad104-msi-resource-observation-then-windows-usb'}elseif($Ad104FirmwareRom){'ad104-msi-firmware-rom-buffer-then-windows-usb'}elseif($Ad104Metadata){'ad104-msi-metadata-only-then-windows-usb'}elseif($Ad104Msi){'ad104-msi-read-only-probe-then-windows-usb'}else{'generic-read-only-probe-then-windows-usb'};
+   CanQueryBarResources=[bool]$Ad104Resources;CanQueryPcdBoolean=[bool]$Ad104OutputObservation;CanCapturePcdProducer=[bool]$Ad104PcdCapture;CanReleaseGopConsumer=[bool]$Ad104GopTest;CanReleasePciOwner=$false;
    CanReadGpuMmio=(!$Ad104Metadata);CanDereferenceRomImage=[bool]$Ad104FirmwareRom;
   WindowsBootIdentity=if($WindowsMbr){'exact-mbr-extent-and-boot-manager-hash'}else{'gpt-partition-guid'};
   CanUnlock=$false;CanDetach=([bool]$Ad104EdidTest -or [bool]$Ad104TextTest);WritesFirmwareVariables=$false;HardwareTested=$false;Defines=$defines
   EfiSha256=(Get-FileHash -LiteralPath "$out/BOOTX64.EFI").Hash.ToLowerInvariant();BuiltUtc=[DateTime]::UtcNow.ToString('o')
-   Sources=@(($sources+@('diagnostic.h','media.h','probe.h','firmware-rom.h','ad104-preflight.h','ad104-edid.h','output-observation.h','pcd-producer.h','text-display.h','platform-config.h')) | ForEach-Object {[ordered]@{Path=$_;Sha256=(Get-FileHash -LiteralPath $_).Hash.ToLowerInvariant()}})
+   Sources=@(($sources+@('diagnostic.h','media.h','probe.h','firmware-rom.h','ad104-preflight.h','ad104-edid.h','output-observation.h','pcd-producer.h','text-display.h','gop-step.h','platform-config.h')) | ForEach-Object {[ordered]@{Path=$_;Sha256=(Get-FileHash -LiteralPath $_).Hash.ToLowerInvariant()}})
  } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath "$out/manifest.json" -Encoding utf8
  "Built $out/BOOTX64.EFI; CanDetach=$([bool]$Ad104EdidTest -or [bool]$Ad104TextTest); hardware untested."
 } finally {Pop-Location}
