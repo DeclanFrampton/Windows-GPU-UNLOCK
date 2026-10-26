@@ -180,7 +180,9 @@
       "index": 29,
       "bytes": 18432,
       "sha256": "6978c561cfc119be29c3832d47fc51e471b02e86dc84b3a4eac6524a65de502c",
-      "hints": []
+      "hints": [
+        "BIOS[INT10] Video Driver"
+      ]
     },
     {
       "index": 30,

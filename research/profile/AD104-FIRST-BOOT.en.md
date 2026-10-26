@@ -49,6 +49,11 @@ The USB EFI SHA-256 remained
 
 ## Next investigation
 
+Completed offline follow-up: [ownership findings](AD104-OWNERSHIP.en.md) and
+[image hash evidence](ad104-ownership-evidence.json). The PCI-to-GOP owner is
+present in IMG29 and contains `BIOS[INT10] Video Driver`; a native NVIDIA GOP
+identity or safe release procedure is not established.
+
 Analyze the captured ownership graph and image bytes offline to identify the
 GPU GOP's driver/controller relationship. Preserve the bus-master guard: do
 not clear the PCI command bit, detach drivers, or treat this partial capture as

@@ -22,6 +22,7 @@ def analyze(folder):
         m = re.fullmatch(r'binding handle=0x([0-9a-f]+) image=0x([0-9a-f]+) version=0x([0-9a-f]+) stop=0x([0-9a-f]+)', line)
         if m:
             binding = int(m[1], 16)
+            size = None
         m = re.fullmatch(r'img size=0x([0-9a-f]+)', line)
         if m:
             size = int(m[1], 16)
@@ -31,10 +32,10 @@ def analyze(folder):
             if index >= 100 or any(x['index'] == index for x in images):
                 raise ValueError('invalid or duplicate image index')
             raw = (folder / f'IMG{index:02}.BIN').read_bytes()
-            if size is None or len(raw) != size or size > 4 * 1024 * 1024:
+            if not binding or size is None or len(raw) != size or size > 4 * 1024 * 1024:
                 raise ValueError('image length does not match log')
             # Only bounded identification hints are emitted, never arbitrary strings.
-            hints = [s for s in ('NVIDIA', 'Nvidia', 'NvidiaGop', 'GraphicsConsole', 'ConsoleSplitter')
+            hints = [s for s in ('NVIDIA', 'Nvidia', 'NvidiaGop', 'GraphicsConsole', 'ConsoleSplitter', 'BIOS[INT10] Video Driver')
                      if s.encode() in raw or s.encode('utf-16le') in raw]
             images.append(dict(index=index, binding=binding, bytes=size,
                                sha256=hashlib.sha256(raw).hexdigest(), hints=hints))
@@ -59,7 +60,7 @@ def analyze(folder):
     if len(targets) != 1:
         raise ValueError('expected exactly one AD104 target')
     target = targets[0]
-    owners = [o for o in handles[target]['opens'] if o['protocol'] == PCI and o['attributes'] == 16]
+    owners = [o for o in handles[target]['opens'] if o['protocol'] == PCI and o['attributes'] in (16, 48)]
     children = [o for o in handles[target]['opens'] if o['protocol'] == PCI and o['attributes'] == 8]
     edges = []
     console_match = re.search(r'^console-out=0x([0-9a-f]+) ', text, re.MULTILINE)
@@ -72,7 +73,7 @@ def analyze(folder):
                 edges.append(dict(role='gpu-owner-to-gop-child', established=True))
                 child_handle = child['controller']
                 for consumer in handles[child_handle]['opens']:
-                    if consumer['attributes'] != 16:
+                    if consumer['attributes'] not in (16, 48):
                         continue
                     links = [o for o in handles[child_handle]['opens']
                              if o['protocol'] == consumer['protocol'] and o['attributes'] == 8
@@ -94,4 +95,4 @@ if __name__ == '__main__':
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()
     result = analyze(args.capture)
-    args.output.write_text(json.dumps(result, indent=2) + '\n', encoding='utf-8')
+    args.output.write_bytes((json.dumps(result, indent=2) + '\n').encode('utf-8'))

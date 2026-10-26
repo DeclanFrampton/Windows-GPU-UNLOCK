@@ -48,6 +48,11 @@ USB EFI의 SHA-256은 다음과 같습니다.
 
 ## 다음 조사
 
+오프라인 후속 분석 결과는 [소유권 분석](AD104-OWNERSHIP.ko.md) 및
+[이미지 해시 증거](ad104-ownership-evidence.json)에 기록했습니다. PCI-to-GOP
+소유자 이미지는 IMG29에 있으며 `BIOS[INT10] Video Driver`를 포함합니다.
+네이티브 NVIDIA GOP ID나 안전한 해제 절차는 확인되지 않았습니다.
+
 수집한 소유권 그래프와 이미지 바이트를 오프라인으로 분석하여 GPU GOP의
 드라이버/컨트롤러 관계를 식별합니다. 버스 마스터 보호 조건을 유지합니다.
 PCI command 비트를 지우거나 드라이버를 해제하거나 이 부분 캡처를 언락
