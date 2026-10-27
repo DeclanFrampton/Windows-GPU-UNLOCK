@@ -192,6 +192,10 @@ static EFI_STATUS EdRun(CAPTURE *c,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *io,const 
 #ifdef GU_AD104_PARENT_TEST
 #ifdef GU_AD104_DECODE_READ_TEST
 #ifdef GU_AD104_DECODE_OFF_TEST
+#ifdef GU_AD104_PROM_HEADER_TEST
+  if(t->ConOut && t->ConOut->OutputString)
+    t->ConOut->OutputString(t->ConOut,L"NEW: 512-byte BAR PROM header at 0x300000.\r\n128 new reads may have side effects or hang.\r\nNot a full ROM dump. Recovery unproven.\r\n");
+#endif
 #ifdef GU_AD104_DELAYED_READ_TEST
   if(t->ConOut && t->ConOut->OutputString)
     t->ConOut->OutputString(t->ConOut,L"DELAYED STABILITY: nominal 1-second batch gap.\r\nSame registers and writes as test 18.\r\nTests stability; no cold-entry authorization.\r\n");

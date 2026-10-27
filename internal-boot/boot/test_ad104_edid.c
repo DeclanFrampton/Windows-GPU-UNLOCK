@@ -18,6 +18,9 @@ static UINT64 CurrentAttributes,SupportedAttributes;
 static int DecodeFault,DecodeCalls,MmioCalls,DecodeFlushes;
 #ifdef GU_AD104_DECODE_OFF_TEST
 static int OffFault,OffCalls,OffIntentSeen;
+#ifdef GU_AD104_PROM_HEADER_TEST
+static int PromFault,PromIntentSeen,PromOutputSeen;
+#endif
 #endif
 #endif
 #ifdef GU_AD104_GOP_TEST
@@ -48,6 +51,10 @@ static EFI_STATUS TextPcdCollect(EFI_SYSTEM_TABLE *t,TEXT_DISPLAY *out) {
 static int QuietReady,EarlyDrained;
 #endif
 VOID Text(CAPTURE *c,const char *s){
+#ifdef GU_AD104_PROM_HEADER_TEST
+  if(strstr(s,"ad104-prom-header intent="))PromIntentSeen=1;
+  if(strstr(s,"ad104-prom-header offset="))PromOutputSeen=1;
+#endif
 #ifdef GU_AD104_DECODE_OFF_TEST
   if(strstr(s,"intent=one-disable-io-memory"))OffIntentSeen=1;
 #endif
@@ -104,7 +111,13 @@ static EFI_STATUS EFIAPI Attributes(EFI_PCI_IO_PROTOCOL *io,EFI_PCI_IO_PROTOCOL_
 #ifdef GU_AD104_DECODE_READ_TEST
 #ifdef GU_AD104_DECODE_OFF_TEST
   if(op==EfiPciIoAttributeOperationDisable) {
-    Check(value==0x300 && !out && DecodeOffAttempted && MmioCalls==44,"one disable only after complete capture");
+    Check(value==0x300 && !out && DecodeOffAttempted && MmioCalls==
+#ifdef GU_AD104_PROM_HEADER_TEST
+    174
+#else
+    44
+#endif
+    ,"one disable only after complete capture");
     OffCalls++;if(OffFault==1)return EFI_DEVICE_ERROR;
     Stage=7;Config[1]&=~3U;CurrentAttributes=0;
     if(OffFault==3)Config[1]|=4;
@@ -129,6 +142,10 @@ static EFI_STATUS EFIAPI Attributes(EFI_PCI_IO_PROTOCOL *io,EFI_PCI_IO_PROTOCOL_
 }
 static EFI_STATUS EFIAPI Write(EFI_FILE_PROTOCOL *f,UINTN *n,VOID *p) {
   (void)f;(void)n;(void)p;Writes++;
+#ifdef GU_AD104_PROM_HEADER_TEST
+  if(PromOutputSeen && PromFault==14)return EFI_DEVICE_ERROR;
+  if(PromOutputSeen && PromFault==15)Config[1]|=4;
+#endif
 #ifdef GU_AD104_DECODE_OFF_TEST
   if(Stage==6 && MmioCalls==44 && OffFault==6)return EFI_DEVICE_ERROR;
   if(Stage==7 && OffFault==7)return EFI_DEVICE_ERROR;
@@ -147,6 +164,14 @@ static EFI_STATUS EFIAPI Write(EFI_FILE_PROTOCOL *f,UINTN *n,VOID *p) {
 return EdFault==1 || (EdFault==15 && Stage)?EFI_DEVICE_ERROR:EFI_SUCCESS;
 }
 static EFI_STATUS EFIAPI FlushFile(EFI_FILE_PROTOCOL *f){(void)f;Flushes++;
+#ifdef GU_AD104_PROM_HEADER_TEST
+  if(PromIntentSeen && !PromHeaderAttempted) {
+    if(PromFault==10)return EFI_DEVICE_ERROR;
+    if(PromFault==11)Config[1]|=4;
+    if(PromFault==12)Io.Mem.Read=NULL;
+    if(PromFault==13)Missing=-1;
+  }
+#endif
 #ifdef GU_AD104_DECODE_OFF_TEST
   if(OffIntentSeen && !OffCalls) {
     if(OffFault==11)return EFI_DEVICE_ERROR;

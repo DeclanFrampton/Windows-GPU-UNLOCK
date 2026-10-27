@@ -30,6 +30,54 @@ static EFI_STATUS DecodeEmit(CAPTURE *c,const DECODE_READS *out,UINTN batch) {
   Text(c,"ad104-register batch=0x");Hex(c,batch,2);Text(c," attempted=0x");Hex(c,out->Attempted,2);End(c);
   return EdFlush(c);
 }
+#ifdef GU_AD104_PROM_HEADER_TEST
+static BOOLEAN PromHeaderAttempted;
+static UINT16 Prom16(const UINT8 *p){return (UINT16)(p[0]|((UINT16)p[1]<<8));}
+static EFI_STATUS PromHeader(CAPTURE *c,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *io,
+                             const PF_PIN *pins,const ED_STATE *parent) {
+  UINT32 words[128]={0},chip=0,signature=0;UINTN attempted=0;static ED_STATE state;
+  EFI_PCI_IO_PROTOCOL_IO_MEM read=io->Mem.Read;
+  if(PromHeaderAttempted || !read)return EFI_ALREADY_STARTED;
+  Text(c,"ad104-prom-header intent=512-byte-window base=0x00300000 full-prom=0 no-execution=1 no-retry=1\r\n");
+  if(EdFlush(c)!=EFI_SUCCESS)return c->Io;
+  EFI_STATUS s=ParentCollect(c,gpu,io,pins,parent->Drivers.Child,&state);
+  if(s!=EFI_SUCCESS || !DecodePost(parent,&state) || io->Mem.Read!=read ||
+     OwnerGone(c->Table,parent->Drivers.Child)!=EFI_SUCCESS)return EFI_NOT_READY;
+  PromHeaderAttempted=TRUE;
+  for(UINTN i=0;i<128;i++) {
+    if(io->Mem.Read!=read){s=EFI_NOT_READY;break;}
+    s=read(io,EfiPciIoWidthUint32,0,0x300000+i*4,1,&words[i]);attempted=i+1;
+    if(s!=EFI_SUCCESS || io->Mem.Read!=read){if(s==EFI_SUCCESS)s=EFI_NOT_READY;break;}
+    if(!i && ((words[0]&0xffffU)!=0xaa55U || (words[0]&0xffff0000U)==0xbadf0000U)){s=EFI_COMPROMISED_DATA;break;}
+  }
+  if(s==EFI_SUCCESS && attempted==128) {
+    s=read(io,EfiPciIoWidthUint32,0,0x300000,1,&signature);
+    if(s==EFI_SUCCESS && (io->Mem.Read!=read || signature!=words[0]))s=EFI_NOT_READY;
+    if(s==EFI_SUCCESS)s=read(io,EfiPciIoWidthUint32,0,0,1,&chip);
+    if(s==EFI_SUCCESS && (io->Mem.Read!=read || chip!=0x194000a1U))s=EFI_NOT_READY;
+  }
+  EFI_STATUS post=ParentCollect(c,gpu,io,pins,parent->Drivers.Child,&state);
+  EFI_STATUS gone=OwnerGone(c->Table,parent->Drivers.Child);
+  if(post!=EFI_SUCCESS || !DecodePost(parent,&state) || gone!=EFI_SUCCESS)s=EFI_NOT_READY;
+  const UINT8 *bytes=(const UINT8 *)words;UINT16 pcir=attempted==128?Prom16(bytes+0x18):0;
+  if(s==EFI_SUCCESS && (pcir>512-24 || pcir<0x1a || bytes[pcir]!='P' || bytes[pcir+1]!='C' ||
+     bytes[pcir+2]!='I' || bytes[pcir+3]!='R' || Prom16(bytes+pcir+4)!=0x10de ||
+     Prom16(bytes+pcir+6)!=0x2782 || Prom16(bytes+pcir+10)<24 || Prom16(bytes+pcir+10)>512-pcir ||
+     !Prom16(bytes+pcir+16) || (UINT32)Prom16(bytes+pcir+16)*512U>0x100000 ||
+     (UINT32)Prom16(bytes+pcir+16)*512U<(UINT32)pcir+Prom16(bytes+pcir+10)))s=EFI_COMPROMISED_DATA;
+  EdStatus(c,"prom-header-read",s);Text(c,"ad104-prom-header attempted=0x");Hex(c,attempted,4);
+  Text(c," pcir=0x");Hex(c,pcir,4);Text(c," full-prom=0\r\n");
+  /* Only complete, admitted bytes are emitted, never a failed or partial dump. */
+  if(s==EFI_SUCCESS)for(UINTN i=0;i<128;i++) {
+    Text(c,"ad104-prom-header offset=0x");Hex(c,i*4,4);Text(c," value=0x");Hex(c,words[i],8);End(c);
+  }
+  if(EdFlush(c)!=EFI_SUCCESS)return c->Io;
+  if(s!=EFI_SUCCESS)return s;
+  s=ParentCollect(c,gpu,io,pins,parent->Drivers.Child,&state);
+  return s==EFI_SUCCESS && DecodePost(parent,&state) && io->Mem.Read==read &&
+    OwnerGone(c->Table,parent->Drivers.Child)==EFI_SUCCESS?EFI_SUCCESS:EFI_NOT_READY;
+}
+#endif
 #ifdef GU_AD104_DECODE_OFF_TEST
 static BOOLEAN DecodeOffAttempted;
 static EFI_STATUS DecodeOff(CAPTURE *c,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *io,const PF_PIN *pins,
@@ -111,6 +159,9 @@ static EFI_STATUS DecodeStep(CAPTURE *c,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *io,
   Text(c,"ad104-register cold-entry-admission=unreviewed transaction-executed=0\r\n");
   if(EdFlush(c)!=EFI_SUCCESS)return c->Io;
   if(!good)return EFI_NOT_READY;
+#ifdef GU_AD104_PROM_HEADER_TEST
+  s=PromHeader(c,gpu,io,pins,&pre);if(s!=EFI_SUCCESS)return s;
+#endif
   s=EdKey(t,'V',NULL);
   x=ParentCollect(c,gpu,io,pins,pre.Drivers.Child,&final);gone=OwnerGone(t,pre.Drivers.Child);
   EdStatus(c,"decode-input-after",s);EdStatus(c,"decode-final-post",x);EdDescribe(c,&final,"decode-final-post");

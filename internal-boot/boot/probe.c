@@ -12,6 +12,9 @@
 #endif
 /* GPL-2.0-only. Read-only GA10x capture for the 3070 Ti headless port.
  * PCI config reads, BAR0 Mem.Read, PROM hash, loaded-image dumps only. */
+#if defined(GU_AD104_PROM_HEADER_TEST) && !defined(GU_AD104_DELAYED_READ_TEST)
+#error PROM header requires delayed read recovery
+#endif
 #if defined(GU_AD104_DELAYED_READ_TEST) && !defined(GU_AD104_DECODE_OFF_TEST)
 #error Delayed reads require decode off recovery
 #endif

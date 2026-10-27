@@ -43,6 +43,9 @@
 #error GU_USB_PROBE is the read-only diagnostic probe only
 #endif
 
+#if defined(GU_AD104_PROM_HEADER_TEST) && !defined(GU_AD104_DELAYED_READ_TEST)
+#error PROM header requires delayed read recovery
+#endif
 #if defined(GU_AD104_DELAYED_READ_TEST) && !defined(GU_AD104_DECODE_OFF_TEST)
 #error Delayed reads require decode off recovery
 #endif

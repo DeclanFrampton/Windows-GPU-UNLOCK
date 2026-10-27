@@ -4,10 +4,43 @@
 #include "test_owner_parent.c"
 #undef main
 static int BatchFileCalls;
+#ifdef GU_AD104_PROM_HEADER_TEST
+static int PromFileCalls;
+#endif
 static EFI_STATUS EFIAPI ReadBar(EFI_PCI_IO_PROTOCOL *io,EFI_PCI_IO_PROTOCOL_WIDTH width,
                                 UINT8 bar,UINT64 offset,UINTN count,VOID *out) {
   (void)io;Check(width==EfiPciIoWidthUint32 && !bar && count==1 && DecodeCalls==1 && Stage==6,
     "MMIO only after explicit decode Enable");
+#ifdef GU_AD104_PROM_HEADER_TEST
+  if(MmioCalls>=44) {
+    UINTN n=MmioCalls-44;Check(n<130,"bounded header and signature/chip bookends");
+    if(!n)PromFileCalls=Writes+Flushes;
+    Check(Writes+Flushes==PromFileCalls,"no file callbacks within PROM window reads");
+    Check(offset==(n<128?0x300000+n*4:n==128?0x300000:0),"only admitted PROM prefix and bookends");
+    MmioCalls++;UINT32 v=0;
+    if(n==0 || n==128)v=0xaa55;
+    UINTN pw=(PromFault==17 || PromFault==18)?122:92;
+    if(n==6)v=(UINT32)pw*4;
+    if(n==pw)v=0x52494350;
+    if(n==pw+1)v=0x278210de;
+    if(n==pw+2)v=PromFault==18?0x00190000:0x00180000;
+    if(n==pw+4)v=0x7e;
+    if(PromFault==16 && n==20)v=MAX_UINT32;
+    if(PromFault==16 && n==21)v=0xbadf5620;
+    if(n==129)v=0x194000a1;
+    if(PromFault>=1000 && n==(UINTN)(PromFault-1000))return EFI_DEVICE_ERROR;
+    if(PromFault==1 && !n)v=MAX_UINT32;
+    if(PromFault==2 && n==6)v=0xfff0;
+    if(PromFault==3 && n==93)v=0;
+    if(PromFault==4 && n==94)v=0;
+    if(PromFault==5 && n==96)v=0;
+    if(PromFault==6 && n==128)v^=1;
+    if(PromFault==7 && n==129)v=0;
+    if(PromFault==8 && n==64)Io.Mem.Read=NULL;
+    if(PromFault==9 && n==129)Config[1]|=4;
+    *(UINT32 *)out=v;return EFI_SUCCESS;
+  }
+#endif
   UINTN index=(UINTN)MmioCalls%22;
   if(!index)BatchFileCalls=Writes+Flushes;
   Check(Writes+Flushes==BatchFileCalls,"no log service callbacks within an MMIO batch");
@@ -36,10 +69,31 @@ static CAPTURE *DecodeSetup(int fault) {
   DecodeAttempted=FALSE;Io.Mem.Read=ReadBar;
 #ifdef GU_AD104_DECODE_OFF_TEST
   OffIntentSeen=0;
+#ifdef GU_AD104_PROM_HEADER_TEST
+  PromIntentSeen=PromOutputSeen=0;
+#endif
 #endif
   return c;
 }
-#ifdef GU_AD104_DECODE_OFF_TEST
+#ifdef GU_AD104_PROM_HEADER_TEST
+int main(void) {
+  CAPTURE *c=DecodeSetup(0);DecodeOffAttempted=PromHeaderAttempted=FALSE;OffFault=OffCalls=PromFault=0;
+  Check(EdRun(c,(VOID *)1,&Io,Pins)==EFI_SUCCESS && MmioCalls==174 && OffCalls==1,"bounded PROM header then verified recovery");
+  Check(PromHeader(c,(VOID *)1,&Io,Pins,NULL)==EFI_ALREADY_STARTED,"no header retry");
+  for(int f=1;f<=18;f++) {
+    c=DecodeSetup(0);DecodeOffAttempted=PromHeaderAttempted=FALSE;OffCalls=0;PromFault=f;
+    EFI_STATUS s=EdRun(c,(VOID *)1,&Io,Pins);
+    if(f==16 || f==17)Check(s==EFI_SUCCESS && OffCalls==1,"literal payload sentinels and max legal PCIR header are valid");
+    else Check(s!=EFI_SUCCESS && !OffCalls,"header/admission/output faults block handoff");
+    if(f>=10 && f<=13)Check(MmioCalls==44,"intent flush admission drift prevents every PROM read");
+  }
+  for(int n=0;n<130;n++) {
+    c=DecodeSetup(0);DecodeOffAttempted=PromHeaderAttempted=FALSE;OffCalls=0;PromFault=1000+n;
+    Check(EdRun(c,(VOID *)1,&Io,Pins)!=EFI_SUCCESS && !OffCalls && MmioCalls==45+n,"every PROM/bookend transport error stops remaining reads");
+  }
+  printf("PASS bounded PROM header: %d checks, RAM-only mocks\n",Checks);return 0;
+}
+#elif defined(GU_AD104_DECODE_OFF_TEST)
 int main(void) {
   CAPTURE *c=DecodeSetup(0);DecodeOffAttempted=FALSE;OffFault=OffCalls=0;
   EFI_STATUS run=EdRun(c,(VOID *)1,&Io,Pins);
