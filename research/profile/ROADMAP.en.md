@@ -55,3 +55,5 @@ also remain. These can still block execution. More repeated captures or matching
 geometry alone must not be counted as accepted admission or unlock.
 
 [Test22 result / 테스트22 결과](AD104-TWENTY-SECOND-RESULT.en.md): EFI RAM audit passed; checklist remains 15/26 (58%).
+
+[Test23 passed / 테스트23 통과](AD104-TWENTY-THIRD-RESULT.en.md). [Next: test24 / 다음: 테스트24](AD104-TWENTY-FOURTH-BOOT.en.md), sampled-version signature installation in RAM; no new GPU access or execution. Checklist remains15/26(58%).

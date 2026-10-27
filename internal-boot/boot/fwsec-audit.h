@@ -17,3 +17,13 @@ typedef struct {
   UINT8 PatchedHash[32];
 } GU_FWSEC_REHEARSAL;
 EFI_STATUS GuRehearseCapturedFwsec(const UINT8 *rom,UINTN bytes,UINT8 *scratch,UINTN scratchBytes,GU_FWSEC_REHEARSAL *out);
+
+typedef struct {
+  GU_FWSEC_REHEARSAL Base;
+  UINT32 Version,SignatureOffset,ChangedBytes;
+  BOOLEAN Supported,ImageMatch;
+  UINT8 SignatureHash[32],AssembledHash[32];
+} GU_FWSEC_SIGNATURE_AUDIT;
+UINT32 GuAuditFuseVersion(UINT32 raw);
+EFI_STATUS GuRehearseObservedSignature(const UINT8 *rom,UINTN bytes,UINT8 *scratch,UINTN scratchBytes,
+  UINT32 sampleOffset,UINT32 sampleRaw,GU_FWSEC_SIGNATURE_AUDIT *out);

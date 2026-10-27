@@ -29,6 +29,7 @@ int main(int argc,char **argv) {
   CHECK(GuRehearseCapturedFwsec(rom,0x100000,rom+1,0x10320,&rehearsal)==EFI_INVALID_PARAMETER);
   CHECK(GuRehearseCapturedFwsec(rom+1,0x100000,rom,0x10320,&rehearsal)==EFI_INVALID_PARAMETER);
   CHECK(GuRehearseCapturedFwsec(rom,0x100000,(UINT8 *)(MAX_UINTN-15),0x10320,&rehearsal)==EFI_INVALID_PARAMETER);
+  for(UINT32 raw=0;raw<65536;raw++){UINT32 expected=0,v=raw;while(v){expected++;v/=2;}CHECK(GuAuditFuseVersion(raw)==expected && GuAuditFuseVersion(raw|0xabcd0000)==expected);}
   UINT32 offset=0xdeadbeef;
   CHECK(gpu_unlock_fwsec_sig_offset(3,16,384,&offset)!=0 && offset==0xdeadbeef);
   CHECK(gpu_unlock_fwsec_sig_offset(0x10000,0,384,&offset)!=0);
@@ -60,6 +61,20 @@ int main(int argc,char **argv) {
     CHECK(GuRehearseCapturedFwsec(rom,0x100000,scratch,0x10320,&rehearsal)==EFI_COMPROMISED_DATA && rehearsal.ScratchIntact && rehearsal.SourceUnchanged && !rehearsal.PatchMatch);
     GuFwsecPatchTestFault=0;
 #endif
+    GU_FWSEC_SIGNATURE_AUDIT sig;
+    CHECK(GuRehearseObservedSignature(rom,0x100000,scratch,0x10320,0x8241e0,1,&sig)==EFI_SUCCESS);
+    CHECK(sig.Supported && sig.ImageMatch && sig.Version==1 && sig.SignatureOffset==384 && sig.Base.SourceUnchanged && sig.Base.ScratchIntact);
+    CHECK(sig.ChangedBytes==393);
+    CHECK(GuHashMatches(scratch+16,0x10300,"5004460ab7fea25b83cc95b6468456d830b98700926ed0c8696e49505eb19d07"));
+    CHECK(GuHashMatches(rom+0x45300,384,"7806dc110f1bbf58f3b41f4414c4e0426000b0d985a66013d035a6ea4d0e6dd5"));
+    printf("assembled hash=");for(int i=0;i<32;i++)printf("%02x",sig.AssembledHash[i]);printf(" changed=%u\n",sig.ChangedBytes);
+    CHECK(GuRehearseObservedSignature(rom,0x100000,scratch,0x10320,0x8241dc,1,&sig)==EFI_UNSUPPORTED);
+    CHECK(GuRehearseObservedSignature(rom,0x100000,scratch,0x10320,0x8241e0,3,&sig)==EFI_UNSUPPORTED);
+    const UINT32 invalidRaw[]={0,2,3,MAX_UINT32,0xbadf5620,0x10001};
+    for(UINTN i=0;i<sizeof(invalidRaw)/sizeof(invalidRaw[0]);i++){
+      CHECK(GuRehearseObservedSignature(rom,0x100000,scratch,0x10320,0x8241e0,invalidRaw[i],&sig)==EFI_UNSUPPORTED && !sig.Supported && sig.Base.ScratchIntact);
+      CHECK(GuHashMatches(scratch+16,0x10300,"0bca65c5d5f41cec855acd8009340a86a1e08d117cb9c1a716cb444f3d0a2d52"));
+    }
     rom[0x45480]^=1;CHECK(GuAuditCapturedFwsec(rom,0x100000,&out)==EFI_CRC_ERROR);
   }
   free(scratch);free(rom);printf("PASS FWSEC RAM audit: %d checks; execution authority absent\n",Checks);return 0;

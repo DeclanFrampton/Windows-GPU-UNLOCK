@@ -47,7 +47,8 @@ static EFI_STATUS PromSave(CAPTURE *c,UINT8 *page,UINT8 *verify,const UINT8 *exp
   if(s==EFI_SUCCESS){UINT8 a[32],b[32];GuSha256(page,0x100000,a);GuSha256(verify,0x100000,b);if(!PfEqual(a,expected,32) || !PfEqual(b,expected,32))s=EFI_CRC_ERROR;}
   EFI_STATUS closed=ops.Close(f);return s==EFI_SUCCESS?closed:s;
 }
-static EFI_STATUS PromFull(CAPTURE *c,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *io,const PF_PIN *pins,const ED_STATE *parent) {
+static EFI_STATUS PromFull(CAPTURE *c,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *io,const PF_PIN *pins,const ED_STATE *parent,const DECODE_READS *samples) {
+  (void)samples;
   EFI_PCI_IO_PROTOCOL_IO_MEM read=io->Mem.Read;UINT8 *buffer=NULL;EFI_FILE_PROTOCOL *existing=NULL;
   if(PromFullAttempted || PromPrefixGpu!=gpu || PromPrefixIo!=io || !c->DumpRoot || !c->DumpRoot->Open ||
      !c->Witness || c->DumpRoot==c->File || c->DumpRoot==c->Witness || c->Witness==c->File || !read || !c->Table->BootServices->AllocatePool || !c->Table->BootServices->FreePool)return EFI_NOT_READY;
@@ -89,6 +90,24 @@ static EFI_STATUS PromFull(CAPTURE *c,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *io,con
     Text(c,"ad104-fwsec-rehearsal patched-ram-sha256=");for(UINTN i=0;i<32;i++)Hex(c,rehearsal.PatchedHash[i],2);End(c);
     s=EdFlush(c);if(s==EFI_SUCCESS && (!rehearsal.ScratchIntact || !PfEqual(after,digest,32)))s=EFI_COMPROMISED_DATA;
     if(s==EFI_SUCCESS && !PromFullState(c,gpu,io,pins,parent,read))s=EFI_NOT_READY;
+  }
+#endif
+#ifdef GU_AD104_FWSEC_SIGNATURE_TEST
+  if(s==EFI_SUCCESS){
+    if(!samples || samples->Attempted!=22 || samples->Status[20]!=EFI_SUCCESS || DecodeOffsets[20]!=0x8241e0)s=EFI_NOT_READY;
+    if(s==EFI_SUCCESS){
+    GU_FWSEC_SIGNATURE_AUDIT sig;EFI_STATUS result=GuRehearseObservedSignature(buffer,0x100000,buffer+0x100000,0x100000,DecodeOffsets[20],samples->Values[20],&sig);
+    EdStatus(c,"fwsec-sampled-signature",result);
+    Text(c,"ad104-fwsec-signature sampled-before-prom=1 offset=0x008241e0 raw=0x");Hex(c,samples->Values[20],8);
+    Text(c," version=0x");Hex(c,sig.Version,2);Text(c," sig-offset=0x");Hex(c,sig.SignatureOffset,8);
+    Text(c," supported=");Hex(c,sig.Supported,1);Text(c," image-match=");Hex(c,sig.ImageMatch,1);
+    Text(c," changed-bytes=0x");Hex(c,sig.ChangedBytes,8);Text(c," authenticated=0 uploaded=0 executed=0 authority=0\r\n");
+    Text(c,"ad104-fwsec-signature selected-bytes-sha256=");for(UINTN i=0;i<32;i++)Hex(c,sig.SignatureHash[i],2);End(c);
+    Text(c,"ad104-fwsec-signature assembled-ram-sha256=");for(UINTN i=0;i<32;i++)Hex(c,sig.AssembledHash[i],2);End(c);
+    UINT8 after[32];GuSha256(buffer,0x100000,after);
+    s=EdFlush(c);if(s==EFI_SUCCESS && (!sig.Base.ScratchIntact || !PfEqual(after,digest,32)))s=EFI_COMPROMISED_DATA;
+    if(s==EFI_SUCCESS && !PromFullState(c,gpu,io,pins,parent,read))s=EFI_NOT_READY;
+    }
   }
 #endif
   if(s==EFI_SUCCESS)s=PromSave(c,buffer,buffer+0x100000,digest);

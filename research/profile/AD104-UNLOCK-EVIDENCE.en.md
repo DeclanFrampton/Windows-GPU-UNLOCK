@@ -110,3 +110,5 @@ restrictions can still block execution. Next work follows the recorded ROM and
 admission differences, not a copied reference profile or callback success alone.
 
 [Test22 result / 테스트22 결과](AD104-TWENTY-SECOND-RESULT.en.md): parser/hash audit passed, automatic Windows return confirmed; no execution authority.
+
+[Test23 passed / 테스트23 통과](AD104-TWENTY-THIRD-RESULT.en.md). [Next: test24 / 다음: 테스트24](AD104-TWENTY-FOURTH-BOOT.en.md), sampled-version signature installation in RAM; no new GPU access or execution. Checklist remains15/26(58%).

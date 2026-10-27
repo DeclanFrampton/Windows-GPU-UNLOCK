@@ -172,7 +172,7 @@ static EFI_STATUS DecodeStep(CAPTURE *c,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *io,
 #ifdef GU_AD104_PROM_HEADER_TEST
   s=PromHeader(c,gpu,io,pins,&pre);if(s!=EFI_SUCCESS)return s;
 #ifdef GU_AD104_PROM_FULL_TEST
-  s=PromFull(c,gpu,io,pins,&pre);if(s!=EFI_SUCCESS)return s;
+  s=PromFull(c,gpu,io,pins,&pre,&b);if(s!=EFI_SUCCESS)return s;
 #endif
 #endif
   s=EdKey(t,'V',NULL);

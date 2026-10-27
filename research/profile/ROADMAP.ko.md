@@ -52,3 +52,5 @@
 반복 캡처나 구조 일치만으로 허용 조건·unlock 완료로 세지 않습니다.
 
 [Test22 result / 테스트22 결과](AD104-TWENTY-SECOND-RESULT.ko.md): EFI RAM audit passed; checklist remains 15/26 (58%).
+
+[Test23 passed / 테스트23 통과](AD104-TWENTY-THIRD-RESULT.ko.md). [Next: test24 / 다음: 테스트24](AD104-TWENTY-FOURTH-BOOT.ko.md), sampled-version signature installation in RAM; no new GPU access or execution. Checklist remains15/26(58%).

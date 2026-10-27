@@ -82,3 +82,38 @@ EFI_STATUS GuRehearseCapturedFwsec(const UINT8 *rom,UINTN bytes,UINT8 *scratch,U
   out->SourceUnchanged=GuHashMatches(rom,bytes,"accf2a054de0ec394078f933f74356ed7c4057ee0bd1ce6734cacda54ca9e1e1");
   return out->ScratchIntact && out->SourceUnchanged && out->PatchMatch && out->SelectorMatrix?EFI_SUCCESS:EFI_COMPROMISED_DATA;
 }
+
+/* Same low16/highest-set-bit+1 conversion as vendor/prep_610.c. No MMIO. */
+UINT32 GuAuditFuseVersion(UINT32 raw){UINT32 value=raw&0xffffU,version=0;while(value){version++;value>>=1;}return version;}
+EFI_STATUS GuRehearseObservedSignature(const UINT8 *rom,UINTN bytes,UINT8 *scratch,UINTN scratchBytes,
+  UINT32 sampleOffset,UINT32 sampleRaw,GU_FWSEC_SIGNATURE_AUDIT *out) {
+  if(!out)return EFI_INVALID_PARAMETER;
+  UINT8 *clear=(UINT8 *)out;for(UINTN i=0;i<sizeof(*out);i++)clear[i]=0;
+  EFI_STATUS status=GuRehearseCapturedFwsec(rom,bytes,scratch,scratchBytes,&out->Base);
+  if(status!=EFI_SUCCESS)return status;
+  /* The descriptor and ROM were exact-pinned by the base rehearsal. Bind only
+   * the known, successful pre-PROM register sample; never claim a fresh fuse. */
+  if(sampleOffset!=0x8241c0+(Observed.ucode_id-1)*4 || sampleRaw!=1)return EFI_UNSUPPORTED;
+  out->Version=GuAuditFuseVersion(sampleRaw);
+  if(gpu_unlock_fwsec_sig_offset(Observed.sig_versions,out->Version,384,&out->SignatureOffset) ||
+     out->SignatureOffset>Observed.sig_bytes || 384>Observed.sig_bytes-out->SignatureOffset ||
+     !AuditRange(Observed.image_size,Observed.data_off+Observed.pkc_off,384))return EFI_COMPROMISED_DATA;
+  out->Supported=TRUE;
+  const UINT8 *signature=rom+Observed.sig_off+out->SignatureOffset;
+  UINT8 *image=scratch+16;
+  for(UINTN i=0;i<384;i++)image[Observed.data_off+Observed.pkc_off+i]=signature[i];
+  static const UINT32 command[11]={1,24,0,0,0,2,1,20,0x100000,0x100,2};
+  out->ImageMatch=TRUE;
+  for(UINTN i=0;i<Observed.image_size;i++){
+    UINT8 original=rom[Observed.image_off+i],expected=original;
+    if(i>=0x10240 && i<0x1026c){UINTN j=i-0x10240;expected=(UINT8)(command[j/4]>>(8*(j%4)));}
+    if(i>=0x1000c && i<0x10010)expected=i==0x1000c?0x15:0;
+    if(i>=0x10024 && i<0x101a4)expected=signature[i-0x10024];
+    if(image[i]!=expected)out->ImageMatch=FALSE;
+    if(image[i]!=original)out->ChangedBytes++;
+  }
+  for(UINTN i=0;i<16;i++)if(scratch[i]!=0xa5 || scratch[16+Observed.image_size+i]!=0x5a)out->Base.ScratchIntact=FALSE;
+  out->Base.SourceUnchanged=GuHashMatches(rom,bytes,"accf2a054de0ec394078f933f74356ed7c4057ee0bd1ce6734cacda54ca9e1e1");
+  GuSha256(signature,384,out->SignatureHash);GuSha256(image,Observed.image_size,out->AssembledHash);
+  return out->ImageMatch && out->Base.ScratchIntact && out->Base.SourceUnchanged?EFI_SUCCESS:EFI_COMPROMISED_DATA;
+}
