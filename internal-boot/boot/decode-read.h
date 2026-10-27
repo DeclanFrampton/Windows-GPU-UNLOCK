@@ -9,6 +9,9 @@ static BOOLEAN DecodePost(const ED_STATE *before,const ED_STATE *after) {
   return PfEqual(&expected,after,sizeof(expected));
 }
 typedef struct {UINT32 Values[22];EFI_STATUS Status[22];UINTN Attempted;} DECODE_READS;
+#ifdef GU_AD104_ENTRY_INPUTS_TEST
+#include "entry-inputs.h"
+#endif
 static EFI_STATUS DecodeBatch(EFI_PCI_IO_PROTOCOL *io,DECODE_READS *out,EFI_PCI_IO_PROTOCOL_IO_MEM read) {
   EFI_STATUS result=EFI_SUCCESS;
   if(!read || io->Mem.Read!=read)return EFI_UNSUPPORTED;
@@ -191,6 +194,19 @@ static EFI_STATUS DecodeStep(CAPTURE *c,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *io,
 #else
   if(s!=EFI_SUCCESS)return s;
 #endif
+#endif
+#ifdef GU_AD104_ENTRY_INPUTS_TEST
+  GU_ENTRY_INPUTS audit={0};
+  if(!PromFullState(c,gpu,io,pins,&pre,read) || !GuAuditEntryInputs(DecodeOffsets,b.Values,b.Status,b.Attempted,&audit))return EFI_NOT_READY;
+  Text(c,"ad104-entry-inputs fb=0x");Hex(c,audit.Fb,16);Text(c," raw-vga=0x");Hex(c,audit.RawVga,16);
+  Text(c," policy-vga=0x");Hex(c,audit.PolicyVga,16);Text(c," mmu-low=0x");Hex(c,audit.MmuLow,16);
+  Text(c," mmu-high=0x");Hex(c,audit.MmuHigh,16);Text(c," mmu-rounded-top=0x");Hex(c,audit.MmuTop,16);
+  Text(c," vga-valid=");Hex(c,audit.VgaValid,1);Text(c," mmu-range-valid=");Hex(c,audit.MmuRangeValid,1);Text(c," top-lock=");Hex(c,audit.TopLock,1);End(c);
+  Text(c,"ad104-entry-inputs ss1=0x");Hex(c,b.Values[13],8);Text(c," vga=0x");Hex(c,b.Values[15],8);
+  Text(c," reference-ss1-match=");Hex(c,audit.ReferenceSs1,1);Text(c," reference-vga-match=");Hex(c,audit.ReferenceVga,1);
+  Text(c," sample-time=pre-prom arithmetic-only=1 assets-qualified=0 full-layout-unavailable=1 profile-admitted=0 execution-authority=0\r\n");
+  if(EdFlush(c)!=EFI_SUCCESS)return c->Io;
+  if(!PromFullState(c,gpu,io,pins,&pre,read))return EFI_NOT_READY;
 #endif
   s=EdKey(t,'V',NULL);
   x=ParentCollect(c,gpu,io,pins,pre.Drivers.Child,&final);gone=OwnerGone(t,pre.Drivers.Child);

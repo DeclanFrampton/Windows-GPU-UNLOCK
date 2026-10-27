@@ -46,10 +46,20 @@ static EFI_STATUS EFIAPI ReadBar(EFI_PCI_IO_PROTOCOL *io,EFI_PCI_IO_PROTOCOL_WID
     UINTN n=MmioCalls-262320,j=n%FalconWords;Check(n<2*FalconWords && offset==FalconOffsets[j],"exact Falcon read order and bound");
     if(!j)FalconFileCalls=Writes+Flushes;
     Check(Writes+Flushes==FalconFileCalls,"no file callbacks inside Falcon batch");
-#ifdef GU_AD104_FALCON_BCR_TEST
-    Check(offset!=0x111388 && offset!=0x11010c,"BCR subset excludes both refused registers");
+#if defined(GU_AD104_FALCON_BCR_TEST) || defined(GU_AD104_ENTRY_INPUTS_TEST)
+    Check(offset!=0x111388 && offset!=0x11010c,"subset excludes refused CPUCTL and DMACTL");
+#ifdef GU_AD104_ENTRY_INPUTS_TEST
+    Check(offset!=0x111668,"entry subset excludes BCR");
+#endif
 #endif
     MmioCalls++;UINT32 value=j==0 || j==FalconWords-1?0x194000a1:0;
+#ifdef GU_AD104_ENTRY_INPUTS_TEST
+    if(offset==0x1103c0 && FalconFault==800)value=1;
+    if(offset==0x110100)value=0x10;
+    if(offset==0x82381c)value=0x24020000;
+    if(offset==0x823820)value=5;
+    if(offset==0x625f04)value=0x10e09;
+#endif
     if(FalconFault==(int)n+1 || FalconFault==100+(int)n)return EFI_DEVICE_ERROR;
     if(FalconFault==20 && j==2)value=MAX_UINT32;
     if(FalconFault==26 && j==2)value=0xbadf5620;
@@ -62,7 +72,7 @@ static EFI_STATUS EFIAPI ReadBar(EFI_PCI_IO_PROTOCOL *io,EFI_PCI_IO_PROTOCOL_WID
     if(FalconFault>=200 && FalconFault<=202 && n>=FalconWords && j==(UINTN)(4+FalconFault-200))value=1;
     if(FalconFault>=300 && FalconFault<=305 && j==(UINTN)(4+(FalconFault-300)/2))value=FalconFault%2?0xbadf5620:MAX_UINT32;
 #endif
-#ifdef GU_AD104_FALCON_BCR_TEST
+#if defined(GU_AD104_FALCON_BCR_TEST)
     if(offset==0x111668 && FalconFault>=700 && FalconFault<=703)value=FalconFault==700?MAX_UINT32:FalconFault==701?0xbadf5620:FalconFault==702?0xbadf5621:0xbadf0000;
     if(offset==0x111668 && n>=FalconWords && FalconFault>=704 && FalconFault<=706)value=FalconFault==704?0x10:FalconFault==705?0x11:1;
     if(offset==0x1103c0 && FalconFault==707)value=1;
@@ -138,6 +148,16 @@ static EFI_STATUS EFIAPI ReadBar(EFI_PCI_IO_PROTOCOL *io,EFI_PCI_IO_PROTOCOL_WID
   Check(Writes+Flushes==BatchFileCalls,"no log service callbacks within an MMIO batch");
   Check(offset==DecodeOffsets[index] && offset<=0x1000000-4,"only bounded allowlisted registers");
   MmioCalls++;*(UINT32 *)out=(index==0 || index==21)?0x194000a1U:0;
+#ifdef GU_AD104_ENTRY_INPUTS_TEST
+  if(index==3)*(UINT32 *)out=0x10;
+  if(index==12)*(UINT32 *)out=0x24020000;
+  if(index==13)*(UINT32 *)out=5;
+  if(index==14)*(UINT32 *)out=0x2ffa;
+  if(index==15)*(UINT32 *)out=0x10e09;
+  if(index==16)*(UINT32 *)out=0x45cb8f;
+  if(index==17)*(UINT32 *)out=0x100000;
+  if(index==18)*(UINT32 *)out=0x2ef9ff0;
+#endif
 #ifdef GU_AD104_FALCON_REFUSAL_TEST
   if(index==3)*(UINT32 *)out=0x10;
 #endif
@@ -213,6 +233,9 @@ static CAPTURE *FullSetup(int fault) {
   PromPrefixGpu=NULL;PromPrefixIo=NULL;FullAllocation=NULL;FilePosition=0;
 #ifdef GU_AD104_FALCON_OBSERVE_TEST
   FalconAttempted=FALSE;FalconFault=FalconIntentSeen=FalconSummarySeen=0;
+#ifdef GU_AD104_ENTRY_INPUTS_TEST
+  EntryAuditSeen=0;
+#endif
 #ifdef GU_AD104_FALCON_REFUSAL_TEST
   FalconRefusalObserved=FalconRecoveryAttempted=FalconRecoveryEligible=FALSE;
   RecoveryIntentSeen=RecoverySummarySeen=RecoveryWitnessRecords=0;
@@ -263,7 +286,14 @@ int main(void) {
     Check(EdRun(c,(VOID *)1,&Io,Pins)!=EFI_SUCCESS && !OffCalls && MmioCalls==262321+position,"capability tail read errors stop remaining reads");
   }
 #endif
-#ifdef GU_AD104_FALCON_BCR_TEST
+#ifdef GU_AD104_ENTRY_INPUTS_TEST
+  Check(FalconWords==12,"entry subset exactly twelve words");
+  for(int fault=800;fault<=804;fault++){
+    c=FullSetup(0);FalconFault=fault;
+    Check(EdRun(c,(VOID *)1,&Io,Pins)!=EFI_SUCCESS && !OffCalls,"engine and audit log/state/method faults block Windows");
+    Check(MmioCalls==(fault==800?262328:262344),"audit adds no MMIO");
+  }
+#elif defined(GU_AD104_FALCON_BCR_TEST)
   Check(FalconWords==13,"BCR subset exactly thirteen words");
   for(int fault=700;fault<=703;fault++){
     c=FullSetup(0);FalconFault=fault;

@@ -10,6 +10,9 @@
 static int Writes,Flushes,Calls,Stage,KeyPhase,Reads,EdFault,Collections;
 #ifdef GU_AD104_FALCON_OBSERVE_TEST
 static int FalconFault,FalconIntentSeen,FalconSummarySeen;
+#ifdef GU_AD104_ENTRY_INPUTS_TEST
+static int EntryAuditSeen;
+#endif
 #ifdef GU_AD104_FALCON_REFUSAL_TEST
 static int RecoveryIntentSeen,RecoverySummarySeen;
 static EFI_STATUS EFIAPI RefusalAltRead(EFI_PCI_IO_PROTOCOL *io,EFI_PCI_IO_PROTOCOL_WIDTH width,UINT8 bar,UINT64 offset,UINTN count,VOID *out){
@@ -70,6 +73,9 @@ VOID Text(CAPTURE *c,const char *s){
   if(strstr(s,"recovery-rechecks-complete=1"))RecoverySummarySeen=1;
 #endif
 #ifdef GU_AD104_FALCON_OBSERVE_TEST
+#ifdef GU_AD104_ENTRY_INPUTS_TEST
+  if(strstr(s,"ad104-entry-inputs fb="))EntryAuditSeen=1;
+#endif
   if(strstr(s,"ad104-falcon intent="))FalconIntentSeen=1;
   if(strstr(s,"ad104-falcon mailbox-dma-stable=") || strstr(s,"ad104-falcon mailbox-only-stable="))FalconSummarySeen=1;
 #endif
@@ -205,6 +211,9 @@ static EFI_STATUS EFIAPI Write(EFI_FILE_PROTOCOL *f,UINTN *n,VOID *p) {
 return EdFault==1 || (EdFault==15 && Stage)?EFI_DEVICE_ERROR:EFI_SUCCESS;
 }
 static EFI_STATUS EFIAPI FlushFile(EFI_FILE_PROTOCOL *f){(void)f;Flushes++;
+#ifdef GU_AD104_ENTRY_INPUTS_TEST
+  if(EntryAuditSeen){if(FalconFault==801)return EFI_DEVICE_ERROR;if(FalconFault==802)Config[1]|=4;if(FalconFault==803)Io.Mem.Read=NULL;if(FalconFault==804)Missing=-1;}
+#endif
 #ifdef GU_AD104_FALCON_REFUSAL_TEST
   if(RecoveryIntentSeen && MmioCalls==262329){if(FalconFault==624)return EFI_DEVICE_ERROR;if(FalconFault==650)Config[1]|=4;}
   if(RecoveryIntentSeen && MmioCalls==262336){if(FalconFault==651)Config[1]|=4;if(FalconFault==652)Missing=-1;}
