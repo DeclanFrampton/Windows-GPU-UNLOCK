@@ -13,7 +13,7 @@ static EFI_FILE_PROTOCOL Root,Marker;
 static UINTN Keys,Calls,Records;
 static BOOLEAN Removed,MarkerExists,BadHash,BadPost,FailRecord,FailStop,BadInventory,ExtraOwner;
 static BOOLEAN Cancel,Timeout,ShortWrite,FlushFail;
-static UINTN InterfaceFailure;
+static UINTN InterfaceFailure,GopConsoleQueries;
 static EFI_HANDLE H(UINTN n){return (EFI_HANDLE)n;}
 BOOLEAN GuHashMatches(const VOID *data,UINTN n,const char *hash){return data && n && hash && !BadHash;}
 static EFI_STATUS EFIAPI Free(VOID *p){return p?EFI_SUCCESS:EFI_INVALID_PARAMETER;}
@@ -35,7 +35,7 @@ static EFI_STATUS EFIAPI Locate(EFI_LOCATE_SEARCH_TYPE type,EFI_GUID *guid,VOID 
 static EFI_STATUS EFIAPI Handle(EFI_HANDLE h,EFI_GUID *guid,VOID **out){
   *out=NULL;
   if(guid==&Text && ((InterfaceFailure==1 && h==H(2)) || (InterfaceFailure==2 && h==H(3))))return EFI_NOT_FOUND;
-  if(guid==&Gop && h==H(3) && InterfaceFailure==3)return EFI_NOT_FOUND;
+  if(guid==&Gop && h==H(3))GopConsoleQueries++;
   if(guid==&Gop && h==H(3) && InterfaceFailure==4){*out=&Graphics[0];return EFI_SUCCESS;}
   if(guid==&Gop && (h==H(1)||h==H(2))){*out=&Graphics[(UINTN)h-1];return EFI_SUCCESS;}
   if(guid==&Path && h==H(1)){*out=&Output;return EFI_SUCCESS;}
@@ -45,8 +45,12 @@ static EFI_STATUS EFIAPI Handle(EFI_HANDLE h,EFI_GUID *guid,VOID **out){
   if(guid==&Pci && h==H(4)){*out=&PciIo;return EFI_SUCCESS;}return EFI_UNSUPPORTED;
 }
 static EFI_STATUS EFIAPI ProtocolList(EFI_HANDLE h,EFI_GUID ***out,UINTN *n){
-  static EFI_GUID *list[1];if(h!=H(3))return EFI_UNSUPPORTED;
-  list[0]=&Text;*out=list;*n=1;return EFI_SUCCESS;
+  static EFI_GUID *list[2];if(h!=H(3))return EFI_UNSUPPORTED;
+  if(InterfaceFailure==3)return EFI_DEVICE_ERROR;
+  list[0]=InterfaceFailure==4?&Gop:&Text;list[1]=&Text;
+  *out=list;*n=InterfaceFailure==5?2:1;
+  if(InterfaceFailure==6)list[0]=NULL;
+  return EFI_SUCCESS;
 }
 static EFI_STATUS EFIAPI Opens(EFI_HANDLE source,EFI_GUID *guid,EFI_OPEN_PROTOCOL_INFORMATION_ENTRY **out,UINTN *n){
   static EFI_OPEN_PROTOCOL_INFORMATION_ENTRY e[3];*out=e;*n=0;EFI_HANDLE agent=NULL,child=NULL;
@@ -75,7 +79,7 @@ static EFI_STATUS RecordMock(VOID *p,const char *name,EFI_STATUS s){
   (void)p;(void)name;(void)s;Records++;return FailRecord?EFI_DEVICE_ERROR:EFI_SUCCESS;
 }
 static VOID Init(VOID){
-  InterfaceFailure=0;Plan=(PLAN){0};Keys=Calls=Records=0;Removed=MarkerExists=BadHash=BadPost=FailRecord=FailStop=BadInventory=ExtraOwner=FALSE;
+  GopConsoleQueries=0;InterfaceFailure=0;Plan=(PLAN){0};Keys=Calls=Records=0;Removed=MarkerExists=BadHash=BadPost=FailRecord=FailStop=BadInventory=ExtraOwner=FALSE;
   Cancel=Timeout=ShortWrite=FlushFail=FALSE;
   Bs=(EFI_BOOT_SERVICES){0};Bs.FreePool=Free;Bs.Stall=Stall;Bs.LocateHandleBuffer=Locate;Bs.HandleProtocol=Handle;Bs.OpenProtocolInformation=Opens;Bs.ProtocolsPerHandle=ProtocolList;
   Input=(EFI_SIMPLE_TEXT_INPUT_PROTOCOL){0};Input.ReadKeyStroke=ReadKey;
@@ -112,6 +116,7 @@ int main(VOID){
   Init();FlushFail=TRUE;s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s==EFI_SUCCESS||Calls||started)return 16;
   Init();s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s!=EFI_SUCCESS)return 17;
   ExtraOwner=TRUE;if(GuEvgaTextStopVerify(&Table)==EFI_SUCCESS)return 18;
-  for(UINTN i=1;i<=4;i++){Init();InterfaceFailure=i;s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s==EFI_SUCCESS||Calls||started||MarkerExists)return 18+(int)i;}
+  for(UINTN i=1;i<=6;i++){Init();InterfaceFailure=i;s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s==EFI_SUCCESS||Calls||started||MarkerExists)return 18+(int)i;}
+  Init();s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s!=EFI_SUCCESS||GopConsoleQueries)return 25;
   return 0;
 }

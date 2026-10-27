@@ -78,8 +78,8 @@ static EFI_STATUS Inventory(EFI_BOOT_SERVICES *b,GU_EVGA_RECORD record) {
   io=Value(record,"evga-observed-matching-card-count",matches);if(io!=EFI_SUCCESS)return io;
   return s==EFI_SUCCESS && displays==1 && matches==1?EFI_SUCCESS:EFI_UNSUPPORTED;
 }
-/* Diagnose an unexpected successful GOP query without trusting its interface. */
-static EFI_STATUS ConsoleProtocols(EFI_SYSTEM_TABLE *t,VOID *queried,GU_EVGA_RECORD record) {
+/* Enumerate membership: this firmware returns a pointer for an unlisted GOP. */
+static EFI_STATUS ConsoleProtocols(EFI_SYSTEM_TABLE *t,GU_EVGA_RECORD record) {
   EFI_GUID **list=NULL;UINTN n=0,gops=0,texts=0;
   EFI_STATUS s=t->BootServices->ProtocolsPerHandle(t->ConsoleOutHandle,&list,&n);
   EFI_STATUS io=Checked(record,"evga-console-protocol-list",s);if(io!=s)return io;
@@ -98,8 +98,7 @@ static EFI_STATUS ConsoleProtocols(EFI_SYSTEM_TABLE *t,VOID *queried,GU_EVGA_REC
   if(s!=EFI_SUCCESS)return s;
   io=Value(record,"evga-console-listed-gops",gops);if(io!=EFI_SUCCESS)return io;
   io=Value(record,"evga-console-listed-texts",texts);if(io!=EFI_SUCCESS)return io;
-  io=Value(record,"evga-query-aliases-system-text",queried==(VOID *)t->ConOut);if(io!=EFI_SUCCESS)return io;
-  return EFI_UNSUPPORTED; /* Evidence only: never admit this discrepancy. */
+  return gops==0 && texts==1?EFI_SUCCESS:EFI_UNSUPPORTED;
 }
 static EFI_STATUS Graph(EFI_SYSTEM_TABLE *t,BOOLEAN after,GU_EVGA_RECORD record) {
   EFI_BOOT_SERVICES *b=t->BootServices;EFI_HANDLE *handles=NULL;UINTN count=0;
@@ -117,20 +116,14 @@ static EFI_STATUS Graph(EFI_SYSTEM_TABLE *t,BOOLEAN after,GU_EVGA_RECORD record)
   }
   if(b->FreePool(handles)!=EFI_SUCCESS)s=EFI_DEVICE_ERROR;
   if(s!=EFI_SUCCESS || !physical || !virtual || !t->ConsoleOutHandle || t->StandardErrorHandle!=t->ConsoleOutHandle)return Checked(record,"evga-gop-shape",EFI_UNSUPPORTED);
-  VOID *text=NULL,*gop=NULL;
+  s=Checked(record,"evga-console-membership",ConsoleProtocols(t,record));if(s!=EFI_SUCCESS)return s;
+  VOID *text=NULL;
   s=b->HandleProtocol(virtual,&Text,&text);
   EFI_STATUS io=Checked(record,"evga-virtual-text-interface",s);if(io!=s)return io;
   if(s!=EFI_SUCCESS || !text)return Checked(record,"evga-virtual-text-interface-valid",EFI_UNSUPPORTED);
   text=NULL;s=b->HandleProtocol(t->ConsoleOutHandle,&Text,&text);
   io=Checked(record,"evga-system-text-interface",s);if(io!=s)return io;
   if(s!=EFI_SUCCESS || !text)return Checked(record,"evga-system-text-interface-valid",EFI_UNSUPPORTED);
-  s=b->HandleProtocol(t->ConsoleOutHandle,&Gop,&gop);
-  io=Checked(record,"evga-system-gop-query",s);if(io!=s)return io;
-  io=Value(record,"evga-system-gop-pointer-present",gop?1:0);if(io!=EFI_SUCCESS)return io;
-  if(s!=EFI_UNSUPPORTED){
-    EFI_STATUS reason=ConsoleProtocols(t,gop,record);
-    return Checked(record,"evga-system-gop-absence",reason);
-  }
   if(Plan.Physical && (Plan.Physical!=physical || Plan.Virtual!=virtual || Plan.Console!=t->ConsoleOutHandle))return EFI_ACCESS_DENIED;
   Plan.Physical=physical;Plan.Virtual=virtual;Plan.Console=t->ConsoleOutHandle;
   s=Checked(record,"evga-gfx-edges",Edges(b,physical,&Gop,virtual,TRUE,&Plan.Gfx,FALSE));if(s!=EFI_SUCCESS)return s;
