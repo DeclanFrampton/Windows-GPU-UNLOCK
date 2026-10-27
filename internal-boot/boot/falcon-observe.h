@@ -1,6 +1,8 @@
 /* GPL-2.0-only. Fixed read-only GSP Falcon baseline; no control writes. */
 static BOOLEAN FalconAttempted;
-#ifdef GU_AD104_FALCON_MAILBOX_TEST
+#ifdef GU_AD104_FALCON_CAPS_TEST
+static const UINT32 FalconOffsets[]={0,0x110100,0x110040,0x110044,0x110008,0x1100f4,0x110108,0x82381c,0x823820,0x625f04,0};
+#elif defined(GU_AD104_FALCON_MAILBOX_TEST)
 static const UINT32 FalconOffsets[]={0,0x110100,0x110040,0x110044,0x82381c,0x823820,0x625f04,0};
 #else
 static const UINT32 FalconOffsets[]={0,0x110100,0x110040,0x110044,0x11010c,0x82381c,0x823820,0x625f04,0};
@@ -24,7 +26,9 @@ static EFI_STATUS FalconObserve(CAPTURE *c,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *i
   if(FalconAttempted || !read || !prior || prior->Attempted!=22)return EFI_NOT_READY;
   for(UINTN i=0;i<22;i++)if(prior->Status[i]!=EFI_SUCCESS)return EFI_NOT_READY;
   FalconAttempted=TRUE;
-#ifdef GU_AD104_FALCON_MAILBOX_TEST
+#ifdef GU_AD104_FALCON_CAPS_TEST
+  Text(c,"ad104-falcon intent=two-eleven-dword-batches new-addresses=110008,1100f4,110108 dmactl-excluded=1 no-writes=1 no-execution=1\r\n");
+#elif defined(GU_AD104_FALCON_MAILBOX_TEST)
   Text(c,"ad104-falcon intent=two-eight-dword-batches addresses=110040,110044 dmactl-excluded=1 no-writes=1 no-execution=1\r\n");
 #else
   Text(c,"ad104-falcon intent=two-nine-dword-batches new-addresses=110040,110044,11010c no-writes=1 no-execution=1\r\n");
@@ -47,6 +51,14 @@ static EFI_STATUS FalconObserve(CAPTURE *c,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *i
   Text(c,"ad104-falcon mailbox-dma-stable=");Hex(c,PfEqual(batches[0].Values+2,batches[1].Values+2,3*sizeof(UINT32)),1);
 #endif
   Text(c," readiness=unreviewed execution-authority=0\r\n");
+#ifdef GU_AD104_FALCON_CAPS_TEST
+  Text(c,"ad104-falcon capabilities irqstat=0x");Hex(c,batches[1].Values[4],8);
+  Text(c," hwcfg2=0x");Hex(c,batches[1].Values[5],8);Text(c," hwcfg=0x");Hex(c,batches[1].Values[6],8);
+  Text(c," riscv-field=");Hex(c,(batches[1].Values[5]>>10)&1,1);
+  Text(c," scrubbing-field=");Hex(c,(batches[1].Values[5]>>12)&1,1);
+  Text(c," imem-size-field=0x");Hex(c,batches[1].Values[6]&0x1ff,3);
+  Text(c," fields-only=1 execution-authority=0\r\n");
+#endif
   s=EdFlush(c);if(s!=EFI_SUCCESS)return s;
   return PromFullState(c,gpu,io,pins,parent,read)?EFI_SUCCESS:EFI_NOT_READY;
 }

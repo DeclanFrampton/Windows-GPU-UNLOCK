@@ -20,14 +20,18 @@ static EFI_STATUS EFIAPI ReadBar(EFI_PCI_IO_PROTOCOL *io,EFI_PCI_IO_PROTOCOL_WID
     if(!j)FalconFileCalls=Writes+Flushes;
     Check(Writes+Flushes==FalconFileCalls,"no file callbacks inside Falcon batch");
     MmioCalls++;UINT32 value=j==0 || j==FalconWords-1?0x194000a1:0;
-    if(FalconFault==(int)n+1)return EFI_DEVICE_ERROR;
+    if(FalconFault==(int)n+1 || FalconFault==100+(int)n)return EFI_DEVICE_ERROR;
     if(FalconFault==20 && j==2)value=MAX_UINT32;
     if(FalconFault==26 && j==2)value=0xbadf5620;
     if(FalconFault==21 && j==FalconWords-1)value=0;
     if(FalconFault==22 && offset==0x823820)value^=1;
     if(FalconFault==23 && j==4)Io.Mem.Read=NULL;
     if(FalconFault==24 && n==FalconWords-1)Config[1]|=4;
-    if(FalconFault==25 && n==11)value=42;
+    if(FalconFault==25 && n==FalconWords+3)value=42;
+#ifdef GU_AD104_FALCON_CAPS_TEST
+    if(FalconFault>=200 && FalconFault<=202 && n>=FalconWords && j==(UINTN)(4+FalconFault-200))value=1;
+    if(FalconFault>=300 && FalconFault<=305 && j==(UINTN)(4+(FalconFault-300)/2))value=FalconFault%2?0xbadf5620:MAX_UINT32;
+#endif
     *(UINT32 *)out=value;return EFI_SUCCESS;
   }
 #endif
@@ -194,6 +198,20 @@ int main(void) {
     if(fault>=34 && fault<=37)Check(MmioCalls==262320+FalconWords,"batch log drift prevents second batch");
     if(fault<=18)Check(MmioCalls==262320+fault,"Falcon failure stops remaining reads");
   }
+#ifdef GU_AD104_FALCON_CAPS_TEST
+  for(int fault=200;fault<=202;fault++){
+    c=FullSetup(0);FalconFault=fault;
+    Check(EdRun(c,(VOID *)1,&Io,Pins)==EFI_SUCCESS && OffCalls==1,"new capability field drift remains observational");
+  }
+  for(int fault=300;fault<=305;fault++){
+    c=FullSetup(0);FalconFault=fault;
+    Check(EdRun(c,(VOID *)1,&Io,Pins)!=EFI_SUCCESS && !OffCalls && MmioCalls==262325+(fault-300)/2,"every capability register sentinel blocks remaining reads");
+  }
+  for(int position=18;position<22;position++){
+    c=FullSetup(0);FalconFault=100+position;
+    Check(EdRun(c,(VOID *)1,&Io,Pins)!=EFI_SUCCESS && !OffCalls && MmioCalls==262321+position,"capability tail read errors stop remaining reads");
+  }
+#endif
   c=FullSetup(0);FalconAttempted=FALSE;FalconFault=25;
   Check(EdRun(c,(VOID *)1,&Io,Pins)==EFI_SUCCESS && OffCalls==1,"mailbox drift remains observational");
   FalconFault=0;
