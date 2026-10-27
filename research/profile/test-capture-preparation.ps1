@@ -77,6 +77,14 @@ try {
  if($LASTEXITCODE -ne 0){throw 'Audit recovery compile failed'}
  & ./build/capture-tests/refusal-recovery.exe
  if($LASTEXITCODE -ne 0){throw 'Audit recovery mocks failed'}
+ & $Clang @flags -Wno-unused-function -DGU_AD104_DECODE_OFF_TEST -DGU_AD104_DELAYED_READ_TEST -DGU_AD104_PROM_HEADER_TEST -DGU_AD104_PROM_FULL_TEST -DGU_AD104_FWSEC_AUDIT_TEST -DGU_AD104_FWSEC_REHEARSAL_TEST -DGU_AD104_FWSEC_SIGNATURE_TEST -DGU_AD104_FALCON_OBSERVE_TEST -DGU_AD104_FALCON_MAILBOX_TEST -DGU_AD104_FALCON_CAPS_TEST -DGU_AD104_FALCON_CORE_TEST -DGU_AD104_FALCON_BCR_TEST test_decode_read.c fwsec-audit.c ../unlock/sha256.c -o build/capture-tests/bcr-recovery.exe
+ if($LASTEXITCODE -ne 0){throw 'BCR subset compile failed'}
+ & ./build/capture-tests/bcr-recovery.exe
+ if($LASTEXITCODE -ne 0){throw 'BCR subset mocks failed'}
+ $out=& $Clang @flags -Wno-unused-function -DGU_AD104_DECODE_OFF_TEST -DGU_AD104_DELAYED_READ_TEST -DGU_AD104_PROM_HEADER_TEST -DGU_AD104_PROM_FULL_TEST -DGU_AD104_FWSEC_AUDIT_TEST -DGU_AD104_FWSEC_REHEARSAL_TEST -DGU_AD104_FWSEC_SIGNATURE_TEST -DGU_AD104_FALCON_OBSERVE_TEST -DGU_AD104_FALCON_MAILBOX_TEST -DGU_AD104_FALCON_CAPS_TEST -DGU_AD104_FALCON_CORE_TEST -DGU_AD104_FALCON_BCR_TEST -DGU_AD104_FALCON_REFUSAL_TEST -fsyntax-only test_decode_read.c 2>&1 | Out-String
+ if($LASTEXITCODE -eq 0 -or $out -notmatch 'BCR observation cannot use'){throw 'BCR mode accepted refusal recovery'}
+ $global:LASTEXITCODE=0
+ 'PASS BCR plus CPUCTL refusal recovery rejected'
  foreach($name in @('pcd_producer','text_display','text_lifecycle','gop_lifecycle','consumers_lifecycle','owner_child','owner_parent','decode_read')) {
   & $Clang @flags -Wno-unused-function "test_$name.c" ../unlock/sha256.c -o "build/capture-tests/$name.exe"
   if($LASTEXITCODE -ne 0){throw "$name mocks compile failed"}

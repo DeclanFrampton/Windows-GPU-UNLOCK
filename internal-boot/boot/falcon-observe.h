@@ -1,6 +1,11 @@
 /* GPL-2.0-only. Fixed read-only GSP Falcon baseline; no control writes. */
 static BOOLEAN FalconAttempted;
-#ifdef GU_AD104_FALCON_CORE_TEST
+#if defined(GU_AD104_FALCON_BCR_TEST) && defined(GU_AD104_FALCON_REFUSAL_TEST)
+#error BCR observation cannot use the CPUCTL refusal recovery exception
+#endif
+#ifdef GU_AD104_FALCON_BCR_TEST
+static const UINT32 FalconOffsets[]={0,0x110100,0x110040,0x110044,0x110008,0x1100f4,0x110108,0x1103c0,0x111668,0x82381c,0x823820,0x625f04,0};
+#elif defined(GU_AD104_FALCON_CORE_TEST)
 static const UINT32 FalconOffsets[]={0,0x110100,0x110040,0x110044,0x110008,0x1100f4,0x110108,0x1103c0,0x111388,0x111668,0x82381c,0x823820,0x625f04,0};
 #elif defined(GU_AD104_FALCON_CAPS_TEST)
 static const UINT32 FalconOffsets[]={0,0x110100,0x110040,0x110044,0x110008,0x1100f4,0x110108,0x82381c,0x823820,0x625f04,0};
@@ -18,6 +23,9 @@ static EFI_STATUS FalconBatch(EFI_PCI_IO_PROTOCOL *io,EFI_PCI_IO_PROTOCOL_IO_MEM
     out->Values[i]=value;out->Status[i]=s;out->Attempted=i+1;
     if(s!=EFI_SUCCESS || io->Mem.Read!=read || value==MAX_UINT32 || (value&0xffff0000U)==0xbadf0000U)return EFI_NOT_READY;
     if((i==0 || i==FalconWords-1) && value!=0x194000a1)return EFI_NOT_READY;
+#ifdef GU_AD104_FALCON_BCR_TEST
+    if(FalconOffsets[i]==0x1103c0 && value!=0)return EFI_NOT_READY;
+#endif
     if((FalconOffsets[i]==0x110100 && value!=prior->Values[3]) || (FalconOffsets[i]==0x82381c && value!=prior->Values[12]) ||
        (FalconOffsets[i]==0x823820 && value!=prior->Values[13]) || (FalconOffsets[i]==0x625f04 && value!=prior->Values[15]))return EFI_NOT_READY;
   }
@@ -31,7 +39,9 @@ static EFI_STATUS FalconObserve(CAPTURE *c,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *i
   if(FalconAttempted || !read || !prior || prior->Attempted!=22)return EFI_NOT_READY;
   for(UINTN i=0;i<22;i++)if(prior->Status[i]!=EFI_SUCCESS)return EFI_NOT_READY;
   FalconAttempted=TRUE;
-#ifdef GU_AD104_FALCON_CORE_TEST
+#ifdef GU_AD104_FALCON_BCR_TEST
+  Text(c,"ad104-falcon intent=two-thirteen-dword-batches bcr-only=1 riscv-cpuctl-excluded=1 dmactl-excluded=1 no-writes=1 no-execution=1\r\n");
+#elif defined(GU_AD104_FALCON_CORE_TEST)
   Text(c,"ad104-falcon intent=two-fourteen-dword-batches new-addresses=1103c0,111388,111668 dmactl-excluded=1 no-writes=1 no-execution=1\r\n");
 #elif defined(GU_AD104_FALCON_CAPS_TEST)
   Text(c,"ad104-falcon intent=two-eleven-dword-batches new-addresses=110008,1100f4,110108 dmactl-excluded=1 no-writes=1 no-execution=1\r\n");
@@ -72,7 +82,14 @@ static EFI_STATUS FalconObserve(CAPTURE *c,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *i
   Text(c," imem-size-field=0x");Hex(c,batches[1].Values[6]&0x1ff,3);
   Text(c," fields-only=1 execution-authority=0\r\n");
 #endif
-#ifdef GU_AD104_FALCON_CORE_TEST
+#ifdef GU_AD104_FALCON_BCR_TEST
+  Text(c,"ad104-falcon bcr-state engine=0x");Hex(c,batches[1].Values[7],8);
+  Text(c," bcr-ctrl=0x");Hex(c,batches[1].Values[8],8);
+  Text(c," bcr-valid-field=");Hex(c,batches[1].Values[8]&1,1);
+  Text(c," configured-core-field=");Hex(c,(batches[1].Values[8]>>4)&1,1);
+  Text(c," configured-core-qualified-by-valid=");Hex(c,batches[1].Values[8]&1,1);
+  Text(c," current-execution-unknown=1 fields-only=1 execution-authority=0\r\n");
+#elif defined(GU_AD104_FALCON_CORE_TEST)
   Text(c,"ad104-falcon core-state engine=0x");Hex(c,batches[1].Values[7],8);
   Text(c," riscv-cpuctl=0x");Hex(c,batches[1].Values[8],8);Text(c," bcr-ctrl=0x");Hex(c,batches[1].Values[9],8);
   Text(c," reset-field=");Hex(c,batches[1].Values[7]&1,1);

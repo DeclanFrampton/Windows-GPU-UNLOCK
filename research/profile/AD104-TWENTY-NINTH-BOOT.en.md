@@ -29,3 +29,5 @@ Native AMD64/noimports EFI69,632bytes SHA256:
 Checklist remains15/26(58%); unlock and actual firmware execution are unproven.
 
 After verified staging: savework/fullshutdown/wait10s/UEFIUSB/Shift+G once. Wait10s then Shift+V every2s up to3minutes. If noWindows10minutes,poweroff/removeUSB/normalBootManager. Runonce and preserve captures. A failed recovery guard still cannot resume with keys.
+
+[Physical result: automatic Windows return](AD104-TWENTY-NINTH-RESULT.en.md). This document preserves the pre-run test contract; see the result for current evidence.

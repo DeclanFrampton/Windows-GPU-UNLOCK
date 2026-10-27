@@ -46,6 +46,9 @@ static EFI_STATUS EFIAPI ReadBar(EFI_PCI_IO_PROTOCOL *io,EFI_PCI_IO_PROTOCOL_WID
     UINTN n=MmioCalls-262320,j=n%FalconWords;Check(n<2*FalconWords && offset==FalconOffsets[j],"exact Falcon read order and bound");
     if(!j)FalconFileCalls=Writes+Flushes;
     Check(Writes+Flushes==FalconFileCalls,"no file callbacks inside Falcon batch");
+#ifdef GU_AD104_FALCON_BCR_TEST
+    Check(offset!=0x111388 && offset!=0x11010c,"BCR subset excludes both refused registers");
+#endif
     MmioCalls++;UINT32 value=j==0 || j==FalconWords-1?0x194000a1:0;
     if(FalconFault==(int)n+1 || FalconFault==100+(int)n)return EFI_DEVICE_ERROR;
     if(FalconFault==20 && j==2)value=MAX_UINT32;
@@ -59,7 +62,11 @@ static EFI_STATUS EFIAPI ReadBar(EFI_PCI_IO_PROTOCOL *io,EFI_PCI_IO_PROTOCOL_WID
     if(FalconFault>=200 && FalconFault<=202 && n>=FalconWords && j==(UINTN)(4+FalconFault-200))value=1;
     if(FalconFault>=300 && FalconFault<=305 && j==(UINTN)(4+(FalconFault-300)/2))value=FalconFault%2?0xbadf5620:MAX_UINT32;
 #endif
-#ifdef GU_AD104_FALCON_CORE_TEST
+#ifdef GU_AD104_FALCON_BCR_TEST
+    if(offset==0x111668 && FalconFault>=700 && FalconFault<=703)value=FalconFault==700?MAX_UINT32:FalconFault==701?0xbadf5620:FalconFault==702?0xbadf5621:0xbadf0000;
+    if(offset==0x111668 && n>=FalconWords && FalconFault>=704 && FalconFault<=706)value=FalconFault==704?0x10:FalconFault==705?0x11:1;
+    if(offset==0x1103c0 && FalconFault==707)value=1;
+#elif defined(GU_AD104_FALCON_CORE_TEST)
     if(FalconFault>=400 && FalconFault<=402 && n>=FalconWords && j==(UINTN)(7+FalconFault-400))value=0x91;
     if(FalconFault>=500 && FalconFault<=505 && j==(UINTN)(7+(FalconFault-500)/2))value=FalconFault%2?0xbadf5620:MAX_UINT32;
 #endif
@@ -256,7 +263,19 @@ int main(void) {
     Check(EdRun(c,(VOID *)1,&Io,Pins)!=EFI_SUCCESS && !OffCalls && MmioCalls==262321+position,"capability tail read errors stop remaining reads");
   }
 #endif
-#ifdef GU_AD104_FALCON_CORE_TEST
+#ifdef GU_AD104_FALCON_BCR_TEST
+  Check(FalconWords==13,"BCR subset exactly thirteen words");
+  for(int fault=700;fault<=703;fault++){
+    c=FullSetup(0);FalconFault=fault;
+    Check(EdRun(c,(VOID *)1,&Io,Pins)!=EFI_SUCCESS && !OffCalls && MmioCalls==262329,"every BCR error pattern holds without recovery");
+  }
+  for(int fault=704;fault<=706;fault++){
+    c=FullSetup(0);FalconFault=fault;
+    Check(EdRun(c,(VOID *)1,&Io,Pins)==EFI_SUCCESS && OffCalls==1 && MmioCalls==262346,"BCR selection/valid changes remain observational");
+  }
+  c=FullSetup(0);FalconFault=707;
+  Check(EdRun(c,(VOID *)1,&Io,Pins)!=EFI_SUCCESS && !OffCalls && MmioCalls==262328,"ENGINE reset mismatch holds before BCR");
+#elif defined(GU_AD104_FALCON_CORE_TEST)
   for(int fault=400;fault<=402;fault++){
     c=FullSetup(0);FalconFault=fault;
     Check(EdRun(c,(VOID *)1,&Io,Pins)==EFI_SUCCESS && OffCalls==1,"new core-state field drift remains observational");
