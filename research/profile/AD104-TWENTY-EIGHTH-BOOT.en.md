@@ -2,7 +2,7 @@
 
 [English](AD104-TWENTY-EIGHTH-BOOT.en.md) | [한국어](AD104-TWENTY-EIGHTH-BOOT.ko.md)
 
-Built/host-tested for review; user explicitly accepted the disclosed new-MMIO risk and staging. Physical28 has NOT executed; test27 originals are preserved before verified staging. Test27's RISCV capability field does not identify the currently active/selected core; this candidate records relevant control/status fields without changing them.
+Built/host-tested for review; user explicitly accepted the disclosed new-MMIO risk and staging. Physical28 executed and stopped at a sentinel guard; test27 originals are preserved before verified staging. Test27's RISCV capability field does not identify the currently active/selected core; this candidate records relevant control/status fields without changing them.
 
 Two14-DWORD batches:
 `0, 0x110100, 0x110040, 0x110044, 0x110008, 0x1100f4, 0x110108, 0x1103c0, 0x111388, 0x111668, 0x82381c, 0x823820, 0x625f04, 0`.
@@ -19,3 +19,5 @@ Host tests cover25/26/27/28modes, all28transport positions, each new register's 
 Manifest core-state=true, additional28, reset/DMACTL/firmwareexecution/unlock=false. Checks are host evidence, not physical success. Checklist15/26(58%) unchanged.
 
 After verified staging: savework/fullshutdown/wait10s/UEFIUSB/Shift+G once;wait10s then Shift+V every2s up to3minutes. NoWindows10minutes:poweroff/removeUSB/normalBootManager. Run once,preserveallcaptures;recovery unproven.
+
+[Actual result / 실제 결과](AD104-TWENTY-EIGHTH-RESULT.en.md).
