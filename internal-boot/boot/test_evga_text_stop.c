@@ -17,6 +17,7 @@ static EFI_HANDLE H(UINTN n){return (EFI_HANDLE)n;}
 BOOLEAN GuHashMatches(const VOID *data,UINTN n,const char *hash){return data && n && hash && !BadHash;}
 static EFI_STATUS EFIAPI Free(VOID *p){return p?EFI_SUCCESS:EFI_INVALID_PARAMETER;}
 static EFI_STATUS EFIAPI Stall(UINTN n){(void)n;return EFI_SUCCESS;}
+static EFI_STATUS EFIAPI SayMock(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *p,CHAR16 *s){(void)p;(void)s;return EFI_SUCCESS;}
 static EFI_STATUS EFIAPI ReadKey(EFI_SIMPLE_TEXT_INPUT_PROTOCOL *p,EFI_INPUT_KEY *k){
   (void)p;if(Keys++==0 || Timeout)return EFI_NOT_READY;k->UnicodeChar=Cancel?0:'G';k->ScanCode=Cancel?SCAN_ESC:0;return EFI_SUCCESS;
 }
@@ -70,6 +71,7 @@ static VOID Init(VOID){
   Cancel=Timeout=ShortWrite=FlushFail=FALSE;
   Bs=(EFI_BOOT_SERVICES){0};Bs.FreePool=Free;Bs.Stall=Stall;Bs.LocateHandleBuffer=Locate;Bs.HandleProtocol=Handle;Bs.OpenProtocolInformation=Opens;
   Input=(EFI_SIMPLE_TEXT_INPUT_PROTOCOL){0};Input.ReadKeyStroke=ReadKey;
+  Output=(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL){0};Output.OutputString=SayMock;
   Table=(EFI_SYSTEM_TABLE){0};Table.BootServices=&Bs;Table.ConIn=&Input;Table.ConOut=&Output;Table.ConsoleOutHandle=H(3);Table.StandardErrorHandle=H(3);
   for(UINTN i=0;i<2;i++){Modes[i]=(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE){0};Graphics[i]=(EFI_GRAPHICS_OUTPUT_PROTOCOL){0};Graphics[i].Mode=&Modes[i];}
   Modes[0].FrameBufferBase=0x100000;Modes[0].FrameBufferSize=0x200000;
@@ -83,8 +85,9 @@ static VOID Init(VOID){
 }
 int main(VOID){
   BOOLEAN started=FALSE;EFI_STATUS s;
-  Init();s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s!=EFI_SUCCESS||!started||Calls!=1||!Removed||Records!=3)return 1;
-  if(GuEvgaTextStopVerify(&Table)!=EFI_SUCCESS)return 2;
+  Init();s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s!=EFI_SUCCESS||!started||Calls!=1||!Removed||Records<3)return 1;
+  UINTN savedRecords=Records;
+  if(GuEvgaTextStopVerify(&Table)!=EFI_SUCCESS || Records!=savedRecords)return 2;
   Init();BadHash=TRUE;s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s==EFI_SUCCESS||Calls||started)return 3;
   Init();MarkerExists=TRUE;s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s!=EFI_ALREADY_STARTED||Calls||started)return 4;
   Init();FailRecord=TRUE;s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s==EFI_SUCCESS||Calls||started)return 5;

@@ -34,7 +34,7 @@ With the existing capture USB still D:, run:
 
 This verifies the build/source hashes and this PC's ESP pin, requires a FAT32 USB data volume with the original capture pair, refuses an existing attempt marker, backs up the current EFI and copies the new one with hash verification. It preserves captures, never formats or changes boot settings, and does not reboot. If the USB letter changed, use its actual letter. Read any refusal rather than bypassing it.
 
-Save work, fully shut down, and select the UEFI USB. Wait for `Capture saved. NOW press fresh Shift+G once`; then press Shift+G once. No Shift+V is needed: passing checks automatically attempt Windows. After G, the screen may stop updating. If Windows has not started within three minutes, power off, remove the USB and select normal Windows Boot Manager. Do not repeat or delete the marker; preserve `RTX3090-UNLOCK/EVGA00.TXT` (or next free EVGAnn name) and EVGA-TEXT-STOP.ARMED. Report whether Windows arrived directly or required manual recovery, plus any display/input change.
+Save work, fully shut down, and select the UEFI USB. Wait for `Live guards passed. NOW press fresh Shift+G once`; then press Shift+G once. No Shift+V is needed: passing checks automatically attempt Windows. After G, the screen may stop updating. If Windows has not started within three minutes, power off, remove the USB and select normal Windows Boot Manager. Do not repeat or delete the marker; preserve `RTX3090-UNLOCK/EVGA00.TXT` (or next free EVGAnn name) and EVGA-TEXT-STOP.ARMED. Report whether Windows arrived directly or required manual recovery, plus any display/input change.
 
 ## Validation completed locally
 
@@ -45,3 +45,5 @@ Save work, fully shut down, and select the UEFI USB. Wait for `Capture saved. NO
 Passing this test would establish only this exact membership removal and observed handoff on this machine. It would not qualify later consumers or prove unlock.
 
 Corrected build and first-run evidence: [FIRST-EFI-RESULT](FIRST-EFI-RESULT.en.md). The earlier artifact details above describe the initial build.
+
+Latest pre-call refusal and phase-diagnostic build: [SECOND-EFI-RESULT](SECOND-EFI-RESULT.en.md).

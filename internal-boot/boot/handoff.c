@@ -421,7 +421,7 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE Image,EFI_SYSTEM_TABLE *St) {
   BOOLEAN evgaPrepared=s==EFI_SUCCESS;
   if(s==EFI_SUCCESS)s=Record(NULL,"evga-text-stop-capture-before",EFI_SUCCESS);
   if(s==EFI_SUCCESS)s=GuCaptureGraphOnVolume(Table,Log,Root);
-  if(s==EFI_SUCCESS)Say(L"Capture saved. NOW press fresh Shift+G once. Esc cancels.\r\nAfter G this screen may freeze; successful checks automatically start Windows.\r\n");
+  if(s==EFI_SUCCESS)Say(L"Capture saved. Checking live inventory, ownership and code pins...\r\nWait for Live guards passed before Shift+G.\r\n");
   if(s==EFI_SUCCESS)s=GuEvgaTextStop(Table,Root,Record,&ResearchOutputDisabled);
   if(s==EFI_SUCCESS)s=Record(NULL,"evga-text-stop-capture-after",EFI_SUCCESS);
   if(s==EFI_SUCCESS)s=GuCaptureGraphOnVolume(Table,Log,Root);

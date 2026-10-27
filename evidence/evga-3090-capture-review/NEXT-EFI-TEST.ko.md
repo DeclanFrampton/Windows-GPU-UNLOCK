@@ -34,7 +34,7 @@ IMG16/17, EDID, NVIDIA Stop, PCI 속성 쓰기, GPU MMIO, 리셋, DMA 시작, �
 
 빌드/소스 해시와 현재 PC의 ESP를 확인하고, 원본 캡처 2개가 있는 FAT32 USB 데이터 볼륨만 허용합니다. 기존 시도 마커가 있으면 거부합니다. 현재 EFI를 백업한 뒤 새 EFI를 복사하고 해시를 확인합니다. 캡처 보존, 포맷/부팅 설정 변경/재부팅 없음입니다. 문자가 바뀌었다면 실제 USB 문자를 사용하고 거부를 우회하지 마세요.
 
-작업 저장 후 완전히 종료하고 UEFI USB를 선택합니다. `Capture saved. NOW press fresh Shift+G once`가 표시되면 Shift+G를 1회 누릅니다. Shift+V는 필요 없고 통과하면 자동 Windows 시작을 시도합니다. G 이후 화면이 멈춰 보일 수 있습니다. 3분 내 Windows가 시작하지 않으면 전원을 끄고 USB를 제거한 뒤 정상 Windows Boot Manager를 선택합니다. 반복하거나 마커를 삭제하지 마세요. EVGA00.TXT(또는 다음 EVGAnn)와 마커를 보존하고 자동 복귀인지 수동 복구인지, 화면/입력 변화도 알려주세요.
+작업 저장 후 완전히 종료하고 UEFI USB를 선택합니다. `Live guards passed. NOW press fresh Shift+G once`가 표시되면 Shift+G를 1회 누릅니다. Shift+V는 필요 없고 통과하면 자동 Windows 시작을 시도합니다. G 이후 화면이 멈춰 보일 수 있습니다. 3분 내 Windows가 시작하지 않으면 전원을 끄고 USB를 제거한 뒤 정상 Windows Boot Manager를 선택합니다. 반복하거나 마커를 삭제하지 마세요. EVGA00.TXT(또는 다음 EVGAnn)와 마커를 보존하고 자동 복귀인지 수동 복구인지, 화면/입력 변화도 알려주세요.
 
 ## 로컬 검증
 
@@ -45,3 +45,5 @@ IMG16/17, EDID, NVIDIA Stop, PCI 속성 쓰기, GPU MMIO, 리셋, DMA 시작, �
 통과하더라도 해당 PC의 정확한 연결 제거와 관찰된 Windows 핸드오프만 입증합니다. 후속 소비자 검증 또는 언락 증거는 아닙니다.
 
 수정 빌드와 첫 실행 근거: [FIRST-EFI-RESULT](FIRST-EFI-RESULT.ko.md). 위의 이전 파일 정보는 초기 빌드를 설명합니다.
+
+최신 호출 전 거부와 단계 진단 빌드: [SECOND-EFI-RESULT](SECOND-EFI-RESULT.ko.md).
