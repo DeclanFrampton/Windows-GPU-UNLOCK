@@ -13,6 +13,10 @@ static EFI_STATUS EFIAPI ReadBar(EFI_PCI_IO_PROTOCOL *io,EFI_PCI_IO_PROTOCOL_WID
   Check(Writes+Flushes==BatchFileCalls,"no log service callbacks within an MMIO batch");
   Check(offset==DecodeOffsets[index] && offset<=0x1000000-4,"only bounded allowlisted registers");
   MmioCalls++;*(UINT32 *)out=(index==0 || index==21)?0x194000a1U:0;
+#ifdef GU_AD104_DELAYED_READ_TEST
+  if(OffFault==18 && MmioCalls==36)*(UINT32 *)out=6;
+  if(OffFault==19 && MmioCalls==38)*(UINT32 *)out=1;
+#endif
   if((DecodeFault>=100 && DecodeFault<122 && MmioCalls==DecodeFault-99) ||
      (DecodeFault>=200 && DecodeFault<222 && MmioCalls==DecodeFault-177))return EFI_DEVICE_ERROR;
   if(DecodeFault==9 && MmioCalls==7)return EFI_DEVICE_ERROR;
@@ -38,12 +42,19 @@ static CAPTURE *DecodeSetup(int fault) {
 #ifdef GU_AD104_DECODE_OFF_TEST
 int main(void) {
   CAPTURE *c=DecodeSetup(0);DecodeOffAttempted=FALSE;OffFault=OffCalls=0;
-  Check(EdRun(c,(VOID *)1,&Io,Pins)==EFI_SUCCESS && OffCalls==1 && MmioCalls==44,"capture then one decode off qualifies Windows");
+  EFI_STATUS run=EdRun(c,(VOID *)1,&Io,Pins);
+  Check(run==EFI_SUCCESS && OffCalls==1 && MmioCalls==44,"capture then one decode off qualifies Windows");
   Check(CurrentAttributes==0 && !(Config[1]&7),"exact post-parent decode/BME state restored");
   Check(DecodeOff(c,(VOID *)1,&Io,Pins,NULL,NULL)==EFI_ALREADY_STARTED && OffCalls==1,"no disable retry");
-  for(int f=1;f<=13;f++) {
+  for(int f=1;f<=
+#ifdef GU_AD104_DELAYED_READ_TEST
+  19
+#else
+  13
+#endif
+  ;f++) {
     c=DecodeSetup(0);DecodeOffAttempted=FALSE;OffFault=f;OffCalls=0;
-    Check(EdRun(c,(VOID *)1,&Io,Pins)!=EFI_SUCCESS && OffCalls==((f==6 || f==9 || f==10 || f>=11)?0:1) && MmioCalls==44,"disable error/partial/config/log drift blocks Windows without more MMIO");
+    Check(EdRun(c,(VOID *)1,&Io,Pins)!=EFI_SUCCESS && OffCalls==((f==6 || f==9 || f==10 || f>=11)?0:1) && MmioCalls==((f>=14 && f<=17)?22:44),"disable error/partial/config/log drift blocks Windows without more MMIO");
   }
   c=DecodeSetup(10);DecodeOffAttempted=FALSE;OffFault=OffCalls=0;
   Check(EdRun(c,(VOID *)1,&Io,Pins)!=EFI_SUCCESS && !OffCalls,"failed capture prevents disable");

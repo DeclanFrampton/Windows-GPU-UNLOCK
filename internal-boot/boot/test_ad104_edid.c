@@ -195,8 +195,16 @@ static EFI_STATUS EFIAPI Print(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *o,CHAR16 *s) {
   return EFI_SUCCESS;
 }
 static EFI_STATUS EFIAPI Stall(UINTN us){(void)us;
+#ifdef GU_AD104_DELAYED_READ_TEST
+  if(us==1000000) {
+    if(OffFault==14)return EFI_DEVICE_ERROR;
+    if(OffFault==15)Config[1]|=4;
+    if(OffFault==16)Missing=-1;
+    if(OffFault==17)Io.Mem.Read=NULL;
+  }
+#endif
 #ifdef GU_AD104_TEXT_TEST
-  if(Stage && !QuietReady){KeyPhase=2;QuietReady=1;}
+  if(us==100000 && Stage && !QuietReady){KeyPhase=2;QuietReady=1;}
 #endif
   return EFI_SUCCESS;}
 static EFI_STATUS EFIAPI Disconnect(EFI_HANDLE child,EFI_HANDLE agent,EFI_HANDLE deeper) {

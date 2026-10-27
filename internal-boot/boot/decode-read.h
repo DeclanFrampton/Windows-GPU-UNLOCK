@@ -90,6 +90,15 @@ static EFI_STATUS DecodeStep(CAPTURE *c,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *io,
   if(x!=EFI_SUCCESS || !DecodePost(&pre,&one) || OwnerGone(t,pre.Drivers.Child)!=EFI_SUCCESS)return EFI_NOT_READY;
   x=DecodeBatch(io,&a,read);
   EFI_STATUS emit=DecodeEmit(c,&a,1);
+#ifdef GU_AD104_DELAYED_READ_TEST
+  if(emit==EFI_SUCCESS && x==EFI_SUCCESS) {
+    Text(c,"ad104-register delay-request-us=1000000 wall-clock-unverified=1 no-additional-registers=1\r\n");
+    emit=EdFlush(c);
+    if(emit==EFI_SUCCESS)x=t->BootServices->Stall?t->BootServices->Stall(1000000):EFI_UNSUPPORTED;
+    EdStatus(c,"inter-batch-delay",x);
+    if(emit==EFI_SUCCESS)emit=EdFlush(c);
+  }
+#endif
   y=ParentCollect(c,gpu,io,pins,pre.Drivers.Child,&one);
   if(emit==EFI_SUCCESS && x==EFI_SUCCESS && y==EFI_SUCCESS && DecodePost(&pre,&one) && OwnerGone(t,pre.Drivers.Child)==EFI_SUCCESS)
     x=DecodeBatch(io,&b,read);
