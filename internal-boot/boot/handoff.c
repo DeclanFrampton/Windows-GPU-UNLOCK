@@ -7,6 +7,12 @@
 #include <Guid/FileInfo.h>
 #include "media.h"
 #include "flow.h"
+#ifdef GU_EVGA_STOP_ONLY
+#include "evga-text-stop.h"
+#if !defined(GU_DIAGNOSTIC_ONLY) || !defined(GU_USB_MEDIA) || defined(GU_DIAGNOSTIC_PROBE) || defined(GU_FULL_UNLOCK) || defined(GU_CONSOLE_PREPARE)
+#error EVGA text Stop must be a separate USB image with no GPU probe or unlock
+#endif
+#endif
 #ifdef GU_HEADLESS_RESEARCH
 #include "build/headless/child-contract.h"
 #elif defined(GU_AUTOMATIC_BOOT)
@@ -61,12 +67,12 @@ static EFI_STATUS CloseBootFiles(EFI_STATUS *LogStatus,EFI_STATUS *RootStatus) {
   if(RootStatus)*RootStatus=b;
   return a!=EFI_SUCCESS?a:b;
 }
-#ifdef GU_SINGLE_RTX_CONSOLE
+#if defined(GU_SINGLE_RTX_CONSOLE) || defined(GU_EVGA_STOP_ONLY)
 static BOOLEAN ResearchOutputDisabled;
 #endif
 
 static VOID Say(const CHAR16 *Text) {
-#ifdef GU_SINGLE_RTX_CONSOLE
+#if defined(GU_SINGLE_RTX_CONSOLE) || defined(GU_EVGA_STOP_ONLY)
   if(ResearchOutputDisabled)return;
 #endif
   if(Table && Table->ConOut)Table->ConOut->OutputString(Table->ConOut,(CHAR16 *)Text);
@@ -136,7 +142,9 @@ static EFI_STATUS OpenLog(VOID) {
 #endif
 #else
   for(UINTN i=0;i<100;i++) {
-#ifdef GU_FULL_UNLOCK
+#ifdef GU_EVGA_STOP_ONLY
+    CHAR16 name[]=L"\\RTX3090-UNLOCK\\EVGA00.TXT";
+#elif defined(GU_FULL_UNLOCK)
     CHAR16 name[]=L"\\RTX3090-UNLOCK\\FULL00.TXT";
 #elif defined(GU_CONSOLE_PREPARE)
 #ifdef GU_SINGLE_RTX_CONSOLE
@@ -351,6 +359,9 @@ static EFI_STATUS Windows(VOID *Context) {
   (void)Context;
   Say(L"Starting Windows Boot Manager directly. No reset.\r\n");
   EFI_STATUS s=CloseBootFiles(NULL,NULL);if(s!=EFI_SUCCESS)return s;
+#ifdef GU_EVGA_STOP_ONLY
+  s=GuEvgaTextStopVerify(Table);if(s!=EFI_SUCCESS)return s;
+#endif
   return Table->BootServices->StartImage(WindowsImage,NULL,NULL);
 }
 #endif
@@ -404,7 +415,18 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE Image,EFI_SYSTEM_TABLE *St) {
   EFI_STATUS s=St->BootServices->HandleProtocol(Image,&LoadedGuid,(VOID **)&loaded);
   if(s!=EFI_SUCCESS || !loaded)Stop();
   OwnDevice=loaded->DeviceHandle;
-#ifdef GU_FULL_UNLOCK
+#ifdef GU_EVGA_STOP_ONLY
+  Say(L"EVGA 3090 TEXT MEMBERSHIP TEST. NO UNLOCK.\r\nPress fresh Shift+G when ready (60 seconds), Esc cancels.\r\nScreen may stop updating. One IMG13 child Stop only; automatic Windows handoff on success.\r\nNo Windows after 3 minutes: power off, remove USB, use Windows Boot Manager. Recovery is unproven.\r\n");
+  s=Prepare(NULL);
+  if(s==EFI_SUCCESS)s=Record(NULL,"evga-text-stop-capture-before",EFI_SUCCESS);
+  if(s==EFI_SUCCESS)s=GuCaptureGraphOnVolume(Table,Log,Root);
+  if(s==EFI_SUCCESS)Say(L"Capture saved. NOW press fresh Shift+G once. Esc cancels.\r\nAfter G this screen may freeze; successful checks automatically start Windows.\r\n");
+  if(s==EFI_SUCCESS)s=GuEvgaTextStop(Table,Root,Record,&ResearchOutputDisabled);
+  if(s==EFI_SUCCESS)s=Record(NULL,"evga-text-stop-capture-after",EFI_SUCCESS);
+  if(s==EFI_SUCCESS)s=GuCaptureGraphOnVolume(Table,Log,Root);
+  if(s==EFI_SUCCESS)s=Record(NULL,"evga-text-stop-ready-windows",EFI_SUCCESS);
+  if(s==EFI_SUCCESS)s=Windows(NULL);
+#elif defined(GU_FULL_UNLOCK)
   GU_FULL_FLOW_OPS ops={NULL,Prepare,FullChoice,FullCapture,FullRelease,FullVerifyCold,Unlock,Windows,FullWindows,Record};
   s=GuFullFlow(&ops);
 #elif defined(GU_CONSOLE_PREPARE)
@@ -439,7 +461,7 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE Image,EFI_SYSTEM_TABLE *St) {
     return s==EFI_SUCCESS || s==EFI_ABORTED?EFI_NOT_STARTED:s;
   }
 #endif
-#if defined(GU_DIAGNOSTIC_ONLY) && defined(GU_USB_MEDIA)
+#if defined(GU_DIAGNOSTIC_ONLY) && defined(GU_USB_MEDIA) && !defined(GU_EVGA_STOP_ONLY)
   /* Observation stick: this image never releases a driver or writes GPU state,
    * so a failed capture or Windows load hands back to the firmware BootOrder. */
   if(Log){(void)Log->Close(Log);Log=NULL;}
