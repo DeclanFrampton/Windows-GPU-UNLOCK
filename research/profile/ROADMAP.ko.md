@@ -50,3 +50,5 @@
 다음: [22차 관찰 전용 EFI 파서 검사](AD104-TWENTY-SECOND-BOOT.ko.md).
 참조 PROM 해시와 descriptor 두 오프셋, SS1/VGA_BASE/BAR 차이가 남아 실행을 막을 수 있습니다.
 반복 캡처나 구조 일치만으로 허용 조건·unlock 완료로 세지 않습니다.
+
+[Test22 result / 테스트22 결과](AD104-TWENTY-SECOND-RESULT.ko.md): EFI RAM audit passed; checklist remains 15/26 (58%).

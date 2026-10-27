@@ -108,3 +108,5 @@ are not equally difficult: this is checklist completion, not an unlock probabili
 time estimate or number of remaining boots. Cold-entry or immutable hardware
 restrictions can still block execution. Next work follows the recorded ROM and
 admission differences, not a copied reference profile or callback success alone.
+
+[Test22 result / 테스트22 결과](AD104-TWENTY-SECOND-RESULT.en.md): parser/hash audit passed, automatic Windows return confirmed; no execution authority.

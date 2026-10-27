@@ -52,3 +52,5 @@ fresh-V poll lasts60seconds after capture checks; the operator period is not an
 internal3minute timer. No Windows after10minutes: power off, remove USB, select
 normal Windows Boot Manager. Callbacks may hang; recovery is unproven for this
 run. Run once and preserve all captures before retry.
+
+[Physical result / 실제 결과](AD104-TWENTY-SECOND-RESULT.en.md).

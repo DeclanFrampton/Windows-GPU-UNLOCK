@@ -53,3 +53,5 @@ Next: [test22 observation-only EFI parser audit](AD104-TWENTY-SECOND-BOOT.en.md)
 Reference PROM hash and two descriptor offsets differ; SS1/VGA_BASE/BAR differences
 also remain. These can still block execution. More repeated captures or matching
 geometry alone must not be counted as accepted admission or unlock.
+
+[Test22 result / 테스트22 결과](AD104-TWENTY-SECOND-RESULT.en.md): EFI RAM audit passed; checklist remains 15/26 (58%).

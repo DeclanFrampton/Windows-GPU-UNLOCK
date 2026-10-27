@@ -43,3 +43,5 @@ Shift+V를2초마다 최대3분 누릅니다. 내부 새 V 대기는 검사 후6
 내부 타이머가 아닙니다.10분 안에 Windows가 없으면 전원을 끄고 USB를 제거한 뒤 정상
 Windows Boot Manager를 고릅니다. 콜백이 멈출 수 있고 새 실행의 복구는 미입증입니다.
 한 번만 실행하고 재시도 전에 모든 캡처를 보관하십시오.
+
+[Physical result / 실제 결과](AD104-TWENTY-SECOND-RESULT.ko.md).
