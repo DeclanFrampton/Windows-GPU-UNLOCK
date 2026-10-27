@@ -1,16 +1,21 @@
 /* GPL-2.0-only. Fixed read-only GSP Falcon baseline; no control writes. */
 static BOOLEAN FalconAttempted;
+#ifdef GU_AD104_FALCON_MAILBOX_TEST
+static const UINT32 FalconOffsets[]={0,0x110100,0x110040,0x110044,0x82381c,0x823820,0x625f04,0};
+#else
 static const UINT32 FalconOffsets[]={0,0x110100,0x110040,0x110044,0x11010c,0x82381c,0x823820,0x625f04,0};
-typedef struct {UINT32 Values[9];EFI_STATUS Status[9];UINTN Attempted;} FALCON_OBSERVATION;
+#endif
+enum {FalconWords=sizeof(FalconOffsets)/sizeof(FalconOffsets[0])};
+typedef struct {UINT32 Values[FalconWords];EFI_STATUS Status[FalconWords];UINTN Attempted;} FALCON_OBSERVATION;
 static EFI_STATUS FalconBatch(EFI_PCI_IO_PROTOCOL *io,EFI_PCI_IO_PROTOCOL_IO_MEM read,FALCON_OBSERVATION *out,const DECODE_READS *prior){
-  for(UINTN i=0;i<9;i++){
+  for(UINTN i=0;i<FalconWords;i++){
     if(io->Mem.Read!=read)return EFI_NOT_READY;
     UINT32 value=MAX_UINT32;EFI_STATUS s=read(io,EfiPciIoWidthUint32,0,FalconOffsets[i],1,&value);
     out->Values[i]=value;out->Status[i]=s;out->Attempted=i+1;
     if(s!=EFI_SUCCESS || io->Mem.Read!=read || value==MAX_UINT32 || (value&0xffff0000U)==0xbadf0000U)return EFI_NOT_READY;
-    if((i==0 || i==8) && value!=0x194000a1)return EFI_NOT_READY;
-    if((i==1 && value!=prior->Values[3]) || (i==5 && value!=prior->Values[12]) ||
-       (i==6 && value!=prior->Values[13]) || (i==7 && value!=prior->Values[15]))return EFI_NOT_READY;
+    if((i==0 || i==FalconWords-1) && value!=0x194000a1)return EFI_NOT_READY;
+    if((FalconOffsets[i]==0x110100 && value!=prior->Values[3]) || (FalconOffsets[i]==0x82381c && value!=prior->Values[12]) ||
+       (FalconOffsets[i]==0x823820 && value!=prior->Values[13]) || (FalconOffsets[i]==0x625f04 && value!=prior->Values[15]))return EFI_NOT_READY;
   }
   return EFI_SUCCESS;
 }
@@ -19,7 +24,11 @@ static EFI_STATUS FalconObserve(CAPTURE *c,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *i
   if(FalconAttempted || !read || !prior || prior->Attempted!=22)return EFI_NOT_READY;
   for(UINTN i=0;i<22;i++)if(prior->Status[i]!=EFI_SUCCESS)return EFI_NOT_READY;
   FalconAttempted=TRUE;
+#ifdef GU_AD104_FALCON_MAILBOX_TEST
+  Text(c,"ad104-falcon intent=two-eight-dword-batches addresses=110040,110044 dmactl-excluded=1 no-writes=1 no-execution=1\r\n");
+#else
   Text(c,"ad104-falcon intent=two-nine-dword-batches new-addresses=110040,110044,11010c no-writes=1 no-execution=1\r\n");
+#endif
   EFI_STATUS s=EdFlush(c);if(s!=EFI_SUCCESS)return s;
   for(UINTN batch=0;batch<2;batch++){
     if(!PromFullState(c,gpu,io,pins,parent,read))return EFI_NOT_READY;
@@ -32,7 +41,11 @@ static EFI_STATUS FalconObserve(CAPTURE *c,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *i
     if(log!=EFI_SUCCESS)return log;
     if(!PromFullState(c,gpu,io,pins,parent,read) || s!=EFI_SUCCESS)return EFI_NOT_READY;
   }
+#ifdef GU_AD104_FALCON_MAILBOX_TEST
+  Text(c,"ad104-falcon mailbox-only-stable=");Hex(c,PfEqual(batches[0].Values+2,batches[1].Values+2,2*sizeof(UINT32)),1);
+#else
   Text(c,"ad104-falcon mailbox-dma-stable=");Hex(c,PfEqual(batches[0].Values+2,batches[1].Values+2,3*sizeof(UINT32)),1);
+#endif
   Text(c," readiness=unreviewed execution-authority=0\r\n");
   s=EdFlush(c);if(s!=EFI_SUCCESS)return s;
   return PromFullState(c,gpu,io,pins,parent,read)?EFI_SUCCESS:EFI_NOT_READY;

@@ -59,7 +59,7 @@ static int QuietReady,EarlyDrained;
 VOID Text(CAPTURE *c,const char *s){
 #ifdef GU_AD104_FALCON_OBSERVE_TEST
   if(strstr(s,"ad104-falcon intent="))FalconIntentSeen=1;
-  if(strstr(s,"ad104-falcon mailbox-dma-stable="))FalconSummarySeen=1;
+  if(strstr(s,"ad104-falcon mailbox-dma-stable=") || strstr(s,"ad104-falcon mailbox-only-stable="))FalconSummarySeen=1;
 #endif
 #ifdef GU_AD104_FWSEC_AUDIT_TEST
   if(strstr(s,"ad104-fwsec-audit prom-match="))AuditSeen=1;
@@ -129,7 +129,7 @@ static EFI_STATUS EFIAPI Attributes(EFI_PCI_IO_PROTOCOL *io,EFI_PCI_IO_PROTOCOL_
   if(op==EfiPciIoAttributeOperationDisable) {
     Check(value==0x300 && !out && DecodeOffAttempted && MmioCalls==
 #ifdef GU_AD104_FALCON_OBSERVE_TEST
-    262338
+    262320+2*FalconWords
 #elif defined(GU_AD104_PROM_FULL_TEST)
     262320
 #elif defined(GU_AD104_PROM_HEADER_TEST)
@@ -196,7 +196,7 @@ static EFI_STATUS EFIAPI FlushFile(EFI_FILE_PROTOCOL *f){(void)f;Flushes++;
     if(FalconFault==32)Io.Mem.Read=NULL;
     if(FalconFault==33)Missing=-1;
   }
-  if(FalconIntentSeen && MmioCalls==262329){
+  if(FalconIntentSeen && MmioCalls==262320+FalconWords){
     if(FalconFault==34)return EFI_DEVICE_ERROR;
     if(FalconFault==35)Config[1]|=4;
     if(FalconFault==36)Missing=-1;

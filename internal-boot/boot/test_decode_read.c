@@ -16,16 +16,17 @@ static EFI_STATUS EFIAPI ReadBar(EFI_PCI_IO_PROTOCOL *io,EFI_PCI_IO_PROTOCOL_WID
     "MMIO only after explicit decode Enable");
 #ifdef GU_AD104_FALCON_OBSERVE_TEST
   if(MmioCalls>=262320){
-    UINTN n=MmioCalls-262320,j=n%9;Check(n<18 && offset==FalconOffsets[j],"exact Falcon read order and bound");
+    UINTN n=MmioCalls-262320,j=n%FalconWords;Check(n<2*FalconWords && offset==FalconOffsets[j],"exact Falcon read order and bound");
     if(!j)FalconFileCalls=Writes+Flushes;
     Check(Writes+Flushes==FalconFileCalls,"no file callbacks inside Falcon batch");
-    MmioCalls++;UINT32 value=j==0 || j==8?0x194000a1:0;
+    MmioCalls++;UINT32 value=j==0 || j==FalconWords-1?0x194000a1:0;
     if(FalconFault==(int)n+1)return EFI_DEVICE_ERROR;
     if(FalconFault==20 && j==2)value=MAX_UINT32;
-    if(FalconFault==21 && j==8)value=0;
+    if(FalconFault==26 && j==2)value=0xbadf5620;
+    if(FalconFault==21 && j==FalconWords-1)value=0;
     if(FalconFault==22 && j==6)value^=1;
     if(FalconFault==23 && j==4)Io.Mem.Read=NULL;
-    if(FalconFault==24 && n==8)Config[1]|=4;
+    if(FalconFault==24 && n==FalconWords-1)Config[1]|=4;
     if(FalconFault==25 && n==11)value=42;
     *(UINT32 *)out=value;return EFI_SUCCESS;
   }
@@ -169,7 +170,7 @@ static CAPTURE *FullSetup(int fault) {
 int main(void) {
   CAPTURE *c=FullSetup(0);Check(EdRun(c,(VOID *)1,&Io,Pins)==EFI_SUCCESS && OffCalls==1 && MmioCalls==
 #ifdef GU_AD104_FALCON_OBSERVE_TEST
-  262338
+  262320+2*FalconWords
 #else
   262320
 #endif
@@ -186,11 +187,11 @@ int main(void) {
   }
 #ifdef GU_AD104_FALCON_OBSERVE_TEST
   for(int fault=1;fault<=39;fault++){
-    if(fault==19 || (fault>=25 && fault<=29))continue;
+    if((fault<=18 && fault>2*FalconWords) || fault==19 || (fault==25 || (fault>=27 && fault<=29)))continue;
     c=FullSetup(0);FalconAttempted=FALSE;FalconFault=fault;
     Check(EdRun(c,(VOID *)1,&Io,Pins)!=EFI_SUCCESS && !OffCalls && !FullAllocation,"Falcon transport/sentinel/state/method faults block handoff");
     if(fault>=30 && fault<=33)Check(MmioCalls==262320,"intent log drift prevents all Falcon reads");
-    if(fault>=34 && fault<=37)Check(MmioCalls==262329,"batch log drift prevents second batch");
+    if(fault>=34 && fault<=37)Check(MmioCalls==262320+FalconWords,"batch log drift prevents second batch");
     if(fault<=18)Check(MmioCalls==262320+fault,"Falcon failure stops remaining reads");
   }
   c=FullSetup(0);FalconAttempted=FALSE;FalconFault=25;
