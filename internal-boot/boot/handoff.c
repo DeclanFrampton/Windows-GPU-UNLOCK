@@ -56,6 +56,7 @@ static EFI_HANDLE UnlockImage;
 static EFI_FILE_PROTOCOL *Root,*Log;
 /* Close each owned handle once, even when the first close fails. A failed
  * close forbids StartImage; retain the first failure for the caller. */
+#ifndef GU_AD104_DECODE_READ_TEST
 static EFI_STATUS CloseBootFiles(EFI_STATUS *LogStatus,EFI_STATUS *RootStatus) {
   EFI_FILE_PROTOCOL *log=Log,*root=Root;Log=NULL;Root=NULL;
   EFI_STATUS a=log && log->Close?log->Close(log):EFI_INVALID_PARAMETER;
@@ -64,6 +65,7 @@ static EFI_STATUS CloseBootFiles(EFI_STATUS *LogStatus,EFI_STATUS *RootStatus) {
   if(RootStatus)*RootStatus=b;
   return a!=EFI_SUCCESS?a:b;
 }
+#endif
 #ifdef GU_SINGLE_RTX_CONSOLE
 static BOOLEAN ResearchOutputDisabled;
 #endif
@@ -398,7 +400,24 @@ static EFI_STATUS FullWindows(VOID *Context) {
 static EFI_STATUS Windows(VOID *Context) {
   (void)Context;
   Say(L"Starting Windows Boot Manager directly. No reset.\r\n");
+#ifdef GU_AD104_DECODE_READ_TEST
+  /* Keep the log open while closing the root so the next physical run can
+   * distinguish root Close from the final log-Close/StartImage boundary. */
+  EFI_STATUS s=Record(NULL,"windows-root-close-next",EFI_SUCCESS);
+  if(s!=EFI_SUCCESS)return s;
+  EFI_FILE_PROTOCOL *root=Root;Root=NULL;
+  s=root && root->Close?root->Close(root):EFI_INVALID_PARAMETER;
+  EFI_STATUS recorded=Record(NULL,"windows-root-close-returned",s);
+  if(s!=EFI_SUCCESS)return s;
+  if(recorded!=EFI_SUCCESS)return recorded;
+  s=Record(NULL,"windows-log-close-next-then-StartImage",EFI_SUCCESS);
+  if(s!=EFI_SUCCESS)return s;
+  EFI_FILE_PROTOCOL *log=Log;Log=NULL;
+  s=log && log->Close?log->Close(log):EFI_INVALID_PARAMETER;
+  if(s!=EFI_SUCCESS)return s;
+#else
   EFI_STATUS s=CloseBootFiles(NULL,NULL);if(s!=EFI_SUCCESS)return s;
+#endif
   return Table->BootServices->StartImage(WindowsImage,NULL,NULL);
 }
 #endif
@@ -474,7 +493,7 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE Image,EFI_SYSTEM_TABLE *St) {
   s=GuConsoleFlow(&ops);
 #elif defined(GU_DIAGNOSTIC_ONLY)
 #if defined(GU_AD104_EDID_TEST) || defined(GU_AD104_TEXT_TEST)
-  Say(L"Attended AD104 consumer lifecycle test. No unlock or PCI owner release. Collecting baseline...\r\n");
+  Say(L"Attended AD104 test. No unlock.\r\nCollecting baseline; please wait.\r\n");
 #else
   Say(L"GPU console diagnostic only. No unlock or driver detach. Collecting graph...\r\n");
 #endif

@@ -55,6 +55,10 @@ try {
  if($LASTEXITCODE -ne 0){throw 'EDID handoff mocks compile failed'}
  & ./build/capture-tests/edid-handoff.exe
  if($LASTEXITCODE -ne 0){throw 'EDID handoff mocks failed'}
+ & $Clang @flags -DGU_DIAGNOSTIC_ONLY -DGU_USB_PROBE -DGU_AD104_TEXT_TEST -DGU_AD104_DECODE_READ_TEST test_edid_handoff.c ../unlock/sha256.c -o build/capture-tests/decode-handoff.exe
+ if($LASTEXITCODE -ne 0){throw 'Decode handoff compile failed'}
+ & ./build/capture-tests/decode-handoff.exe
+ if($LASTEXITCODE -ne 0){throw 'Decode handoff checks failed'}
  & $Clang @flags -DGU_DIAGNOSTIC_ONLY -DGU_USB_PROBE -DGU_AD104_TEXT_TEST test_edid_handoff.c ../unlock/sha256.c -o build/capture-tests/text-handoff.exe
  if($LASTEXITCODE -ne 0){throw 'Text handoff mocks compile failed'}
  & ./build/capture-tests/text-handoff.exe
