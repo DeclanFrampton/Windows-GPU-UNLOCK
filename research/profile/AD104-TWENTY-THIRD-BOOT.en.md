@@ -24,3 +24,5 @@ Native EFI: 64,000 bytes, AMD64, no imports. SHA-256:
 Actual-PROM host rehearsal: 57 checks passed, 9 bytes changed; patched RAM hash
 `0bca65c5d5f41cec855acd8009340a86a1e08d117cb9c1a716cb444f3d0a2d52`.
 The native build excludes test-fault hooks and device transaction helpers.
+
+[Physical result / 실제 결과](AD104-TWENTY-THIRD-RESULT.en.md).

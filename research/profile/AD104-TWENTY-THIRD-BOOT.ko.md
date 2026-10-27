@@ -24,3 +24,5 @@ Native EFI: 64,000 bytes, AMD64, no imports. SHA-256:
 실제 PROM 호스트 리허설: 57개 검사 통과, 변경 9바이트. 패치 RAM 해시
 `0bca65c5d5f41cec855acd8009340a86a1e08d117cb9c1a716cb444f3d0a2d52`.
 네이티브 빌드에는 테스트 오류 주입 및 장치 트랜잭션 함수가 없습니다.
+
+[Physical result / 실제 결과](AD104-TWENTY-THIRD-RESULT.ko.md).
