@@ -2,7 +2,7 @@
 
 [English](NEXT-EFI-TEST.en.md) | [한국어](NEXT-EFI-TEST.ko.md)
 
-상태: 구현/컴파일 완료, 하드웨어 미검증, USB 미배치입니다. 첫 EVGA3090 수명주기 테스트이며 언락이 아닙니다. USB 배치나 부팅 전에 운영자의 명시적 위험 수락이 필요합니다.
+상태: 구현/컴파일 완료, 하드웨어 미검증, USB 미배치입니다. 첫 EVGA3090 수명주기 테스트이며 언락이 아닙니다. 아래 위험을 읽고 배치/실행 여부를 선택하세요. 별도 확인 답변은 필요하지 않습니다.
 
 ## 범위와 위험
 
@@ -22,9 +22,17 @@ IMG16/17, EDID, NVIDIA Stop, PCI 속성 쓰기, GPU MMIO, 리셋, DMA 시작, �
 .\research\profile\build-evga-text-stop.ps1 -WindowsEspGuid '<your Windows ESP GUID>' -Clang 'C:\Program Files\LLVM\bin\clang.exe' -LldLink 'C:\Program Files\LLVM\bin\lld-link.exe'
 ```
 
-로컬 빌드 폴더에만 기록하며 USB 복사, 부팅 설정 변경, EFI 실행은 하지 않습니다. 구성은 internal-boot/boot/build/evga-text-stop/에 격리됩니다. 결과와 위험 수락 여부를 알려주세요. 수락 및 배치 안내 전에는 복사/부팅하지 마세요.
+로컬 빌드 폴더에만 기록하며 USB 복사, 부팅 설정 변경, EFI 실행은 하지 않습니다. 구성은 internal-boot/boot/build/evga-text-stop/에 격리됩니다. 빌드가 성공하고 위험을 이해한 상태로 실행하기로 선택하면 아래 배치 명령을 사용하세요. 오류 발생 시 중단하고 마커 삭제나 강제 프로필 적용은 하지 마세요.
 
-## 수락 및 배치 이후 예정된 실행
+## 원하는 시점에 배치 및 실행
+
+기존 캡처 USB가 여전히 D:라면 실행하세요.
+
+```powershell
+.\research\profile\stage-evga-text-stop.ps1 -Drive D
+```
+
+빌드/소스 해시와 현재 PC의 ESP를 확인하고, 원본 캡처 2개가 있는 FAT32 USB 데이터 볼륨만 허용합니다. 기존 시도 마커가 있으면 거부합니다. 현재 EFI를 백업한 뒤 새 EFI를 복사하고 해시를 확인합니다. 캡처 보존, 포맷/부팅 설정 변경/재부팅 없음입니다. 문자가 바뀌었다면 실제 USB 문자를 사용하고 거부를 우회하지 마세요.
 
 작업 저장 후 완전히 종료하고 UEFI USB를 선택합니다. `Capture saved. NOW press fresh Shift+G once`가 표시되면 Shift+G를 1회 누릅니다. Shift+V는 필요 없고 통과하면 자동 Windows 시작을 시도합니다. G 이후 화면이 멈춰 보일 수 있습니다. 3분 내 Windows가 시작하지 않으면 전원을 끄고 USB를 제거한 뒤 정상 Windows Boot Manager를 선택합니다. 반복하거나 마커를 삭제하지 마세요. EVGA00.TXT(또는 다음 EVGAnn)와 마커를 보존하고 자동 복귀인지 수동 복구인지, 화면/입력 변화도 알려주세요.
 

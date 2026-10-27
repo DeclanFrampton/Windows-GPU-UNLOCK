@@ -2,7 +2,7 @@
 
 [English](NEXT-EFI-TEST.en.md) | [한국어](NEXT-EFI-TEST.ko.md)
 
-Status: implemented and compiled, hardware untested, not staged. This is the first EVGA3090 lifecycle test, not an unlock attempt. Operator acceptance is required before staging or booting it.
+Status: implemented and compiled, hardware untested, not staged. This is the first EVGA3090 lifecycle test, not an unlock attempt. Read the risk below and choose whether to stage/run it; no separate confirmation reply is required.
 
 ## Concrete scope and risk
 
@@ -22,9 +22,17 @@ On the updated PR96 branch, run from the repository root. Use the Windows ESP GU
 .\research\profile\build-evga-text-stop.ps1 -WindowsEspGuid '<your Windows ESP GUID>' -Clang 'C:\Program Files\LLVM\bin\clang.exe' -LldLink 'C:\Program Files\LLVM\bin\lld-link.exe'
 ```
 
-This writes only the local build folder. It does not copy to USB, change boot configuration or execute EFI. The generated configuration is isolated under `internal-boot/boot/build/evga-text-stop/`; other local platform configuration is untouched. Send the output and confirm whether you accept the risk above. Do not copy or boot the artifact until acceptance and staging instructions are given.
+This writes only the local build folder. It does not copy to USB, change boot configuration or execute EFI. The generated configuration is isolated under `internal-boot/boot/build/evga-text-stop/`; other local platform configuration is untouched. If the build succeeds and you choose to run the test with the stated risk, stage it with the command below. Stop on errors; do not reset local work, delete markers or force a profile.
 
-## Intended attended run after acceptance and staging
+## Stage and run when you choose
+
+With the existing capture USB still D:, run:
+
+```powershell
+.\research\profile\stage-evga-text-stop.ps1 -Drive D
+```
+
+This verifies the build/source hashes and this PC's ESP pin, requires a FAT32 USB data volume with the original capture pair, refuses an existing attempt marker, backs up the current EFI and copies the new one with hash verification. It preserves captures, never formats or changes boot settings, and does not reboot. If the USB letter changed, use its actual letter. Read any refusal rather than bypassing it.
 
 Save work, fully shut down, and select the UEFI USB. Wait for `Capture saved. NOW press fresh Shift+G once`; then press Shift+G once. No Shift+V is needed: passing checks automatically attempt Windows. After G, the screen may stop updating. If Windows has not started within three minutes, power off, remove the USB and select normal Windows Boot Manager. Do not repeat or delete the marker; preserve `RTX3090-UNLOCK/EVGA00.TXT` (or next free EVGAnn name) and EVGA-TEXT-STOP.ARMED. Report whether Windows arrived directly or required manual recovery, plus any display/input change.
 
