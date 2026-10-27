@@ -24,7 +24,7 @@ static EFI_STATUS EFIAPI ReadBar(EFI_PCI_IO_PROTOCOL *io,EFI_PCI_IO_PROTOCOL_WID
     if(FalconFault==20 && j==2)value=MAX_UINT32;
     if(FalconFault==26 && j==2)value=0xbadf5620;
     if(FalconFault==21 && j==FalconWords-1)value=0;
-    if(FalconFault==22 && j==6)value^=1;
+    if(FalconFault==22 && offset==0x823820)value^=1;
     if(FalconFault==23 && j==4)Io.Mem.Read=NULL;
     if(FalconFault==24 && n==FalconWords-1)Config[1]|=4;
     if(FalconFault==25 && n==11)value=42;
