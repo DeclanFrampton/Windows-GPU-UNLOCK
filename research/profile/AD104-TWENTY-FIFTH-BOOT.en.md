@@ -2,7 +2,7 @@
 
 [English](AD104-TWENTY-FIFTH-BOOT.en.md) | [한국어](AD104-TWENTY-FIFTH-BOOT.ko.md)
 
-Candidate built for review; NOT approved, NOT staged, NOT physically executed. USB remains executed test24 with originals intact. The next boundary is18additional live BAR0 DWORD reads, including three previously untested addresses. This is a physical engine-baseline experiment, not another RAM-only integration test.
+User explicitly accepted the disclosed new-MMIO risk and staging of this exact candidate. Built/host-tested and prepared for USB staging; physical test25 has NOT executed. Test24 originals are preserved before staging. The next boundary is18additional live BAR0 DWORD reads, including three previously untested addresses. This is a physical engine-baseline experiment, not another RAM-only integration test.
 
 Repeat test24, then after PROM capture/save/free and before Shift+V make two RAM-only batches of nine reads:
 `0, 0x110100, 0x110040, 0x110044, 0x11010c, 0x82381c, 0x823820, 0x625f04, 0`.
@@ -12,10 +12,10 @@ Known chip bookends must match194000a1. CPUCTL/SS0/SS1/VGA must match the prior 
 
 Pin Mem.Read and full PCI/ownership/input state before/between/after batches and after logging. No logging, file callbacks or allocation inside a read batch. One attempt; any read error, all-ones/BADF observation, chip/known-state mismatch, method drift, log/state failure blocks handoff without retry. Sentinel rejection means inaccessible-or-unaccepted observation, not proof those literal mailbox contents are impossible. Log partial attempted results. The existing guarded decode-off/Windows path is reached only on success; failure can leave decoding enabled and hold indefinitely.
 
-Success adds18Mem.Read calls: total262338, including262274PROM accesses. No new GPU writes, reset, mailbox clear, interrupt acknowledgment, DMA launch, BME/VGA enable, firmware upload/execution, reconnect, unlock or automatic rollback. New reads can still hang or have side effects. Display/input/Windows may fail; manual power-off/USB removal may be needed, and recovery is unproven. Approval is required before staging.
+Success adds18Mem.Read calls: total262338, including262274PROM accesses. No new GPU writes, reset, mailbox clear, interrupt acknowledgment, DMA launch, BME/VGA enable, firmware upload/execution, reconnect, unlock or automatic rollback. New reads can still hang or have side effects. Display/input/Windows may fail; manual power-off/USB removal may be needed, and recovery is unproven. The user explicitly approved this exact staging boundary.
 
 Native AMD64 EFI66,560bytes/noimports, SHA256:
 `abf77fd008606705ab8e73e0bdc0bfe33b67cbacf35598b14615d4d6d2b11425`.
 Host tests cover all18transport-failure positions, sentinel/chip/selector/method/state faults, intent/inter-batch/summary logging faults and informational mailbox drift. They simulate RAM callbacks and are not hardware proof.
 
-If approved and staged: save work/fullshutdown/wait10s/UEFIUSB/Shift+G once; wait10s then Shift+V every2s up to3minutes. NoWindows after10minutes: poweroff/removeUSB/normalBootManager. Run once; preserve allcaptures before restage.
+Attended instructions after verified staging: save work/fullshutdown/wait10s/UEFIUSB/Shift+G once; wait10s then Shift+V every2s up to3minutes. NoWindows after10minutes: poweroff/removeUSB/normalBootManager. Run once; preserve allcaptures before restage.
