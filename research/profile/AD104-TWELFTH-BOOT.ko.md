@@ -2,7 +2,7 @@
 
 [English](AD104-TWELFTH-BOOT.en.md) | 한국어
 
-상태: 빌드와 호스트 시험 완료, USB 준비 및 실제 시험 전입니다. 입증된 텍스트/
+상태: 2026-10-27 실제 시험 성공; [결과](AD104-TWELFTH-RESULT.ko.md)를 참조하세요. 입증된 텍스트/
 GOP 소비자/EDID 순서 뒤에 네 번째 단계를 추가합니다. 정확히 IMG29 바인딩의
 `Stop(binding, gpu, 1, &child)`만 직접 호출합니다. DisconnectController 또는
 자식 없는 부모 Stop은 호출하지 않습니다. PCI 속성 쓰기, GPU MMIO, 리셋,

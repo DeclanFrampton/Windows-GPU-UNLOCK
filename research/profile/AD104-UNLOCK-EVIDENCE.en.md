@@ -4,9 +4,12 @@ English | [í•œêµ­ì–´](AD104-UNLOCK-EVIDENCE.ko.md)
 
 ## Latest physical result
 
-[Eleventh run](AD104-ELEVENTH-RESULT.en.md): combined text/GOP/EDID removal passed,
-8→6→5→4 edges, fresh keyboard and user-confirmed Windows return. PCI owner remains
-active, command `0007`/BME enabled. Earlier sections below describe dated observations.
+[Twelfth run](AD104-TWELFTH-RESULT.en.md): text/GOP-consumer/EDID removal followed
+by direct owner-child Stop passed. Fresh enumeration found the old GOP child
+absent; input and user-confirmed Windows return succeeded. Three relationships
+remain: PCI ownership and both pointer relationships. All ten PCI snapshots are
+identical, command `0007`/BME enabled. Parent release and unlock remain unproven.
+Earlier sections below describe dated observations.
 
 ## Actual graph replaces the simplified fixture
 

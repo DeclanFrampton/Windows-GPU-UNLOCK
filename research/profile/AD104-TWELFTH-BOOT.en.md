@@ -2,7 +2,7 @@
 
 English | [한국어](AD104-TWELFTH-BOOT.ko.md)
 
-Status: built and host-tested, not staged or hardware-tested. This adds a fourth
+Status: physically tested successfully on 2026-10-27; see [result](AD104-TWELFTH-RESULT.en.md). This adds a fourth
 stage after the proven text/GOP-consumer/EDID sequence. It directly calls only
 `IMG29 binding->Stop(binding, gpu, 1, &child)`, not DisconnectController, not
 zero-child parent Stop. It never requests PCI attribute writes, GPU MMIO, reset,
