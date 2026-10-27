@@ -12,6 +12,9 @@
 #endif
 /* GPL-2.0-only. Read-only GA10x capture for the 3070 Ti headless port.
  * PCI config reads, BAR0 Mem.Read, PROM hash, loaded-image dumps only. */
+#if defined(GU_AD104_FWSEC_AUDIT_TEST) && !defined(GU_AD104_PROM_FULL_TEST)
+#error FWSEC RAM audit requires full PROM capture
+#endif
 #if defined(GU_AD104_PROM_FULL_TEST) && !defined(GU_AD104_PROM_HEADER_TEST)
 #error Full PROM requires header and recovery tests
 #endif

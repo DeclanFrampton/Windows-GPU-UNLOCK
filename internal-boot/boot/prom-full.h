@@ -1,6 +1,20 @@
 /* GPL-2.0-only. Fixed 1 MiB PROM transport capture; no firmware execution. */
 #include "../unlock/sha256.h"
 static BOOLEAN PromFullAttempted;
+#ifdef GU_AD104_FWSEC_AUDIT_TEST
+#include "fwsec-audit.h"
+static VOID PromAuditLog(CAPTURE *c,const UINT8 *buffer) {
+  GU_FWSEC_AUDIT audit;EFI_STATUS status=GuAuditCapturedFwsec(buffer,0x100000,&audit);
+  EdStatus(c,"fwsec-ram-audit",status);
+  Text(c,"ad104-fwsec-audit prom-match=");Hex(c,audit.PromMatch,1);Text(c," parsed=");Hex(c,audit.Parsed,1);
+  Text(c," geometry-match=");Hex(c,audit.GeometryMatch,1);Text(c," image-match=");Hex(c,audit.ImageMatch,1);
+  Text(c," signature-region-match=");Hex(c,audit.SignatureMatch,1);
+  Text(c," firmware-authenticated=0 cold-entry-admitted=0 execution-authority=0\r\n");
+  Text(c,"ad104-fwsec-audit image-off=0x");Hex(c,audit.Descriptor.image_off,8);
+  Text(c," image-bytes=0x");Hex(c,audit.Descriptor.image_size,8);Text(c," sig-off=0x");Hex(c,audit.Descriptor.sig_off,8);
+  Text(c," sig-bytes=0x");Hex(c,audit.Descriptor.sig_bytes,8);End(c);
+}
+#endif
 static BOOLEAN PromFullState(CAPTURE *c,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *io,const PF_PIN *pins,
                              const ED_STATE *parent,EFI_PCI_IO_PROTOCOL_IO_MEM read) {
   static ED_STATE state;
@@ -57,6 +71,11 @@ static EFI_STATUS PromFull(CAPTURE *c,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *io,con
   if(s==EFI_SUCCESS){s=read(io,EfiPciIoWidthUint32,0,0,1,&chip);if(s==EFI_SUCCESS && (chip!=0x194000a1U || io->Mem.Read!=read))s=EFI_NOT_READY;}
   if(!PromFullState(c,gpu,io,pins,parent,read) && s==EFI_SUCCESS)s=EFI_NOT_READY;
   UINT8 digest[32]={0};if(s==EFI_SUCCESS)GuSha256(buffer,0x100000,digest);
+#ifdef GU_AD104_FWSEC_AUDIT_TEST
+  /* Observation only: mismatch is recorded, not converted into authority or a
+   * new hardware failure. Preserve transport evidence and normal safe recovery. */
+  if(s==EFI_SUCCESS){PromAuditLog(c,buffer);s=EdFlush(c);if(s==EFI_SUCCESS && !PromFullState(c,gpu,io,pins,parent,read))s=EFI_NOT_READY;}
+#endif
   if(s==EFI_SUCCESS)s=PromSave(c,buffer,buffer+0x100000,digest);
   EFI_STATUS freed=c->Table->BootServices->FreePool(buffer);
   if(s==EFI_SUCCESS)s=freed;

@@ -43,6 +43,9 @@
 #error GU_USB_PROBE is the read-only diagnostic probe only
 #endif
 
+#if defined(GU_AD104_FWSEC_AUDIT_TEST) && !defined(GU_AD104_PROM_FULL_TEST)
+#error FWSEC RAM audit requires full PROM capture
+#endif
 #if defined(GU_AD104_PROM_FULL_TEST) && !defined(GU_AD104_PROM_HEADER_TEST)
 #error Full PROM requires header and recovery tests
 #endif

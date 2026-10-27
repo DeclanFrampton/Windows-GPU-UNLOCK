@@ -192,6 +192,10 @@ static EFI_STATUS EdRun(CAPTURE *c,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *io,const 
 #ifdef GU_AD104_PARENT_TEST
 #ifdef GU_AD104_DECODE_READ_TEST
 #ifdef GU_AD104_DECODE_OFF_TEST
+#ifdef GU_AD104_FWSEC_AUDIT_TEST
+  if(t->ConOut && t->ConOut->OutputString)
+    t->ConOut->OutputString(t->ConOut,L"RAM AUDIT ONLY: parse/hash captured FWSEC bytes.\r\nNo firmware execution or cold-entry approval.\r\nAudit mismatch alone does not block recovery.\r\n");
+#endif
 #ifdef GU_AD104_PROM_FULL_TEST
   s=EdKey(t,'G',L"COMBINED FULL PROM CAPTURE TEST\r\nFive stops, decode enable, delayed registers,\r\n512-byte header, then full 1 MiB PROM window.\r\n262144 full-window DWORD reads plus bookends.\r\nSave/readback/hash; then decode-off and Windows.\r\nNew MMIO may hang. Recovery is unproven.\r\nNo reset, firmware execution, unlock or retry.\r\nShift+G accepts ALL stages.\r\nScreen stops updating. Capture can take longer.\r\nWait 10 sec; tap Shift+V every 2 sec up to 3 min.\r\nFresh V permits decode-off then Windows.\r\nNo Windows after 10 min: power off, remove USB,\r\nboot normal Windows Boot Manager. Run once.\r\n");
 #else

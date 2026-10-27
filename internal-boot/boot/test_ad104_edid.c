@@ -20,6 +20,9 @@ static int DecodeFault,DecodeCalls,MmioCalls,DecodeFlushes;
 static int OffFault,OffCalls,OffIntentSeen;
 #ifdef GU_AD104_PROM_HEADER_TEST
 static int PromFault,PromIntentSeen,PromOutputSeen;
+#ifdef GU_AD104_FWSEC_AUDIT_TEST
+static int AuditSeen;
+#endif
 #endif
 #endif
 #endif
@@ -51,6 +54,9 @@ static EFI_STATUS TextPcdCollect(EFI_SYSTEM_TABLE *t,TEXT_DISPLAY *out) {
 static int QuietReady,EarlyDrained;
 #endif
 VOID Text(CAPTURE *c,const char *s){
+#ifdef GU_AD104_FWSEC_AUDIT_TEST
+  if(strstr(s,"ad104-fwsec-audit prom-match="))AuditSeen=1;
+#endif
 #ifdef GU_AD104_PROM_HEADER_TEST
   if(strstr(s,"ad104-prom-header intent="))PromIntentSeen=1;
   if(strstr(s,"ad104-prom-header offset="))PromOutputSeen=1;
@@ -147,6 +153,11 @@ static EFI_STATUS EFIAPI Attributes(EFI_PCI_IO_PROTOCOL *io,EFI_PCI_IO_PROTOCOL_
 }
 static EFI_STATUS EFIAPI Write(EFI_FILE_PROTOCOL *f,UINTN *n,VOID *p) {
   (void)f;(void)n;(void)p;Writes++;
+#ifdef GU_AD104_FWSEC_AUDIT_TEST
+  if(AuditSeen && PromFault==55)return EFI_DEVICE_ERROR;
+  if(AuditSeen && PromFault==56)Config[1]|=4;
+  if(AuditSeen && PromFault==57)Missing=-1;
+#endif
 #ifdef GU_AD104_PROM_HEADER_TEST
   if(PromOutputSeen && PromFault==14)return EFI_DEVICE_ERROR;
   if(PromOutputSeen && PromFault==15)Config[1]|=4;

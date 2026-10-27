@@ -95,6 +95,9 @@ static CAPTURE *DecodeSetup(int fault) {
   OffIntentSeen=0;
 #ifdef GU_AD104_PROM_HEADER_TEST
   PromIntentSeen=PromOutputSeen=0;
+#ifdef GU_AD104_FWSEC_AUDIT_TEST
+  AuditSeen=0;
+#endif
 #endif
 #endif
   return c;
@@ -143,7 +146,13 @@ static CAPTURE *FullSetup(int fault) {
 }
 int main(void) {
   CAPTURE *c=FullSetup(0);Check(EdRun(c,(VOID *)1,&Io,Pins)==EFI_SUCCESS && OffCalls==1 && MmioCalls==262320 && !FullAllocation,"full capture/file readback then recovery");
-  for(int f=20;f<=54;f++) {
+  for(int f=20;f<=
+#ifdef GU_AD104_FWSEC_AUDIT_TEST
+  57
+#else
+  54
+#endif
+  ;f++) {
     if(f==45 || f==46 || f==51 || f==53)continue;
     c=FullSetup(f);Check(EdRun(c,(VOID *)1,&Io,Pins)!=EFI_SUCCESS && !OffCalls && !FullAllocation,"full read/file/cleanup/state faults block handoff");
   }

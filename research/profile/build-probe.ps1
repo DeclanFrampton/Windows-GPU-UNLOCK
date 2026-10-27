@@ -6,7 +6,7 @@
 # DMA or firmware variable writes. Builds files only.
 param([Parameter(Mandatory,ParameterSetName='Gpt')][guid]$WindowsEspGuid,
  [Parameter(Mandatory,ParameterSetName='Mbr')][switch]$WindowsMbr,
- [switch]$Ad104Msi,[switch]$Ad104Metadata,[switch]$Ad104FirmwareRom,[switch]$Ad104Resources,[switch]$Ad104Preflight,[switch]$Ad104EdidTest,[switch]$Ad104OutputObservation,[switch]$Ad104PcdCapture,[switch]$Ad104TextTest,[switch]$Ad104GopTest,[switch]$Ad104ConsumersTest,[switch]$Ad104OwnerChildTest,[switch]$Ad104ParentTest,[switch]$Ad104DecodeReadTest,[switch]$Ad104DecodeOffTest,[switch]$Ad104DelayedReadTest,[switch]$Ad104PromHeaderTest,[switch]$Ad104PromFullTest,[string]$Clang='clang',[string]$LldLink='lld-link',[string]$Python='python',
+ [switch]$Ad104Msi,[switch]$Ad104Metadata,[switch]$Ad104FirmwareRom,[switch]$Ad104Resources,[switch]$Ad104Preflight,[switch]$Ad104EdidTest,[switch]$Ad104OutputObservation,[switch]$Ad104PcdCapture,[switch]$Ad104TextTest,[switch]$Ad104GopTest,[switch]$Ad104ConsumersTest,[switch]$Ad104OwnerChildTest,[switch]$Ad104ParentTest,[switch]$Ad104DecodeReadTest,[switch]$Ad104DecodeOffTest,[switch]$Ad104DelayedReadTest,[switch]$Ad104PromHeaderTest,[switch]$Ad104PromFullTest,[switch]$Ad104FwsecAuditTest,[string]$Clang='clang',[string]$LldLink='lld-link',[string]$Python='python',
  [ValidateRange(1,255)][int]$TargetBus=1)
 $ErrorActionPreference='Stop'
 if($Ad104Metadata -and !$Ad104Msi){throw 'Ad104Metadata requires Ad104Msi'}
@@ -21,6 +21,7 @@ if($Ad104GopTest -and !$Ad104TextTest){throw 'GOP test requires text test'}
 if($Ad104ConsumersTest -and !$Ad104GopTest){throw 'Consumers test requires GOP test'}
 if($Ad104OwnerChildTest -and !$Ad104ConsumersTest){throw 'Owner child test requires consumers test'}
 if($Ad104ParentTest -and !$Ad104OwnerChildTest){throw 'Parent test requires owner child test'}
+if($Ad104FwsecAuditTest -and !$Ad104PromFullTest){throw 'FWSEC audit requires full PROM capture'}
 if($Ad104PromFullTest -and !$Ad104PromHeaderTest){throw 'Full PROM requires header and recovery tests'}
 if($Ad104PromHeaderTest -and !$Ad104DelayedReadTest){throw 'PROM header test requires delayed read recovery'}
 if($Ad104DelayedReadTest -and !$Ad104DecodeOffTest){throw 'Delayed reads require decode off recovery'}
@@ -78,7 +79,8 @@ try {
  if($Ad104OutputObservation){$out='build/probe-ad104-output'}
  if($Ad104PcdCapture){$out='build/probe-ad104-pcd'}
  if($Ad104TextTest){$out='build/probe-ad104-text'}
- if($Ad104PromFullTest){$out='build/probe-ad104-prom-full'}
+ if($Ad104FwsecAuditTest){$out='build/probe-ad104-fwsec-audit'}
+ elseif($Ad104PromFullTest){$out='build/probe-ad104-prom-full'}
  elseif($Ad104PromHeaderTest){$out='build/probe-ad104-prom-header'}
  elseif($Ad104DelayedReadTest){$out='build/probe-ad104-delayed-read'}
  elseif($Ad104DecodeOffTest){$out='build/probe-ad104-decode-off'}
@@ -89,6 +91,8 @@ try {
  elseif($Ad104GopTest){$out='build/probe-ad104-gop'}
  New-Item -ItemType Directory -Path $out -Force | Out-Null
  $sources=@('handoff.c','diagnostic.c','../efi_runtime.c','probe.c','../unlock/sha256.c')
+ $auditDeps=@()
+ if($Ad104FwsecAuditTest){$sources+='fwsec-audit.c';$auditDeps=@('fwsec-audit.h','../unlock/vendor/vbios_610.c','../unlock/vendor/vbios_610.h','../unlock/vendor/diagnostic.h','audit-include/errno.h','audit-include/string.h')}
  $defines=@('-DGU_DIAGNOSTIC_ONLY','-DGU_DIAGNOSTIC_PROBE','-DGU_PROBE_GENERIC','-DGU_USB_PROBE')
  if($Ad104Msi){$defines+=@('-DGU_PROBE_AD104_MSI','-DGU_USB_MEDIA')}
  if($Ad104Metadata){$defines+='-DGU_PROBE_AD104_METADATA'}
@@ -104,6 +108,7 @@ try {
  if($Ad104DelayedReadTest){$defines+='-DGU_AD104_DELAYED_READ_TEST'}
  if($Ad104PromHeaderTest){$defines+='-DGU_AD104_PROM_HEADER_TEST'}
  if($Ad104PromFullTest){$defines+='-DGU_AD104_PROM_FULL_TEST'}
+ if($Ad104FwsecAuditTest){$defines+='-DGU_AD104_FWSEC_AUDIT_TEST'}
  if($Ad104ParentTest){$defines+='-DGU_AD104_PARENT_TEST'}
  if($Ad104OwnerChildTest){$defines+='-DGU_AD104_OWNER_CHILD_TEST'}
  if($Ad104ConsumersTest){$defines+='-DGU_AD104_CONSUMERS_TEST'}
@@ -113,7 +118,8 @@ try {
  $objects=@()
  foreach($source in $sources) {
   $obj="$out/"+[IO.Path]::GetFileNameWithoutExtension($source)+'.obj'
-  & $Clang -target x86_64-pc-windows-msvc -std=c11 -ffreestanding -fno-builtin -fno-stack-protector -mno-red-zone -fshort-wchar -Os -Wall -Wextra -Werror @defines -I ../../deps/edk2/MdePkg/Include -I ../../deps/edk2/MdePkg/Include/X64 -c $source -o $obj
+  $parserIncludes=@();if($source -eq 'fwsec-audit.c'){$parserIncludes=@('-I','audit-include')}
+  & $Clang -target x86_64-pc-windows-msvc -std=c11 -ffreestanding -fno-builtin -fno-stack-protector -mno-red-zone -fshort-wchar -ffunction-sections -Os -Wall -Wextra -Werror @defines @parserIncludes -I ../../deps/edk2/MdePkg/Include -I ../../deps/edk2/MdePkg/Include/X64 -c $source -o $obj
   if($LASTEXITCODE -ne 0){throw "Compile failed: $source"}
   $objects+=$obj
  }
@@ -121,13 +127,13 @@ try {
  if($LASTEXITCODE -ne 0){throw 'Probe link failed'}
  & $Python -I ../unlock/verify_pe.py "$out/BOOTX64.EFI" "$out/PROBE.map" --output "$out/pe-verification.json"
  if($LASTEXITCODE -ne 0){throw 'Probe PE verification failed'}
- [ordered]@{Mode=if($Ad104PromFullTest){'ad104-msi-full-prom-capture-test'}elseif($Ad104PromHeaderTest){'ad104-msi-bounded-prom-header-test'}elseif($Ad104DelayedReadTest){'ad104-msi-delayed-register-stability-test'}elseif($Ad104DecodeOffTest){'ad104-msi-capture-then-decode-off-test'}elseif($Ad104DecodeReadTest){'ad104-msi-limited-decode-register-read-test'}elseif($Ad104ParentTest){'ad104-msi-direct-parent-stop-test'}elseif($Ad104OwnerChildTest){'ad104-msi-direct-owner-child-test'}elseif($Ad104ConsumersTest){'ad104-msi-three-consumer-test'}elseif($Ad104GopTest){'ad104-msi-text-then-gop-consumer-test'}elseif($Ad104TextTest){'ad104-msi-pcd-capture-then-one-shot-text-test'}elseif($Ad104PcdCapture){'ad104-msi-pcd-producer-capture'}elseif($Ad104OutputObservation){'ad104-msi-output-and-pcd-observation'}elseif($Ad104EdidTest){'ad104-msi-one-shot-edid-lifecycle-test'}elseif($Ad104Preflight){'ad104-msi-runtime-preflight-observation-then-windows-usb'}elseif($Ad104Resources){'ad104-msi-resource-observation-then-windows-usb'}elseif($Ad104FirmwareRom){'ad104-msi-firmware-rom-buffer-then-windows-usb'}elseif($Ad104Metadata){'ad104-msi-metadata-only-then-windows-usb'}elseif($Ad104Msi){'ad104-msi-read-only-probe-then-windows-usb'}else{'generic-read-only-probe-then-windows-usb'};
+ [ordered]@{Mode=if($Ad104FwsecAuditTest){'ad104-msi-observation-only-fwsec-audit-test'}elseif($Ad104PromFullTest){'ad104-msi-full-prom-capture-test'}elseif($Ad104PromHeaderTest){'ad104-msi-bounded-prom-header-test'}elseif($Ad104DelayedReadTest){'ad104-msi-delayed-register-stability-test'}elseif($Ad104DecodeOffTest){'ad104-msi-capture-then-decode-off-test'}elseif($Ad104DecodeReadTest){'ad104-msi-limited-decode-register-read-test'}elseif($Ad104ParentTest){'ad104-msi-direct-parent-stop-test'}elseif($Ad104OwnerChildTest){'ad104-msi-direct-owner-child-test'}elseif($Ad104ConsumersTest){'ad104-msi-three-consumer-test'}elseif($Ad104GopTest){'ad104-msi-text-then-gop-consumer-test'}elseif($Ad104TextTest){'ad104-msi-pcd-capture-then-one-shot-text-test'}elseif($Ad104PcdCapture){'ad104-msi-pcd-producer-capture'}elseif($Ad104OutputObservation){'ad104-msi-output-and-pcd-observation'}elseif($Ad104EdidTest){'ad104-msi-one-shot-edid-lifecycle-test'}elseif($Ad104Preflight){'ad104-msi-runtime-preflight-observation-then-windows-usb'}elseif($Ad104Resources){'ad104-msi-resource-observation-then-windows-usb'}elseif($Ad104FirmwareRom){'ad104-msi-firmware-rom-buffer-then-windows-usb'}elseif($Ad104Metadata){'ad104-msi-metadata-only-then-windows-usb'}elseif($Ad104Msi){'ad104-msi-read-only-probe-then-windows-usb'}else{'generic-read-only-probe-then-windows-usb'};
    CanQueryBarResources=[bool]$Ad104Resources;CanQueryPcdBoolean=[bool]$Ad104OutputObservation;CanCapturePcdProducer=[bool]$Ad104PcdCapture;CanReleaseGopConsumer=[bool]$Ad104GopTest;CanReleasePciOwner=[bool]$Ad104ParentTest;DriverMayDisablePciAttributes=[bool]$Ad104ParentTest;CanRestoreDecode=$false;CanStopOwnerChildDirectly=[bool]$Ad104OwnerChildTest;CanReleaseAllDisplayConsumers=[bool]$Ad104ConsumersTest;
-   CanReadGpuMmio=([bool]$Ad104DecodeReadTest -or !$Ad104Metadata);CanEnableLimitedDecode=[bool]$Ad104DecodeReadTest;CanDisableLimitedDecode=[bool]$Ad104DecodeOffTest;PromCaptureBytes=if($Ad104PromFullTest){1048576}else{0};PromHeaderBytes=if($Ad104PromHeaderTest){512}else{0};InterBatchDelayUs=if($Ad104DelayedReadTest){1000000}else{0};CanDereferenceRomImage=[bool]$Ad104FirmwareRom;
+   CanReadGpuMmio=([bool]$Ad104DecodeReadTest -or !$Ad104Metadata);CanEnableLimitedDecode=[bool]$Ad104DecodeReadTest;CanDisableLimitedDecode=[bool]$Ad104DecodeOffTest;FwsecObservationOnly=[bool]$Ad104FwsecAuditTest;CanExecuteFirmware=$false;PromCaptureBytes=if($Ad104PromFullTest){1048576}else{0};PromHeaderBytes=if($Ad104PromHeaderTest){512}else{0};InterBatchDelayUs=if($Ad104DelayedReadTest){1000000}else{0};CanDereferenceRomImage=[bool]$Ad104FirmwareRom;
   WindowsBootIdentity=if($WindowsMbr){'exact-mbr-extent-and-boot-manager-hash'}else{'gpt-partition-guid'};
   CanUnlock=$false;CanDetach=([bool]$Ad104EdidTest -or [bool]$Ad104TextTest);WritesFirmwareVariables=$false;HardwareTested=$false;Defines=$defines
   EfiSha256=(Get-FileHash -LiteralPath "$out/BOOTX64.EFI").Hash.ToLowerInvariant();BuiltUtc=[DateTime]::UtcNow.ToString('o')
-   Sources=@(($sources+@('diagnostic.h','media.h','probe.h','firmware-rom.h','ad104-preflight.h','ad104-edid.h','output-observation.h','pcd-producer.h','text-display.h','gop-step.h','edid-step.h','owner-child.h','owner-parent.h','parent-branch.h','decode-read.h','prom-full.h','platform-config.h')) | ForEach-Object {[ordered]@{Path=$_;Sha256=(Get-FileHash -LiteralPath $_).Hash.ToLowerInvariant()}})
+   Sources=@(($sources+$auditDeps+@('diagnostic.h','media.h','probe.h','firmware-rom.h','ad104-preflight.h','ad104-edid.h','output-observation.h','pcd-producer.h','text-display.h','gop-step.h','edid-step.h','owner-child.h','owner-parent.h','parent-branch.h','decode-read.h','prom-full.h','platform-config.h')) | ForEach-Object {[ordered]@{Path=$_;Sha256=(Get-FileHash -LiteralPath $_).Hash.ToLowerInvariant()}})
  } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath "$out/manifest.json" -Encoding utf8
  "Built $out/BOOTX64.EFI; CanDetach=$([bool]$Ad104EdidTest -or [bool]$Ad104TextTest); hardware untested."
 } finally {Pop-Location}
