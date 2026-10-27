@@ -188,6 +188,33 @@ static EFI_STATUS Record(VOID *Context,const char *Event,EFI_STATUS Status) {
   if(s!=EFI_SUCCESS || written!=n)return EFI_DEVICE_ERROR;
   return Log->Flush(Log);
 }
+#ifdef GU_AD104_DECODE_READ_TEST
+static EFI_FILE_PROTOCOL *Witness;
+static EFI_EVENT WitnessExitEvent;
+static volatile BOOLEAN WitnessExited;
+static UINTN WitnessRecords;
+static VOID EFIAPI WitnessExit(EFI_EVENT event,VOID *context) {
+  (void)event;(void)context;WitnessExited=TRUE;
+}
+static EFI_STATUS WitnessRecord(const char *event,EFI_STATUS status) {
+  if(WitnessExited || !Witness || !Witness->Write || !Witness->Flush || WitnessRecords>=16)return EFI_NOT_READY;
+  WitnessRecords++;
+  EFI_FILE_PROTOCOL *saved=Log;Log=Witness;
+  EFI_STATUS s=Record(NULL,event,status);Log=saved;return s;
+}
+static EFI_STATUS WitnessOpen(VOID) {
+  if(Witness || !Root || !Root->Open || !Table->BootServices->CreateEvent)return EFI_UNSUPPORTED;
+  EFI_FILE_PROTOCOL *existing=NULL;
+  EFI_STATUS s=Root->Open(Root,&existing,L"\\RTX3090-UNLOCK\\STATUS.TXT",EFI_FILE_MODE_READ,0);
+  if(s==EFI_SUCCESS){if(existing && existing!=Root && existing!=Log && existing->Close)(void)existing->Close(existing);return EFI_ALREADY_STARTED;}
+  if(s!=EFI_NOT_FOUND || existing)return s==EFI_NOT_FOUND?EFI_COMPROMISED_DATA:s;
+  s=Root->Open(Root,&Witness,L"\\RTX3090-UNLOCK\\STATUS.TXT",EFI_FILE_MODE_READ|EFI_FILE_MODE_WRITE|EFI_FILE_MODE_CREATE,0);
+  if(s!=EFI_SUCCESS || !Witness || Witness==Root || Witness==Log || !Witness->Write || !Witness->Flush){Witness=NULL;return EFI_DEVICE_ERROR;}
+  s=Table->BootServices->CreateEvent(EVT_SIGNAL_EXIT_BOOT_SERVICES,TPL_NOTIFY,WitnessExit,NULL,&WitnessExitEvent);
+  if(s!=EFI_SUCCESS || !WitnessExitEvent)return s==EFI_SUCCESS?EFI_DEVICE_ERROR:s;
+  return WitnessRecord("witness-open-before-detach",EFI_SUCCESS);
+}
+#endif
 #ifndef GU_DIAGNOSTIC_ONLY
 static EFI_STATUS LoadUnlock(VOID) {
   EFI_FILE_PROTOCOL *file=NULL;
@@ -283,6 +310,9 @@ static EFI_STATUS Prepare(VOID *Context) {
   s=FindPartition(&GuWindowsPartition,&windows,TRUE);
   if(s!=EFI_SUCCESS || windows==own)return EFI_COMPROMISED_DATA;
   s=OpenLog();if(s!=EFI_SUCCESS)return s;
+#ifdef GU_AD104_DECODE_READ_TEST
+  s=WitnessOpen();if(s!=EFI_SUCCESS)return s;
+#endif
   s=Record(NULL,"internal-handoff-v1",EFI_SUCCESS);if(s!=EFI_SUCCESS)return s;
 #ifndef GU_DIAGNOSTIC_ONLY
   s=LoadUnlock();if(s!=EFI_SUCCESS)return s;
@@ -403,22 +433,33 @@ static EFI_STATUS Windows(VOID *Context) {
 #ifdef GU_AD104_DECODE_READ_TEST
   /* Keep the log open while closing the root so the next physical run can
    * distinguish root Close from the final log-Close/StartImage boundary. */
-  EFI_STATUS s=Record(NULL,"windows-root-close-next",EFI_SUCCESS);
+  EFI_STATUS s=WitnessRecord("windows-root-close-next",EFI_SUCCESS);
   if(s!=EFI_SUCCESS)return s;
   EFI_FILE_PROTOCOL *root=Root;Root=NULL;
   s=root && root->Close?root->Close(root):EFI_INVALID_PARAMETER;
-  EFI_STATUS recorded=Record(NULL,"windows-root-close-returned",s);
+  EFI_STATUS recorded=WitnessRecord("windows-root-close-returned",s);
   if(s!=EFI_SUCCESS)return s;
   if(recorded!=EFI_SUCCESS)return recorded;
-  s=Record(NULL,"windows-log-close-next-then-StartImage",EFI_SUCCESS);
+  s=WitnessRecord("main-log-close-next",EFI_SUCCESS);
   if(s!=EFI_SUCCESS)return s;
   EFI_FILE_PROTOCOL *log=Log;Log=NULL;
   s=log && log->Close?log->Close(log):EFI_INVALID_PARAMETER;
+  recorded=WitnessRecord("main-log-close-returned",s);
+  if(s!=EFI_SUCCESS)return s;
+  if(recorded!=EFI_SUCCESS)return recorded;
+  s=WitnessRecord("windows-StartImage-next",EFI_SUCCESS);
   if(s!=EFI_SUCCESS)return s;
 #else
   EFI_STATUS s=CloseBootFiles(NULL,NULL);if(s!=EFI_SUCCESS)return s;
 #endif
+#ifdef GU_AD104_DECODE_READ_TEST
+  s=Table->BootServices->StartImage(WindowsImage,NULL,NULL);
+  if(WitnessExited)return EFI_ABORTED; /* No protocol/file access after EBS. */
+  recorded=WitnessRecord("windows-StartImage-returned",s);
+  return recorded==EFI_SUCCESS?s:recorded;
+#else
   return Table->BootServices->StartImage(WindowsImage,NULL,NULL);
+#endif
 }
 #endif
 #ifdef GU_CONSOLE_PREPARE
@@ -515,6 +556,10 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE Image,EFI_SYSTEM_TABLE *St) {
 #else
   GU_HANDOFF_OPS ops={NULL,Prepare,Select,Record,Unlock,Windows};
   s=GuHandoffFlow(&ops);
+#endif
+#ifdef GU_AD104_DECODE_READ_TEST
+  if(WitnessExited)for(;;)__asm__ volatile("pause");
+  (void)WitnessRecord("handoff-stopped-manual-power-off",s);
 #endif
 #if defined(GU_AD104_TEXT_TEST)
   /* Console protocols may already be gone. Persist the recovery instruction;
