@@ -1,4 +1,4 @@
-/* GPL-2.0-only. One IMG13 child Stop; never stop IMG16/17, EDID or NVIDIA. */
+/* GPL-2.0-only. IMG13 membership Stop; optional pinned IMG16 release. No unlock. */
 #include "evga-text-stop.h"
 #include <Protocol/GraphicsOutput.h>
 #include <Protocol/DevicePath.h>
@@ -12,6 +12,13 @@ static EFI_GUID Path=EFI_DEVICE_PATH_PROTOCOL_GUID,Binding=EFI_DRIVER_BINDING_PR
 static EFI_GUID Loaded=EFI_LOADED_IMAGE_PROTOCOL_GUID,Pci=EFI_PCI_IO_PROTOCOL_GUID;
 typedef struct {EFI_HANDLE Physical,Virtual,Console,Gfx,VirtualText,TextAgent;EFI_DRIVER_BINDING_PROTOCOL *Driver;} PLAN;
 static PLAN Plan;
+#ifdef GU_EVGA_RELEASE_TEXT
+static EFI_DRIVER_BINDING_PROTOCOL *VirtualDriver;
+static BOOLEAN TextReleased;
+#define ATTEMPT_PATH L"\\RTX3090-UNLOCK\\EVGA-TEXT-RELEASE.ARMED"
+#else
+#define ATTEMPT_PATH L"\\RTX3090-UNLOCK\\EVGA-TEXT-STOP.ARMED"
+#endif
 static EFI_STATUS Checked(GU_EVGA_RECORD record,const char *event,EFI_STATUS status) {
   if(record){EFI_STATUS io=record(NULL,event,status);if(io!=EFI_SUCCESS)return io;}
   return status;
@@ -100,6 +107,29 @@ static EFI_STATUS ConsoleProtocols(EFI_SYSTEM_TABLE *t,GU_EVGA_RECORD record) {
   io=Value(record,"evga-console-listed-texts",texts);if(io!=EFI_SUCCESS)return io;
   return gops==0 && texts==1?EFI_SUCCESS:EFI_UNSUPPORTED;
 }
+#ifdef GU_EVGA_RELEASE_TEXT
+static EFI_STATUS VirtualInterfaces(EFI_SYSTEM_TABLE *t,BOOLEAN released) {
+  EFI_GUID **list=NULL;UINTN n=0,texts=0,ugas=0,extras=0;
+  EFI_GUID uga={0xd3b36f2c,0xd551,0x11d4,{0x9a,0x46,0,0x90,0x27,0x3f,0xc1,0x4d}};
+  EFI_GUID extra={0xe1e4a857,0xc970,0x4075,{0xa4,0xda,0xe9,0xc4,0x1b,0x69,0xad,0xfc}};
+  EFI_STATUS s=t->BootServices->ProtocolsPerHandle(Plan.Virtual,&list,&n);
+  if(s!=EFI_SUCCESS || !list || n>256)return EFI_UNSUPPORTED;
+  for(UINTN i=0;i<n;i++) {
+    if(!list[i]){s=EFI_COMPROMISED_DATA;break;}
+    BOOLEAN x=TRUE,u=TRUE,e=TRUE;
+    for(UINTN j=0;j<sizeof(EFI_GUID);j++) {
+      UINT8 v=((UINT8 *)list[i])[j];
+      if(v!=((UINT8 *)&Text)[j])x=FALSE;
+      if(v!=((UINT8 *)&uga)[j])u=FALSE;
+      if(v!=((UINT8 *)&extra)[j])e=FALSE;
+    }
+    texts+=x;ugas+=u;extras+=e;
+  }
+  if(t->BootServices->FreePool(list)!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
+  if(s!=EFI_SUCCESS)return s;
+  return ugas==0 && texts==(released?0U:1U) && extras==(released?0U:1U)?EFI_SUCCESS:EFI_ACCESS_DENIED;
+}
+#endif
 static EFI_STATUS Graph(EFI_SYSTEM_TABLE *t,BOOLEAN after,GU_EVGA_RECORD record) {
   EFI_BOOT_SERVICES *b=t->BootServices;EFI_HANDLE *handles=NULL;UINTN count=0;
   EFI_STATUS s=b->LocateHandleBuffer(ByProtocol,&Gop,NULL,&count,&handles);
@@ -117,20 +147,46 @@ static EFI_STATUS Graph(EFI_SYSTEM_TABLE *t,BOOLEAN after,GU_EVGA_RECORD record)
   if(b->FreePool(handles)!=EFI_SUCCESS)s=EFI_DEVICE_ERROR;
   if(s!=EFI_SUCCESS || !physical || !virtual || !t->ConsoleOutHandle || t->StandardErrorHandle!=t->ConsoleOutHandle)return Checked(record,"evga-gop-shape",EFI_UNSUPPORTED);
   s=Checked(record,"evga-console-membership",ConsoleProtocols(t,record));if(s!=EFI_SUCCESS)return s;
-  VOID *text=NULL;
+  VOID *text=NULL;EFI_STATUS io;
+#ifdef GU_EVGA_RELEASE_TEXT
+  if(!TextReleased) {
+#endif
   s=b->HandleProtocol(virtual,&Text,&text);
-  EFI_STATUS io=Checked(record,"evga-virtual-text-interface",s);if(io!=s)return io;
+  io=Checked(record,"evga-virtual-text-interface",s);if(io!=s)return io;
   if(s!=EFI_SUCCESS || !text)return Checked(record,"evga-virtual-text-interface-valid",EFI_UNSUPPORTED);
+#ifdef GU_EVGA_RELEASE_TEXT
+  }
+#endif
   text=NULL;s=b->HandleProtocol(t->ConsoleOutHandle,&Text,&text);
   io=Checked(record,"evga-system-text-interface",s);if(io!=s)return io;
   if(s!=EFI_SUCCESS || !text)return Checked(record,"evga-system-text-interface-valid",EFI_UNSUPPORTED);
   if(Plan.Physical && (Plan.Physical!=physical || Plan.Virtual!=virtual || Plan.Console!=t->ConsoleOutHandle))return EFI_ACCESS_DENIED;
   Plan.Physical=physical;Plan.Virtual=virtual;Plan.Console=t->ConsoleOutHandle;
   s=Checked(record,"evga-gfx-edges",Edges(b,physical,&Gop,virtual,TRUE,&Plan.Gfx,FALSE));if(s!=EFI_SUCCESS)return s;
-  s=Checked(record,"evga-virtual-text-edges",Edges(b,virtual,&Gop,NULL,FALSE,&Plan.VirtualText,FALSE));if(s!=EFI_SUCCESS)return s;
+  s=Checked(record,"evga-virtual-text-edges",Edges(b,virtual,&Gop,NULL,FALSE,&Plan.VirtualText,
+#ifdef GU_EVGA_RELEASE_TEXT
+    TextReleased
+#else
+    FALSE
+#endif
+  ));if(s!=EFI_SUCCESS)return s;
+#ifdef GU_EVGA_RELEASE_TEXT
+  if(TextReleased) {
+    s=Checked(record,"evga-virtual-interfaces-removed",VirtualInterfaces(t,TRUE));if(s!=EFI_SUCCESS)return s;
+  } else {
+#endif
   s=Checked(record,"evga-text-splitter-edges",Edges(b,virtual,&Text,Plan.Console,TRUE,&Plan.TextAgent,after));if(s!=EFI_SUCCESS)return s;
+#ifdef GU_EVGA_RELEASE_TEXT
+  }
+#endif
   s=Checked(record,"evga-gfx-code",Code(b,Plan.Gfx,0x2180,0x1990,0x88c,17,"3f4c4ea26023ddf00990b59385d0fcf3139acb583c70406828777cdceab8cecb",NULL,record));if(s!=EFI_SUCCESS)return s;
-  s=Checked(record,"evga-virtual-text-code",Code(b,Plan.VirtualText,0x3bc0,0x1e00,0xb2c,16,"e5e68f0856c6e932da9bf3c680bac955dbf180eb083da78b64007388d89e24a7",NULL,record));if(s!=EFI_SUCCESS)return s;
+  s=Checked(record,"evga-virtual-text-code",Code(b,Plan.VirtualText,0x3bc0,0x1e00,0xb2c,16,"e5e68f0856c6e932da9bf3c680bac955dbf180eb083da78b64007388d89e24a7",
+#ifdef GU_EVGA_RELEASE_TEXT
+    &VirtualDriver,
+#else
+    NULL,
+#endif
+    record));if(s!=EFI_SUCCESS)return s;
   return Checked(record,"evga-text-splitter-code",Code(b,Plan.TextAgent,0x6ae0,0x5620,0x104c,16,"e2b072199726ae784f749057c3c5453ed8db0bb3fbe1a73ccca7e6f302325291",&Plan.Driver,record));
 }
 EFI_STATUS GuEvgaTextStopVerify(EFI_SYSTEM_TABLE *t) {
@@ -160,12 +216,17 @@ EFI_STATUS GuEvgaTextStop(EFI_SYSTEM_TABLE *t,EFI_FILE_PROTOCOL *root,GU_EVGA_RE
   }
   /* Durable one-shot marker, never overwritten or automatically removed. */
   EFI_FILE_PROTOCOL *marker=NULL;
-  s=root->Open(root,&marker,L"\\RTX3090-UNLOCK\\EVGA-TEXT-STOP.ARMED",EFI_FILE_MODE_READ,0);
+  s=root->Open(root,&marker,ATTEMPT_PATH,EFI_FILE_MODE_READ,0);
   if(s==EFI_SUCCESS){if(marker)marker->Close(marker);return EFI_ALREADY_STARTED;}
   if(s!=EFI_NOT_FOUND)return s;
-  s=root->Open(root,&marker,L"\\RTX3090-UNLOCK\\EVGA-TEXT-STOP.ARMED",EFI_FILE_MODE_READ|EFI_FILE_MODE_WRITE|EFI_FILE_MODE_CREATE,0);
+  s=root->Open(root,&marker,ATTEMPT_PATH,EFI_FILE_MODE_READ|EFI_FILE_MODE_WRITE|EFI_FILE_MODE_CREATE,0);
   if(s!=EFI_SUCCESS || !marker)return EFI_DEVICE_ERROR;
-  char tag[]="one IMG13 child Stop attempted; preserve evidence; no retry\r\n";UINTN n=sizeof(tag)-1;
+#ifdef GU_EVGA_RELEASE_TEXT
+  char tag[]="IMG13 then IMG16 Stop armed; preserve evidence; no retry\r\n";
+#else
+  char tag[]="one IMG13 child Stop attempted; preserve evidence; no retry\r\n";
+#endif
+  UINTN n=sizeof(tag)-1;
   s=marker->Write(marker,&n,tag);if(s==EFI_SUCCESS && n!=sizeof(tag)-1)s=EFI_DEVICE_ERROR;
   if(s==EFI_SUCCESS)s=marker->Flush(marker);
   EFI_STATUS closed=marker->Close(marker);if(s==EFI_SUCCESS)s=closed;if(s!=EFI_SUCCESS)return s;
@@ -178,5 +239,16 @@ EFI_STATUS GuEvgaTextStop(EFI_SYSTEM_TABLE *t,EFI_FILE_PROTOCOL *root,GU_EVGA_RE
   EFI_STATUS logged=record(NULL,"evga-text-stop-return",s);if(logged!=EFI_SUCCESS)return logged;
   if(s!=EFI_SUCCESS)return s;
   s=Graph(t,TRUE,record);
-  logged=record(NULL,"evga-text-stop-post-graph",s);return logged==EFI_SUCCESS?s:logged;
+  logged=record(NULL,"evga-text-stop-post-graph",s);if(logged!=EFI_SUCCESS)return logged;if(s!=EFI_SUCCESS)return s;
+#ifdef GU_EVGA_RELEASE_TEXT
+  s=Checked(record,"evga-virtual-text-pre-stop",VirtualInterfaces(t,FALSE));if(s!=EFI_SUCCESS)return s;
+  s=record(NULL,"evga-virtual-text-stop-before",EFI_SUCCESS);if(s!=EFI_SUCCESS)return s;
+  /* No console/interface calls through the object IMG16 is about to free. */
+  s=VirtualDriver->Stop(VirtualDriver,Plan.Virtual,0,NULL);
+  logged=record(NULL,"evga-virtual-text-stop-return",s);if(logged!=EFI_SUCCESS)return logged;if(s!=EFI_SUCCESS)return s;
+  TextReleased=TRUE;s=Graph(t,TRUE,record);
+  return Checked(record,"evga-virtual-text-post-graph",s);
+#else
+  return EFI_SUCCESS;
+#endif
 }

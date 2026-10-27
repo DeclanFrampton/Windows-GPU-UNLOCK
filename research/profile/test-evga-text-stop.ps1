@@ -15,5 +15,11 @@ try {
   & "./$out/$name.exe"
   if($LASTEXITCODE -ne 0){throw "Host scenario failed: $name/$LASTEXITCODE"}
  }
- '25 membership host checkpoints and 9 capture regression cases passed (mock protocols, hashes and Stop; no captured firmware executed).'
+ & $Clang -target x86_64-pc-windows-msvc -std=c11 -ffreestanding -fno-builtin -fno-stack-protector -O1 -Wall -Wextra -Werror -DGU_EVGA_RELEASE_TEXT -I deps/edk2/MdePkg/Include -I deps/edk2/MdePkg/Include/X64 -c internal-boot/boot/test_evga_text_stop.c -o "$out/release.host.obj"
+ if($LASTEXITCODE -ne 0){throw 'Combined release host compile failed'}
+ & $LldLink /nologo /nodefaultlib /subsystem:console /entry:main /machine:x64 "/out:$out/release-test.exe" "$out/release.host.obj" "$out/efi_runtime.host.obj"
+ if($LASTEXITCODE -ne 0){throw 'Combined release host link failed'}
+ & "./$out/release-test.exe"
+ if($LASTEXITCODE -ne 0){throw "Combined release scenario failed: $LASTEXITCODE"}
+ '25 membership host checkpoints, 7 combined-release checkpoints and 9 capture regression cases passed (mock protocols, hashes and Stop; no captured firmware executed).'
 } finally {Pop-Location}

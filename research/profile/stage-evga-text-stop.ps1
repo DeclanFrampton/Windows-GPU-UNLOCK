@@ -6,7 +6,7 @@ $repo=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $build=Join-Path $repo 'internal-boot/boot/build/evga-text-stop'
 $source=Join-Path $build 'BOOTX64.EFI'
 $manifest=Get-Content -LiteralPath (Join-Path $build 'manifest.json') -Raw | ConvertFrom-Json
-if($manifest.Mode -ne 'evga3090-one-text-membership-stop' -or $manifest.CanUnlock -ne $false){throw 'Wrong build mode'}
+if($manifest.Mode -notin @('evga3090-one-text-membership-stop','evga3090-two-text-stops') -or $manifest.CanUnlock -ne $false){throw 'Wrong build mode'}
 $hash=(Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash.ToLowerInvariant()
 if($hash -cne $manifest.EfiSha256){throw 'EFI differs from build manifest; rebuild'}
 $boot=Join-Path $repo 'internal-boot/boot'
@@ -26,7 +26,12 @@ if($disk.BusType -ne 'USB' -or $partition[0].IsSystem -or $partition[0].IsBoot){
 $root=$letter+':\'
 $captures=Join-Path $root 'RTX3090-UNLOCK'
 if(!(Test-Path -LiteralPath (Join-Path $captures 'DIAG00.TXT')) -or !(Test-Path -LiteralPath (Join-Path $captures 'DIAG01.TXT'))){throw 'Original capture pair must remain on the USB'}
-if(Test-Path -LiteralPath (Join-Path $captures 'EVGA-TEXT-STOP.ARMED')){throw 'An attempt is already armed; preserve evidence instead of repeating'}
+$attempt=if($manifest.Mode -eq 'evga3090-two-text-stops'){'EVGA-TEXT-RELEASE.ARMED'}else{'EVGA-TEXT-STOP.ARMED'}
+if(Test-Path -LiteralPath (Join-Path $captures $attempt)){throw 'An attempt is already armed; preserve evidence instead of repeating'}
+if($manifest.Mode -eq 'evga3090-two-text-stops') {
+ $baseline=Join-Path $captures 'EVGA05.TXT'
+ if(!(Test-Path -LiteralPath $baseline) -or (Get-FileHash -LiteralPath $baseline -Algorithm SHA256).Hash.ToLowerInvariant() -ne 'cbbfad6aadb858cdc6311f656c819e6707e52f274e8e0959df4348c51fbbec1a'){throw 'Expected reviewed EVGA05 baseline; preserve captures and send the error'}
+}
 $destination=Join-Path $root 'EFI/BOOT/BOOTX64.EFI'
 if(!(Test-Path -LiteralPath $destination)){throw 'Expected the existing capture EFI on this USB'}
 $backup=Join-Path $root 'EFI/BOOT/BOOTX64.before-evga-text-stop.efi'
@@ -38,7 +43,7 @@ if(Test-Path -LiteralPath $backup){
  }
  if(!$found){throw 'All backup slots are occupied; preserve them and review USB state'}
 }
-if($PSCmdlet.ShouldProcess($destination,'Back up existing capture EFI and stage the one-call EVGA text Stop experiment')) {
+if($PSCmdlet.ShouldProcess($destination,'Back up existing capture EFI and stage the manifest-selected EVGA text Stop experiment')) {
  Copy-Item -LiteralPath $destination -Destination $backup
  if((Get-FileHash -LiteralPath $destination).Hash -cne (Get-FileHash -LiteralPath $backup).Hash){throw 'Backup verification failed'}
  Copy-Item -LiteralPath $source -Destination $destination -Force

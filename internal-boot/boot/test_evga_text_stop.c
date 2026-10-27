@@ -13,6 +13,9 @@ static EFI_FILE_PROTOCOL Root,Marker;
 static UINTN Keys,Calls,Records;
 static BOOLEAN Removed,MarkerExists,BadHash,BadPost,FailRecord,FailStop,BadInventory,ExtraOwner;
 static BOOLEAN Cancel,Timeout,ShortWrite,FlushFail;
+#ifdef GU_EVGA_RELEASE_TEXT
+static BOOLEAN RemovedVirtual,FailVirtual,BadVirtual;
+#endif
 static UINTN InterfaceFailure,GopConsoleQueries;
 static EFI_HANDLE H(UINTN n){return (EFI_HANDLE)n;}
 BOOLEAN GuHashMatches(const VOID *data,UINTN n,const char *hash){return data && n && hash && !BadHash;}
@@ -39,13 +42,21 @@ static EFI_STATUS EFIAPI Handle(EFI_HANDLE h,EFI_GUID *guid,VOID **out){
   if(guid==&Gop && h==H(3) && InterfaceFailure==4){*out=&Graphics[0];return EFI_SUCCESS;}
   if(guid==&Gop && (h==H(1)||h==H(2))){*out=&Graphics[(UINTN)h-1];return EFI_SUCCESS;}
   if(guid==&Path && h==H(1)){*out=&Output;return EFI_SUCCESS;}
+#ifdef GU_EVGA_RELEASE_TEXT
+  if(guid==&Text && h==H(2) && RemovedVirtual)return EFI_UNSUPPORTED;
+#endif
   if(guid==&Text && (h==H(2)||h==H(3))){*out=&Output;return EFI_SUCCESS;}
   if(guid==&Binding && (UINTN)h>=10 && (UINTN)h<=12){*out=&Drivers[(UINTN)h-10];return EFI_SUCCESS;}
   if(guid==&Loaded && (UINTN)h>=10 && (UINTN)h<=12){*out=&Images[(UINTN)h-10];return EFI_SUCCESS;}
   if(guid==&Pci && h==H(4)){*out=&PciIo;return EFI_SUCCESS;}return EFI_UNSUPPORTED;
 }
 static EFI_STATUS EFIAPI ProtocolList(EFI_HANDLE h,EFI_GUID ***out,UINTN *n){
-  static EFI_GUID *list[2];if(h!=H(3))return EFI_UNSUPPORTED;
+  static EFI_GUID *list[3];
+#ifdef GU_EVGA_RELEASE_TEXT
+  static EFI_GUID extra={0xe1e4a857,0xc970,0x4075,{0xa4,0xda,0xe9,0xc4,0x1b,0x69,0xad,0xfc}};
+  if(h==H(2)){list[0]=&Gop;list[1]=&Text;list[2]=&extra;*out=list;*n=RemovedVirtual&&!BadVirtual?1:3;return EFI_SUCCESS;}
+#endif
+  if(h!=H(3))return EFI_UNSUPPORTED;
   if(InterfaceFailure==3)return EFI_DEVICE_ERROR;
   list[0]=InterfaceFailure==4?&Gop:&Text;list[1]=&Text;
   *out=list;*n=InterfaceFailure==5?2:1;
@@ -55,7 +66,12 @@ static EFI_STATUS EFIAPI ProtocolList(EFI_HANDLE h,EFI_GUID ***out,UINTN *n){
 static EFI_STATUS EFIAPI Opens(EFI_HANDLE source,EFI_GUID *guid,EFI_OPEN_PROTOCOL_INFORMATION_ENTRY **out,UINTN *n){
   static EFI_OPEN_PROTOCOL_INFORMATION_ENTRY e[3];*out=e;*n=0;EFI_HANDLE agent=NULL,child=NULL;
   if(source==H(1)&&guid==&Gop){agent=H(10);child=H(2);}
-  if(source==H(2)&&guid==&Gop)agent=H(11);
+  if(source==H(2)&&guid==&Gop){
+#ifdef GU_EVGA_RELEASE_TEXT
+    if(RemovedVirtual&&!BadVirtual)return EFI_SUCCESS;
+#endif
+    agent=H(11);
+  }
   if(source==H(2)&&guid==&Text){if(Removed&&!BadPost)return EFI_SUCCESS;agent=H(12);child=H(3);}
   if(!agent)return EFI_UNSUPPORTED;
   e[0]=(EFI_OPEN_PROTOCOL_INFORMATION_ENTRY){agent,source,16,1};*n=1;
@@ -64,6 +80,9 @@ static EFI_STATUS EFIAPI Opens(EFI_HANDLE source,EFI_GUID *guid,EFI_OPEN_PROTOCO
   return EFI_SUCCESS;
 }
 static EFI_STATUS EFIAPI MockStop(EFI_DRIVER_BINDING_PROTOCOL *d,EFI_HANDLE controller,UINTN n,EFI_HANDLE *children){
+#ifdef GU_EVGA_RELEASE_TEXT
+  if(d==&Drivers[1]){if(controller!=H(2)||n||children)return EFI_INVALID_PARAMETER;Calls++;if(FailVirtual)return EFI_DEVICE_ERROR;RemovedVirtual=TRUE;return EFI_SUCCESS;}
+#endif
   if(d!=&Drivers[2] || controller!=H(2) || n!=1 || !children || children[0]!=H(3))return EFI_INVALID_PARAMETER;
   Calls++;if(FailStop)return EFI_DEVICE_ERROR;Removed=TRUE;return EFI_SUCCESS;
 }
@@ -79,6 +98,9 @@ static EFI_STATUS RecordMock(VOID *p,const char *name,EFI_STATUS s){
   (void)p;(void)name;(void)s;Records++;return FailRecord?EFI_DEVICE_ERROR:EFI_SUCCESS;
 }
 static VOID Init(VOID){
+#ifdef GU_EVGA_RELEASE_TEXT
+  VirtualDriver=NULL;TextReleased=RemovedVirtual=FailVirtual=BadVirtual=FALSE;
+#endif
   GopConsoleQueries=0;InterfaceFailure=0;Plan=(PLAN){0};Keys=Calls=Records=0;Removed=MarkerExists=BadHash=BadPost=FailRecord=FailStop=BadInventory=ExtraOwner=FALSE;
   Cancel=Timeout=ShortWrite=FlushFail=FALSE;
   Bs=(EFI_BOOT_SERVICES){0};Bs.FreePool=Free;Bs.Stall=Stall;Bs.LocateHandleBuffer=Locate;Bs.HandleProtocol=Handle;Bs.OpenProtocolInformation=Opens;Bs.ProtocolsPerHandle=ProtocolList;
@@ -95,6 +117,20 @@ static VOID Init(VOID){
   PciIo=(EFI_PCI_IO_PROTOCOL){0};PciIo.Pci.Read=ReadPci;
   Root=(EFI_FILE_PROTOCOL){0};Root.Open=FileOpen;Marker=(EFI_FILE_PROTOCOL){0};Marker.Close=FileClose;Marker.Write=FileWrite;Marker.Flush=FileFlush;
 }
+#ifdef GU_EVGA_RELEASE_TEXT
+int main(VOID){
+  BOOLEAN started=FALSE;EFI_STATUS s;
+  Init();s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);
+  if(s!=EFI_SUCCESS||!started||Calls!=2||!RemovedVirtual)return 1;
+  UINTN saved=Records;if(GuEvgaTextStopVerify(&Table)!=EFI_SUCCESS||saved!=Records)return 2;
+  Init();FailVirtual=TRUE;s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s==EFI_SUCCESS||Calls!=2||!started)return 3;
+  Init();BadVirtual=TRUE;s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s==EFI_SUCCESS||Calls!=2)return 4;
+  Init();FailStop=TRUE;s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s==EFI_SUCCESS||Calls!=1||RemovedVirtual)return 5;
+  Init();MarkerExists=TRUE;s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s!=EFI_ALREADY_STARTED||Calls)return 6;
+  Init();BadHash=TRUE;s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s==EFI_SUCCESS||Calls)return 7;
+  return 0;
+}
+#else
 int main(VOID){
   BOOLEAN started=FALSE;EFI_STATUS s;
   Init();s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s!=EFI_SUCCESS||!started||Calls!=1||!Removed||Records<3)return 1;
@@ -120,3 +156,5 @@ int main(VOID){
   Init();s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s!=EFI_SUCCESS||GopConsoleQueries)return 25;
   return 0;
 }
+
+#endif
