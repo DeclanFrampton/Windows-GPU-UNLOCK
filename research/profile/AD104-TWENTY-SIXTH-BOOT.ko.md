@@ -15,3 +15,5 @@
 매니페스트 mailbox-only=true, 추가읽기16, CanReadDmaControl=false, 펌웨어실행/언락=false입니다.
 
 작업 저장/완전 종료/10초/UEFIUSB/Shift+G 한 번.10초 후 Shift+V를2초마다 최대3분 누릅니다. 보호 정지는 키로 재개할 수 없습니다.10분 후 Windows가 없으면 전원 차단/USB 제거/정상 Boot Manager를 선택합니다. 이번 실행의 복구는 미검증입니다. 한 번만 실행하고 재시도 전 캡처를 보존합니다. 스테이징 전 테스트25 원본/기존EFI를 보존·검증해야 합니다.
+
+[Physical result / 실제 결과](AD104-TWENTY-SIXTH-RESULT.ko.md).

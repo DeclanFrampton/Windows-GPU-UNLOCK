@@ -15,3 +15,5 @@ Regression mocks exercise both nine-word25 and eight-word26 modes, exact address
 Manifest mailbox-only=true, additionalreads16, CanReadDmaControl=false, firmwareexecution/unlock=false.
 
 Save work, fully shut down, wait10seconds, bootUEFIUSB, Shift+G once. Wait10seconds then tap Shift+V every2seconds up to3minutes. A deliberate guard hold cannot be resumed with keys. If noWindows after10minutes, poweroff/removeUSB/select normalWindowsBootManager. Recovery remains unproven for this run. Run once; preserve captures before retry. Test25 originals/oldEFI must be archived and verified before staging.
+
+[Physical result / 실제 결과](AD104-TWENTY-SIXTH-RESULT.en.md).
