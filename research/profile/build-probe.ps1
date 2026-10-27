@@ -6,7 +6,8 @@
 # DMA or firmware variable writes. Builds files only.
 param([Parameter(Mandatory,ParameterSetName='Gpt')][guid]$WindowsEspGuid,
  [Parameter(Mandatory,ParameterSetName='Mbr')][switch]$WindowsMbr,
- [switch]$Ad104Msi,[switch]$Ad104Metadata,[switch]$Ad104FirmwareRom,[switch]$Ad104Resources,[switch]$Ad104Preflight,[switch]$Ad104EdidTest,[switch]$Ad104OutputObservation,[switch]$Ad104PcdCapture,[switch]$Ad104TextTest,[switch]$Ad104GopTest,[switch]$Ad104ConsumersTest,[switch]$Ad104OwnerChildTest,[string]$Clang='clang',[string]$LldLink='lld-link',[string]$Python='python')
+ [switch]$Ad104Msi,[switch]$Ad104Metadata,[switch]$Ad104FirmwareRom,[switch]$Ad104Resources,[switch]$Ad104Preflight,[switch]$Ad104EdidTest,[switch]$Ad104OutputObservation,[switch]$Ad104PcdCapture,[switch]$Ad104TextTest,[switch]$Ad104GopTest,[switch]$Ad104ConsumersTest,[switch]$Ad104OwnerChildTest,[string]$Clang='clang',[string]$LldLink='lld-link',[string]$Python='python',
+ [ValidateRange(1,255)][int]$TargetBus=1)
 $ErrorActionPreference='Stop'
 if($Ad104Metadata -and !$Ad104Msi){throw 'Ad104Metadata requires Ad104Msi'}
 if($Ad104FirmwareRom -and !$Ad104Metadata){throw 'Ad104FirmwareRom requires Ad104Metadata'}
@@ -90,6 +91,7 @@ try {
  if($Ad104ConsumersTest){$defines+='-DGU_AD104_CONSUMERS_TEST'}
  if($Ad104GopTest){$defines+='-DGU_AD104_GOP_TEST'}
  if($WindowsMbr){$defines+='-DGU_DIAGNOSTIC_MBR';if(!$Ad104Msi){$defines+='-DGU_USB_MEDIA'}}
+ if($TargetBus -ne 1){$defines+=('-DGU_PROBE_BUS=0x{0:x}U' -f $TargetBus)}
  $objects=@()
  foreach($source in $sources) {
   $obj="$out/"+[IO.Path]::GetFileNameWithoutExtension($source)+'.obj'

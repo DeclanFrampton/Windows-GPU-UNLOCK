@@ -62,6 +62,14 @@
 #if defined(GU_PROBE_DUMP_PROM) || defined(GU_PROFILE_H610M_3060) || defined(GU_PROFILE_PROBE_H610M_3060) || (defined(GU_DIAGNOSTIC_ONLY) && defined(GU_USB_MEDIA))
 #define GU_PROBE_PRESERVE_CAPTURE 1
 #endif
+/* PCI bus of the single deep-read target. Reviewed profiles all sit at 01:00.0;
+ * AM4 boards commonly place the CPU x16 slot on a higher bus (e.g. 0x2b). */
+#ifndef GU_PROBE_BUS
+#define GU_PROBE_BUS 1U
+#endif
+#if defined(GU_PROBE_BUS) && !defined(GU_DIAGNOSTIC_ONLY) && GU_PROBE_BUS != 1U
+#error A non-default GU_PROBE_BUS is only for the read-only diagnostic probe
+#endif
 
 VOID Text(CAPTURE *c,const char *s);
 VOID Hex(CAPTURE *c,UINT64 v,UINTN digits);
@@ -227,7 +235,7 @@ static BOOLEAN ProbeUnchanged(CAPTURE *c,EFI_HANDLE handle,EFI_PCI_IO_PROTOCOL *
 #ifdef GU_PROBE_AD104_MSI
      !location || seg!=location[0] || bus!=location[1] || dev!=location[2] || fun!=location[3] ||
 #else
-     seg || bus!=1 || dev || fun ||
+     seg || bus!=GU_PROBE_BUS || dev || fun ||
 #endif
      io->Pci.Read(io,EfiPciIoWidthUint32,0,64,now)!=EFI_SUCCESS)return FALSE;
 #ifndef GU_PROBE_AD104_MSI
@@ -421,6 +429,11 @@ static VOID ProbeBar(CAPTURE *c,EFI_PCI_IO_PROTOCOL *io,UINT32 bar,EFI_FILE_PROT
   if(!ProbeEnvelope(c,io,cfg)){Problem(c,"probe-unreviewed-envelope",EFI_UNSUPPORTED);return;}
   s=c->Table->BootServices->AllocatePool(EfiBootServicesData,0x100000,(VOID **)&page);
   if(s!=EFI_SUCCESS || !page){Problem(c,"prom-alloc",s==EFI_SUCCESS?EFI_OUT_OF_RESOURCES:s);return;}
+  /* The release's CapturePermit requires the PciIo attribute cache to match the raw IO/MEM/BME
+   * command bits. Record it here, read-only (Get only), so a local profile can be refused before
+   * any release instead of stopping mid-release. A protocol call, so it precedes the recheck. */
+  UINT64 pciAttributes=0;
+  EFI_STATUS attributesStatus=io->Attributes?io->Attributes(io,EfiPciIoAttributeOperationGet,0,&pciAttributes):EFI_UNSUPPORTED;
   if(!ProbeUnchanged(c,handle,io,cfg,NULL)) {
     c->Table->BootServices->FreePool(page);Problem(c,"probe-identity-changed",EFI_NOT_READY);return;
   }
@@ -442,6 +455,9 @@ static VOID ProbeBar(CAPTURE *c,EFI_PCI_IO_PROTOCOL *io,UINT32 bar,EFI_FILE_PROT
   EFI_STATUS promStatus=s;
 #endif
   Text(c,"probe-bar0 base=0x");Hex(c,bar,16);End(c);
+#ifdef GU_CHECKED_PROBE
+  Text(c,"pci-attributes status=0x");Hex(c,attributesStatus,16);Text(c," value=0x");Hex(c,pciAttributes,16);End(c);
+#endif
   for(UINTN i=0;i<sizeof(offs)/sizeof(offs[0]);i++) {
     UINT32 v=0xdeadbeef;
 #ifdef GU_CHECKED_PROBE

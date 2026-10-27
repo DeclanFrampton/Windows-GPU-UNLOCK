@@ -5,6 +5,19 @@
 Experimental UEFI GPU unlock and direct Windows handoff, expanded through
 community contributions.
 
+[![Join our Discord community](https://img.shields.io/badge/Join%20Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/WjKsjEqxF)
+[![View compatibility and supported configurations](https://img.shields.io/badge/Compatibility-455A64?style=for-the-badge)](docs/COMPATIBILITY.en.md)
+[![Contribute research and improvements](https://img.shields.io/badge/Contribute-37474F?style=for-the-badge&logo=github&logoColor=white)](docs/CONTRIBUTING.en.md)
+
+## Community
+
+Join our [Discord community](https://discord.gg/WjKsjEqxF) for conversations,
+work-in-progress findings, and collaborative development and research.
+Keep substantial research results, reproducible test reports, code reviews,
+and project decisions in [GitHub issues](https://github.com/impacifist/Windows-GPU-UNLOCK/issues)
+and pull requests so everyone can find and review them. Please read the
+[community rules](docs/DISCORD-RULES.en.md).
+
 ## GPU support
 
 **Success reports apply to specific cards and systems, not every card of the same
