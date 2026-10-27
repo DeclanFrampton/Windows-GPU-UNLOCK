@@ -3,11 +3,36 @@
 #define GU_AD104_GOP_TEST
 #define GU_AD104_CONSUMERS_TEST
 #define GU_AD104_OWNER_CHILD_TEST
+#pragma push_macro("main")
+#undef main
 #define main OriginalMain
 #include "test_ad104_edid.c"
 #undef main
+#pragma pop_macro("main")
 static int OwnerFault,OwnerCalls,AfterFreeReads,OwnerFlushes;
+#ifdef GU_AD104_PARENT_TEST
+static int ParentFault,ParentCalls,ParentFlushes,ParentPostFlushes;
+#endif
 static EFI_STATUS EFIAPI OwnerStop(EFI_DRIVER_BINDING_PROTOCOL *d,EFI_HANDLE gpu,UINTN n,EFI_HANDLE *child) {
+#ifdef GU_AD104_PARENT_TEST
+  if(n==0) {
+    Check(d==&Drivers[3] && gpu==(VOID *)1 && !child && ParentAttempted,"exact zero-child parent ABI");
+    ParentCalls++;
+    if(ParentFault==1)return EFI_DEVICE_ERROR;
+    Stage=5;Missing=ParentFault==3?-1:0;Config[1]&=~7U;CurrentAttributes=0;
+    if(ParentFault==4)Config[1]|=4;
+    if(ParentFault==5)CurrentAttributes=0x718;
+    if(ParentFault==6){Config[1]|=3;CurrentAttributes=0x300;}
+    if(ParentFault==7)Config[4]++;
+    if(ParentFault==8)*(UINT64 *)(Data[0]+0x5530)=0;
+    if(ParentFault==9)Input.WaitForKey=(VOID *)2;
+    if(ParentFault==15)Config[1]^=0x10000;
+    if(ParentFault==16)HideChild=0;
+    if(ParentFault==19)Io.Pci.Read=NULL;
+    if(ParentFault==20)SupportedAttributes^=0x100;
+    return ParentFault==2?EFI_DEVICE_ERROR:EFI_SUCCESS;
+  }
+#endif
   Check(d==&Drivers[3] && gpu==(VOID *)1 && n==1 && child && *child==(VOID *)2,"direct one-child ABI only, never zero-child Stop");
   Check(Calls==3 && OwnerChildAttempted && GuTextOutputDisabled,"prior stages and one-shot intent");
   OwnerCalls++;
@@ -20,10 +45,20 @@ static EFI_STATUS EFIAPI OwnerStop(EFI_DRIVER_BINDING_PROTOCOL *d,EFI_HANDLE gpu
   return OwnerFault==2?EFI_DEVICE_ERROR:EFI_SUCCESS;
 }
 static EFI_STATUS EFIAPI OwnerHandle(EFI_HANDLE h,EFI_GUID *g,VOID **out) {
-  if(Stage==4 && h==(VOID *)2){AfterFreeReads++;Check(0,"no protocol access on freed child");}
+#ifdef GU_AD104_PARENT_TEST
+  if(Stage==5 && ParentFault==21 && h==(VOID *)1 && PfEqual(g,&PciGuidL,sizeof(*g))){*out=NULL;return EFI_NOT_FOUND;}
+#endif
+  if(Stage>=4 && h==(VOID *)2){AfterFreeReads++;Check(0,"no protocol access on freed child");}
   return EdHandle(h,g,out);
 }
 static EFI_STATUS EFIAPI OwnerFlush(EFI_FILE_PROTOCOL *f) {
+#ifdef GU_AD104_PARENT_TEST
+  if(Stage==4 && ++ParentFlushes==2) {
+    if(ParentFault==10)return EFI_DEVICE_ERROR;
+    if(ParentFault==11)Drivers[3].Stop=(VOID *)((UINTN)OwnerStop+1);
+  }
+  if(Stage==5 && ++ParentPostFlushes==2 && ParentFault==14)return EFI_DEVICE_ERROR;
+#endif
   if(Stage==3 && ++OwnerFlushes==2) {
     if(OwnerFault==9)return EFI_DEVICE_ERROR;
     if(OwnerFault==13)Drivers[3].Stop=(VOID *)((UINTN)OwnerStop+1);
@@ -33,6 +68,12 @@ static EFI_STATUS EFIAPI OwnerFlush(EFI_FILE_PROTOCOL *f) {
 }
 static EFI_STATUS EFIAPI OwnerKey(EFI_SIMPLE_TEXT_INPUT_PROTOCOL *i,EFI_INPUT_KEY *k) {
   EFI_STATUS s=ReadKey(i,k);
+#ifdef GU_AD104_PARENT_TEST
+  if(s==EFI_SUCCESS && Stage==5) {
+    if(ParentFault==12)Config[1]|=7;
+    if(ParentFault==13)k->UnicodeChar='x';
+  }
+#endif
   if(s==EFI_SUCCESS && Stage==4) {
     if(OwnerFault==10)Config[1]=3;
     if(OwnerFault==11)k->UnicodeChar='x';

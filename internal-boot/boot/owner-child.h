@@ -24,6 +24,9 @@ static EFI_STATUS OwnerInvoke(EFI_DRIVER_BINDING_PROTOCOL *binding,EFI_HANDLE gp
    * Unlike DisconnectController, this cannot append a zero-child parent Stop. */
   return binding->Stop(binding,gpu,1,&child);
 }
+#ifdef GU_AD104_PARENT_TEST
+#include "owner-parent.h"
+#endif
 static EFI_STATUS OwnerChildStep(CAPTURE *c,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *io,
                                  const PF_PIN *pins,const ED_STATE *before) {
   EFI_SYSTEM_TABLE *t=c->Table;static ED_STATE pre,one,two,final;
@@ -36,7 +39,7 @@ static EFI_STATUS OwnerChildStep(CAPTURE *c,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *
   if(s!=EFI_SUCCESS || !binding || binding->DriverBindingHandle!=pre.Drivers.Agent[3] ||
      binding->ImageHandle!=pre.Drivers.Image[3] || binding->Version!=pins[3].Version ||
      (UINTN)binding->Stop!=(UINTN)pre.Drivers.Base[3]+pins[3].Stop)return EFI_NOT_READY;
-  Text(c,"ad104-display intent=direct-one-child-stop agent=img29 no-parent-stop=1 no-retry=1\r\n");
+  Text(c,"ad104-display intent=direct-one-child-stop agent=img29 parent-stage-separate=1 no-retry=1\r\n");
   if(EdFlush(c)!=EFI_SUCCESS)return c->Io;
   s=EdCollectMask(t,gpu,io,pins,TRUE,0x3c,&pre);
   if(s!=EFI_SUCCESS || !PfEqual(before,&pre,sizeof(pre)) ||
@@ -56,6 +59,9 @@ static EFI_STATUS OwnerChildStep(CAPTURE *c,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *
     OwnerPost(&pre,&one) && OwnerPost(&pre,&two);
   if(EdFlush(c)!=EFI_SUCCESS)return c->Io;
   if(!good)return EFI_NOT_READY;
+#ifdef GU_AD104_PARENT_TEST
+  return ParentStep(c,gpu,io,pins,&two);
+#endif
   s=EdKey(t,'V',NULL);
   a=OwnerCollect(c,gpu,io,pins,pre.Drivers.Child,&final);gone=OwnerGone(t,pre.Drivers.Child);
   EdStatus(c,"owner-input-after",s);EdStatus(c,"owner-final-post",a);EdStatus(c,"owner-final-absent",gone);

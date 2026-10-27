@@ -189,7 +189,11 @@ static EFI_STATUS EdRun(CAPTURE *c,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *io,const 
 #ifdef GU_AD104_GOP_TEST
   #ifdef GU_AD104_CONSUMERS_TEST
 #ifdef GU_AD104_OWNER_CHILD_TEST
+#ifdef GU_AD104_PARENT_TEST
+  s=EdKey(t,'G',L"PARENT STOP TEST: prior four stages THEN direct IMG29 zero-child Stop. May disable IO/MEM/BME/VGA. No restore/unlock. Recovery unproven.\r\nG permits all FIVE stages. Display/input/Windows may fail. Wait five seconds then tap uppercase V every two seconds up to one minute. No second prompt.\r\n");
+#else
   s=EdKey(t,'G',L"OWNER CHILD TEST: text, GOP consumer, EDID, then DIRECT IMG29 one-child Stop. No parent Stop. Recovery unproven.\r\nG permits all FOUR stages. GOP may be freed; legacy video may reset. Wait five seconds then tap uppercase V every two seconds up to one minute. No second prompt.\r\n");
+#endif
 #else
   s=EdKey(t,'G',L"CONSUMER TEST: text THEN GOP consumer THEN EDID detach. PCI owner retained. Recovery unproven.\r\nUppercase G permits all THREE stages. Wait five seconds then tap uppercase V every two seconds up to one minute. No second prompt. Any other key stops.\r\n");
 #endif

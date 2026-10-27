@@ -1,3 +1,6 @@
+#if defined(GU_AD104_PARENT_TEST) && !defined(GU_AD104_OWNER_CHILD_TEST)
+#error Parent test requires owner child test
+#endif
 #if defined(GU_AD104_OWNER_CHILD_TEST) && !defined(GU_AD104_CONSUMERS_TEST)
 #error Owner child test requires consumers test
 #endif

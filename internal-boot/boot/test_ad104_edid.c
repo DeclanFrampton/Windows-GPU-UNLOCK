@@ -13,6 +13,7 @@ static EFI_FILE_PROTOCOL File;
 static EFI_SIMPLE_TEXT_INPUT_PROTOCOL Input;
 static EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL Output;
 static UINT32 Config[64];
+static UINT64 CurrentAttributes,SupportedAttributes;
 #ifdef GU_AD104_GOP_TEST
 static int GopFault,ProtocolReads;
 #ifdef GU_AD104_CONSUMERS_TEST
@@ -75,8 +76,8 @@ static EFI_STATUS EFIAPI Bar(EFI_PCI_IO_PROTOCOL *io,UINT8 index,UINT64 *support
 }
 static EFI_STATUS EFIAPI Attributes(EFI_PCI_IO_PROTOCOL *io,EFI_PCI_IO_PROTOCOL_ATTRIBUTE_OPERATION op,UINT64 value,UINT64 *out) {
   (void)io;(void)value;
-  if(op==EfiPciIoAttributeOperationGet){*out=0x718;return EFI_SUCCESS;}
-  if(op==EfiPciIoAttributeOperationSupported){*out=0x1b77b;return EFI_SUCCESS;}
+  if(op==EfiPciIoAttributeOperationGet){*out=CurrentAttributes;return EFI_SUCCESS;}
+  if(op==EfiPciIoAttributeOperationSupported){*out=SupportedAttributes;return EFI_SUCCESS;}
   Check(0,"attribute write forbidden");return EFI_UNSUPPORTED;
 }
 static EFI_STATUS EFIAPI Write(EFI_FILE_PROTOCOL *f,UINTN *n,VOID *p) {
@@ -188,7 +189,7 @@ static EFI_STATUS EFIAPI Disconnect(EFI_HANDLE child,EFI_HANDLE agent,EFI_HANDLE
   return EFI_SUCCESS;
 }
 static CAPTURE *EdSetup(int fault) {
-  Setup(0,-1);EdFault=fault;EdAttempted=FALSE;Writes=Flushes=Calls=Stage=KeyPhase=Reads=Collections=0;
+  Setup(0,-1);CurrentAttributes=0x718;SupportedAttributes=0x1b77b;EdFault=fault;EdAttempted=FALSE;Writes=Flushes=Calls=Stage=KeyPhase=Reads=Collections=0;
 #ifdef GU_AD104_GOP_TEST
   GopAttempted=FALSE;GopFault=ProtocolReads=0;
 #ifdef GU_AD104_CONSUMERS_TEST
