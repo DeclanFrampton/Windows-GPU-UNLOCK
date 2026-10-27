@@ -497,6 +497,11 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE Image,EFI_SYSTEM_TABLE *St) {
   GU_HANDOFF_OPS ops={NULL,Prepare,Select,Record,Unlock,Windows};
   s=GuHandoffFlow(&ops);
 #endif
+#if defined(GU_AD104_TEXT_TEST)
+  /* Console protocols may already be gone. Persist the recovery instruction;
+   * do not call detached display protocols just to announce the stop. */
+  (void)Record(NULL,"manual-power-off-required-no-key-can-resume",s);
+#endif
   (void)Record(NULL,"handoff-stopped",s);
 #ifdef GU_FULL_UNLOCK
   ScreenStatus("full-flow-returned",s);

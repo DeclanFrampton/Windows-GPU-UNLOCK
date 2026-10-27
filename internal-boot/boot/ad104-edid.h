@@ -191,7 +191,7 @@ static EFI_STATUS EdRun(CAPTURE *c,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *io,const 
 #ifdef GU_AD104_OWNER_CHILD_TEST
 #ifdef GU_AD104_PARENT_TEST
 #ifdef GU_AD104_DECODE_READ_TEST
-  s=EdKey(t,'G',L"DECODE + REGISTER TEST: five proven stops THEN enable IO/MEM only; BME stays off. Two bounded BAR0 register batches. No unlock or automatic rollback.\r\nG permits ALL stages. Recovery unproven. Wait five seconds then tap uppercase V every two seconds up to one minute. No second prompt.\r\n");
+  s=EdKey(t,'G',L"DECODE + REGISTER TEST: five proven stops THEN enable IO/MEM only; BME stays off. Two bounded BAR0 register batches. No unlock or automatic rollback.\r\nG permits ALL stages. Recovery unproven.\r\nDISPLAY WILL STOP UPDATING after G. A blinking cursor is NOT a progress indicator.\r\nWait five seconds, then tap Shift+V every two seconds for up to one minute.\r\nV is accepted ONLY if every test passes. A failed guard enters a permanent STOP; V cannot resume it.\r\nIf Windows has not started within five minutes, power off manually, remove this USB, and choose normal Windows Boot Manager. Recovery is unproven.\r\nDo not repeat this USB test until its captures have been checked. No automatic reboot or rollback.\r\n");
 #else
   s=EdKey(t,'G',L"PARENT STOP TEST: prior four stages THEN direct IMG29 zero-child Stop. May disable IO/MEM/BME/VGA. No restore/unlock. Recovery unproven.\r\nG permits all FIVE stages. Display/input/Windows may fail. Wait five seconds then tap uppercase V every two seconds up to one minute. No second prompt.\r\n");
 #endif
