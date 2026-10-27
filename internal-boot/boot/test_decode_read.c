@@ -27,10 +27,14 @@ static EFI_STATUS EFIAPI ReadBar(EFI_PCI_IO_PROTOCOL *io,EFI_PCI_IO_PROTOCOL_WID
     if(FalconFault==22 && offset==0x823820)value^=1;
     if(FalconFault==23 && j==4)Io.Mem.Read=NULL;
     if(FalconFault==24 && n==FalconWords-1)Config[1]|=4;
-    if(FalconFault==25 && n==FalconWords+3)value=42;
+    if(FalconFault==40 && n==FalconWords+3)value=42;
 #ifdef GU_AD104_FALCON_CAPS_TEST
     if(FalconFault>=200 && FalconFault<=202 && n>=FalconWords && j==(UINTN)(4+FalconFault-200))value=1;
     if(FalconFault>=300 && FalconFault<=305 && j==(UINTN)(4+(FalconFault-300)/2))value=FalconFault%2?0xbadf5620:MAX_UINT32;
+#endif
+#ifdef GU_AD104_FALCON_CORE_TEST
+    if(FalconFault>=400 && FalconFault<=402 && n>=FalconWords && j==(UINTN)(7+FalconFault-400))value=0x91;
+    if(FalconFault>=500 && FalconFault<=505 && j==(UINTN)(7+(FalconFault-500)/2))value=FalconFault%2?0xbadf5620:MAX_UINT32;
 #endif
     *(UINT32 *)out=value;return EFI_SUCCESS;
   }
@@ -207,12 +211,22 @@ int main(void) {
     c=FullSetup(0);FalconFault=fault;
     Check(EdRun(c,(VOID *)1,&Io,Pins)!=EFI_SUCCESS && !OffCalls && MmioCalls==262325+(fault-300)/2,"every capability register sentinel blocks remaining reads");
   }
-  for(int position=18;position<22;position++){
+  for(int position=18;position<2*FalconWords;position++){
     c=FullSetup(0);FalconFault=100+position;
     Check(EdRun(c,(VOID *)1,&Io,Pins)!=EFI_SUCCESS && !OffCalls && MmioCalls==262321+position,"capability tail read errors stop remaining reads");
   }
 #endif
-  c=FullSetup(0);FalconAttempted=FALSE;FalconFault=25;
+#ifdef GU_AD104_FALCON_CORE_TEST
+  for(int fault=400;fault<=402;fault++){
+    c=FullSetup(0);FalconFault=fault;
+    Check(EdRun(c,(VOID *)1,&Io,Pins)==EFI_SUCCESS && OffCalls==1,"new core-state field drift remains observational");
+  }
+  for(int fault=500;fault<=505;fault++){
+    c=FullSetup(0);FalconFault=fault;
+    Check(EdRun(c,(VOID *)1,&Io,Pins)!=EFI_SUCCESS && !OffCalls && MmioCalls==262328+(fault-500)/2,"every new core register sentinel blocks remaining reads");
+  }
+#endif
+  c=FullSetup(0);FalconAttempted=FALSE;FalconFault=40;
   Check(EdRun(c,(VOID *)1,&Io,Pins)==EFI_SUCCESS && OffCalls==1,"mailbox drift remains observational");
   FalconFault=0;
 #endif
