@@ -104,3 +104,5 @@ are not equally difficult: this is checklist completion, not an unlock probabili
 time estimate or number of remaining boots. Cold-entry or immutable hardware
 restrictions can still block execution. Next work follows the recorded ROM and
 admission differences, not a copied reference profile or callback success alone.
+
+[Issue54 validation and process corrections](ISSUE54-VALIDATION.en.md): pinned source/report mismatches, claim boundaries and read-only outcome summaries. The staged test31 remains unchanged.

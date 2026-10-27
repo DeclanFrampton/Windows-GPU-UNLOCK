@@ -1,6 +1,6 @@
-# AD104 runs 13â€“18: PCI release, live reads and Windows recovery
+# AD104 runs 13–18: PCI release, live reads and Windows recovery
 
-English | [í•œêµ­ì–´](AD104-THIRTEENTH-EIGHTEENTH-RESULT.ko.md)
+English | [한국어](AD104-THIRTEENTH-EIGHTEENTH-RESULT.ko.md)
 
 ## Outcome
 
@@ -21,14 +21,14 @@ analysis; source captures are retained and never overwritten during staging.
 
 | Run | Observed result | Windows observation |
 | --- | --- | --- |
-| 13 | Direct IMG29 zero-child parent Stop succeeded after the four previous stops; graph 3â†’2, attributes 0x718â†’0, PCI command 7â†’0; repeated checks passed | User returned to Windows |
+| 13 | Direct IMG29 zero-child parent Stop succeeded after the four previous stops; graph 3→2, attributes 0x718→0, PCI command 7→0; repeated checks passed | User returned to Windows |
 | 14 | Enable(0x300) succeeded; attributes 0x300/command 3; first batch attempted 22 reads, last offset 0x840100 returned 0xbadf5620; guard skipped batch two and deliberately held | Manual power-off and normal Windows boot |
 | 15 | Excluded 0x840100; replaced it with a second chip-ID read. Both 22-read batches matched, V and final state checks passed | No visible boot; manual recovery |
 | 16 | Same capture; root Close independently returned success; last marker preceded main-log Close and StartImage | No visible boot; manual recovery |
 | 17 | Independent STATUS.TXT remained open: both root and main-log Close returned success; StartImage-next persisted, no returned status | No visible boot; manual recovery |
 | 18 | Same capture, then one Disable(0x300) after V; repeated whole-state comparison matched saved post-parent state, command 0/attributes 0; final verification passed | User confirmed direct Windows return |
 
-The complete relevant graph progression is 8â†’6â†’5â†’4â†’3â†’2: text consumer,
+The complete relevant graph progression is 8→6→5→4→3→2: text consumer,
 GOP consumer, EDID consumer, direct owner-child Stop, direct parent Stop.
 Only the two pointer relationships remain; shared flag is zero, pointer counts
 remain 1/1. Parent Stop removes I/O/memory/BME/VGA decoding. Limited Enable(0x300)
@@ -72,7 +72,7 @@ The existing 150,016-byte firmware RAM ROM capture is distinct from a physical
 
 A blinking cursor cannot distinguish waiting for V, a deliberate guard stop,
 an ordinary error return, firmware/boot-manager stall, or display-only failure.
-Run 14 was a deliberate guard stop before the V wait. Runs 15â€“18 accepted V.
+Run 14 was a deliberate guard stop before the V wait. Runs 15–18 accepted V.
 The original file-close log could not distinguish main-log Close from StartImage.
 STATUS.TXT is now created before detach, refuses overwrite and aliased handles,
 and records bounded, flushed stage results independently of the main log.
@@ -90,8 +90,8 @@ callback errors, exact full-state equality twice, and another check after flush.
 No freed GOP/child allocations are queried after removal. Failure holds without
 retry, reset, reconnect or automatic rollback.
 
-The monitor runs Windows at 5120Ã—1440, 144 Hz, while captured EFI GOP is
-1024Ã—768. Full-panel scaling explains roughly 2.67Ã— horizontal stretching.
+The monitor runs Windows at 5120×1440, 144 Hz, while captured EFI GOP is
+1024×768. Full-panel scaling explains roughly 2.67× horizontal stretching.
 Shorter text does not correct aspect ratio. No firmware display mode was changed;
 changing it would add another hardware-state variable to the experiment.
 

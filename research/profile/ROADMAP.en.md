@@ -50,3 +50,5 @@ is not guaranteed and broad platform safety has not been established.
 
 Latest: [test29 guarded recovery](AD104-TWENTY-NINTH-RESULT.en.md), then [test30 BCR refusal/hold](AD104-THIRTIETH-RESULT.en.md). Operator recollection of30 recovery is uncertain; logs establish deliberate hold before Windows handoff.
 Next: [test31 measured-input audit](AD104-THIRTY-FIRST-BOOT.en.md), omitting all three refused registers. Tests22–24 established CPU-owned parser/patch/signature assembly;25–30 separated accessible observations from rejected data and one exact recovery path. None completes firmware-entry qualification. Full layout requires parsed/pinned assets, not file-byte counts. SS1/VGA/reference-ROM differences remain; repeated captures or arithmetic alone do not count as unlock/admission.
+
+[Issue54 validation and process corrections](ISSUE54-VALIDATION.en.md): pinned source/report mismatches, claim boundaries and read-only outcome summaries. The staged test31 remains unchanged.
