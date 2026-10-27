@@ -49,6 +49,10 @@ try {
  if($LASTEXITCODE -ne 0){throw 'PROM header compile failed'}
  & ./build/capture-tests/prom-header.exe
  if($LASTEXITCODE -ne 0){throw 'PROM header mocks failed'}
+ & $Clang @flags -Wno-unused-function -DGU_AD104_DECODE_OFF_TEST -DGU_AD104_DELAYED_READ_TEST -DGU_AD104_PROM_HEADER_TEST -DGU_AD104_PROM_FULL_TEST test_decode_read.c ../unlock/sha256.c -o build/capture-tests/prom-full.exe
+ if($LASTEXITCODE -ne 0){throw 'Full PROM compile failed'}
+ & ./build/capture-tests/prom-full.exe
+ if($LASTEXITCODE -ne 0){throw 'Full PROM mocks failed'}
  foreach($name in @('pcd_producer','text_display','text_lifecycle','gop_lifecycle','consumers_lifecycle','owner_child','owner_parent','decode_read')) {
   & $Clang @flags -Wno-unused-function "test_$name.c" ../unlock/sha256.c -o "build/capture-tests/$name.exe"
   if($LASTEXITCODE -ne 0){throw "$name mocks compile failed"}
@@ -71,6 +75,10 @@ try {
  if($LASTEXITCODE -ne 0){throw 'Decode handoff compile failed'}
  & ./build/capture-tests/decode-handoff.exe
  if($LASTEXITCODE -ne 0){throw 'Decode handoff checks failed'}
+ & $Clang @flags -DGU_DIAGNOSTIC_ONLY -DGU_USB_PROBE -DGU_AD104_TEXT_TEST -DGU_AD104_DECODE_READ_TEST -DGU_AD104_DECODE_OFF_TEST -DGU_AD104_DELAYED_READ_TEST -DGU_AD104_PROM_HEADER_TEST -DGU_AD104_PROM_FULL_TEST test_edid_handoff.c ../unlock/sha256.c -o build/capture-tests/full-prom-handoff.exe
+ if($LASTEXITCODE -ne 0){throw 'Full PROM handoff compile failed'}
+ & ./build/capture-tests/full-prom-handoff.exe
+ if($LASTEXITCODE -ne 0){throw 'Full PROM handoff checks failed'}
  & $Clang @flags -DGU_DIAGNOSTIC_ONLY -DGU_USB_PROBE -DGU_AD104_TEXT_TEST test_edid_handoff.c ../unlock/sha256.c -o build/capture-tests/text-handoff.exe
  if($LASTEXITCODE -ne 0){throw 'Text handoff mocks compile failed'}
  & ./build/capture-tests/text-handoff.exe

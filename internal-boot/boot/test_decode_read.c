@@ -11,6 +11,30 @@ static EFI_STATUS EFIAPI ReadBar(EFI_PCI_IO_PROTOCOL *io,EFI_PCI_IO_PROTOCOL_WID
                                 UINT8 bar,UINT64 offset,UINTN count,VOID *out) {
   (void)io;Check(width==EfiPciIoWidthUint32 && !bar && count==1 && DecodeCalls==1 && Stage==6,
     "MMIO only after explicit decode Enable");
+#ifdef GU_AD104_PROM_FULL_TEST
+  if(MmioCalls>=174) {
+    UINTN n=MmioCalls-174;
+    Check(n<262146,"bounded full PROM plus bookends");
+    if(!n)PromFileCalls=Writes+Flushes;
+    Check(Writes+Flushes==PromFileCalls,"no file callbacks within full PROM reads");
+    Check(offset==(n<262144?0x300000+n*4:n==262144?0x300000:0),"contiguous exact 1 MiB window then signature/chip");
+    MmioCalls++;UINT32 v=(UINT32)n;
+    if(n<128 || n==262144)v=0;
+    if(!n || n==262144)v=0xaa55;
+    if(n==6)v=0x170;if(n==92)v=0x52494350;if(n==93)v=0x278210de;
+    if(n==94)v=0x00180000;if(n==96)v=0x7e;
+    if(n==200)v=MAX_UINT32;if(n==201)v=0xbadf5620;
+    if(n==262145)v=0x194000a1;
+    if(PromFault>=2000 && n==(UINTN)(PromFault-2000))return EFI_DEVICE_ERROR;
+    if(PromFault==20 && !n)v=MAX_UINT32;
+    if(PromFault==21 && n==20)v^=1;
+    if(PromFault==22 && n==262144)v^=1;
+    if(PromFault==23 && n==262145)v=0;
+    if(PromFault==24 && n==1024)Io.Mem.Read=NULL;
+    if(PromFault==25 && n==262145)Config[1]|=4;
+    *(UINT32 *)out=v;return EFI_SUCCESS;
+  }
+#endif
 #ifdef GU_AD104_PROM_HEADER_TEST
   if(MmioCalls>=44) {
     UINTN n=MmioCalls-44;Check(n<130,"bounded header and signature/chip bookends");
@@ -75,7 +99,61 @@ static CAPTURE *DecodeSetup(int fault) {
 #endif
   return c;
 }
-#ifdef GU_AD104_PROM_HEADER_TEST
+#ifdef GU_AD104_PROM_FULL_TEST
+static EFI_FILE_PROTOCOL FullRoot,FullFile,FullWitness;
+static UINT8 SavedProm[0x100000];static UINTN FilePosition;
+static VOID *FullAllocation;static EFI_ALLOCATE_POOL SavedAllocate;static EFI_FREE_POOL SavedFree;
+static EFI_STATUS EFIAPI FullAllocate(EFI_MEMORY_TYPE type,UINTN n,VOID **out) {
+  if(n==0x200000){if(PromFault==52){*out=NULL;return EFI_SUCCESS;}if(PromFault==26)return EFI_OUT_OF_RESOURCES;EFI_STATUS s=EFI_SUCCESS;*out=calloc(1,n);if(!*out)s=EFI_OUT_OF_RESOURCES;FullAllocation=*out;if(PromFault==38)Config[1]|=4;return s;}
+  return SavedAllocate?SavedAllocate(type,n,out):EFI_UNSUPPORTED;
+}
+static EFI_STATUS EFIAPI FullFree(VOID *p) {
+  BOOLEAN full=p==FullAllocation;EFI_STATUS s=SavedFree(p);
+  if(full){FullAllocation=NULL;if(PromFault==41)Config[1]|=4;if(PromFault==36)return EFI_DEVICE_ERROR;}return s;
+}
+static EFI_STATUS EFIAPI FullWrite(EFI_FILE_PROTOCOL *f,UINTN *n,VOID *p) {
+  Check(f==&FullFile && *n==0x100000,"one exact PROM file write");if(PromFault==54)((UINT8 *)p)[512]^=1;memcpy(SavedProm,p,*n);
+  if(PromFault==29)(*n)--;if(PromFault==42)FullFile.Read=NULL;return EFI_SUCCESS;
+}
+static EFI_STATUS EFIAPI FullRead(EFI_FILE_PROTOCOL *f,UINTN *n,VOID *p) {
+  Check(f==&FullFile,"read back same PROM file");
+  if(*n==1){*n=PromFault==33?1:0;return EFI_SUCCESS;}
+  Check(*n==0x100000 && !FilePosition,"exact readback after seek");memcpy(p,SavedProm,*n);FilePosition=*n;
+  if(PromFault==32)(*n)--;if(PromFault==34)((UINT8 *)p)[512]^=1;if(PromFault==40)Config[1]|=4;return EFI_SUCCESS;
+}
+static EFI_STATUS EFIAPI FullSeek(EFI_FILE_PROTOCOL *f,UINT64 n){Check(f==&FullFile && !n,"seek to zero only");FilePosition=0;return PromFault==31?EFI_DEVICE_ERROR:EFI_SUCCESS;}
+static EFI_STATUS EFIAPI FullFlush(EFI_FILE_PROTOCOL *f){Check(f==&FullFile,"flush PROM only");return PromFault==30?EFI_DEVICE_ERROR:EFI_SUCCESS;}
+static EFI_STATUS EFIAPI FullClose(EFI_FILE_PROTOCOL *f){Check(f==&FullFile,"never close root/log/witness");return PromFault==35?EFI_DEVICE_ERROR:EFI_SUCCESS;}
+static EFI_STATUS EFIAPI FullOpen(EFI_FILE_PROTOCOL *f,EFI_FILE_PROTOCOL **out,CHAR16 *name,UINT64 mode,UINT64 attr) {
+  Check(f==&FullRoot && name && !attr,"only borrowed capture root");*out=NULL;
+  if(mode==EFI_FILE_MODE_READ){if(PromFault==27){*out=&FullFile;return EFI_SUCCESS;}return EFI_NOT_FOUND;}
+  Check(mode==(EFI_FILE_MODE_READ|EFI_FILE_MODE_WRITE|EFI_FILE_MODE_CREATE),"only new capture file");
+  *out=PromFault==28?&FullRoot:&FullFile;
+  if(PromFault==43)*out=&File;if(PromFault==44)*out=&FullWitness;
+  if(PromFault==47)return EFI_DEVICE_ERROR;
+  if(PromFault==48)FullFile.Read=NULL;if(PromFault==49)FullFile.Flush=NULL;if(PromFault==50)FullFile.Close=NULL;
+  if(PromFault==39)Config[1]|=4;return EFI_SUCCESS;
+}
+static CAPTURE *FullSetup(int fault) {
+  CAPTURE *c=DecodeSetup(0);OffCalls=OffFault=0;DecodeOffAttempted=PromHeaderAttempted=PromFullAttempted=FALSE;PromFault=fault;
+  PromPrefixGpu=NULL;PromPrefixIo=NULL;FullAllocation=NULL;FilePosition=0;
+  memset(&FullRoot,0,sizeof(FullRoot));memset(&FullFile,0,sizeof(FullFile));memset(&FullWitness,0,sizeof(FullWitness));
+  FullRoot.Open=FullOpen;FullFile.Write=FullWrite;FullFile.Read=FullRead;FullFile.SetPosition=FullSeek;FullFile.Flush=FullFlush;FullFile.Close=FullClose;
+  c->DumpRoot=&FullRoot;c->Witness=&FullWitness;SavedAllocate=Bs.AllocatePool;SavedFree=Bs.FreePool;Bs.AllocatePool=FullAllocate;Bs.FreePool=FullFree;return c;
+}
+int main(void) {
+  CAPTURE *c=FullSetup(0);Check(EdRun(c,(VOID *)1,&Io,Pins)==EFI_SUCCESS && OffCalls==1 && MmioCalls==262320 && !FullAllocation,"full capture/file readback then recovery");
+  for(int f=20;f<=54;f++) {
+    if(f==45 || f==46 || f==51 || f==53)continue;
+    c=FullSetup(f);Check(EdRun(c,(VOID *)1,&Io,Pins)!=EFI_SUCCESS && !OffCalls && !FullAllocation,"full read/file/cleanup/state faults block handoff");
+  }
+  int points[]={0,1,127,128,1023,1024,131072,262142,262143,262144,262145};
+  for(UINTN j=0;j<sizeof(points)/sizeof(points[0]);j++) {
+    c=FullSetup(2000+points[j]);Check(EdRun(c,(VOID *)1,&Io,Pins)!=EFI_SUCCESS && !OffCalls && MmioCalls==175+points[j] && !FullAllocation,"selected boundary transport errors stop without retry");
+  }
+  printf("PASS full PROM capture: %d checks, RAM-only mocks\n",Checks);return 0;
+}
+#elif defined(GU_AD104_PROM_HEADER_TEST)
 int main(void) {
   CAPTURE *c=DecodeSetup(0);DecodeOffAttempted=PromHeaderAttempted=FALSE;OffFault=OffCalls=PromFault=0;
   Check(EdRun(c,(VOID *)1,&Io,Pins)==EFI_SUCCESS && MmioCalls==174 && OffCalls==1,"bounded PROM header then verified recovery");

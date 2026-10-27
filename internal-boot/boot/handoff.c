@@ -43,6 +43,9 @@
 #error GU_USB_PROBE is the read-only diagnostic probe only
 #endif
 
+#if defined(GU_AD104_PROM_FULL_TEST) && !defined(GU_AD104_PROM_HEADER_TEST)
+#error Full PROM requires header and recovery tests
+#endif
 #if defined(GU_AD104_PROM_HEADER_TEST) && !defined(GU_AD104_DELAYED_READ_TEST)
 #error PROM header requires delayed read recovery
 #endif
@@ -517,7 +520,11 @@ static EFI_STATUS DetachConsole(VOID *Context) {
 static EFI_STATUS EdidThenWindows(EFI_STATUS captured,EFI_STATUS recorded) {
   if(recorded!=EFI_SUCCESS)return recorded;
   if(captured!=EFI_NOT_READY || !WindowsImage)return EFI_NOT_READY;
+#ifdef GU_AD104_PROM_FULL_TEST
+  EFI_STATUS s=GuEdidExperimentOnVolume(Table,Log,Root,Witness);
+#else
   EFI_STATUS s=GuEdidExperiment(Table,Log);
+#endif
 #ifdef GU_AD104_TEXT_TEST
   recorded=Record(NULL,"text-experiment-result",s);
 #else

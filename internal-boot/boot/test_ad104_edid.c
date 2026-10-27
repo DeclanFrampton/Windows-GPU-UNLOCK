@@ -54,6 +54,9 @@ VOID Text(CAPTURE *c,const char *s){
 #ifdef GU_AD104_PROM_HEADER_TEST
   if(strstr(s,"ad104-prom-header intent="))PromIntentSeen=1;
   if(strstr(s,"ad104-prom-header offset="))PromOutputSeen=1;
+#ifdef GU_AD104_PROM_FULL_TEST
+  if(strstr(s,"ad104-prom-full intent=") && PromFault==37)Config[1]|=4;
+#endif
 #endif
 #ifdef GU_AD104_DECODE_OFF_TEST
   if(strstr(s,"intent=one-disable-io-memory"))OffIntentSeen=1;
@@ -112,7 +115,9 @@ static EFI_STATUS EFIAPI Attributes(EFI_PCI_IO_PROTOCOL *io,EFI_PCI_IO_PROTOCOL_
 #ifdef GU_AD104_DECODE_OFF_TEST
   if(op==EfiPciIoAttributeOperationDisable) {
     Check(value==0x300 && !out && DecodeOffAttempted && MmioCalls==
-#ifdef GU_AD104_PROM_HEADER_TEST
+#ifdef GU_AD104_PROM_FULL_TEST
+    262320
+#elif defined(GU_AD104_PROM_HEADER_TEST)
     174
 #else
     44

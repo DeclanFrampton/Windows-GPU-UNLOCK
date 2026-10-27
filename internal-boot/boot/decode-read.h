@@ -32,6 +32,9 @@ static EFI_STATUS DecodeEmit(CAPTURE *c,const DECODE_READS *out,UINTN batch) {
 }
 #ifdef GU_AD104_PROM_HEADER_TEST
 static BOOLEAN PromHeaderAttempted;
+#ifdef GU_AD104_PROM_FULL_TEST
+static UINT8 PromPrefix[512];static EFI_HANDLE PromPrefixGpu;static EFI_PCI_IO_PROTOCOL *PromPrefixIo;
+#endif
 static UINT16 Prom16(const UINT8 *p){return (UINT16)(p[0]|((UINT16)p[1]<<8));}
 static EFI_STATUS PromHeader(CAPTURE *c,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *io,
                              const PF_PIN *pins,const ED_STATE *parent) {
@@ -74,9 +77,16 @@ static EFI_STATUS PromHeader(CAPTURE *c,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *io,
   if(EdFlush(c)!=EFI_SUCCESS)return c->Io;
   if(s!=EFI_SUCCESS)return s;
   s=ParentCollect(c,gpu,io,pins,parent->Drivers.Child,&state);
-  return s==EFI_SUCCESS && DecodePost(parent,&state) && io->Mem.Read==read &&
-    OwnerGone(c->Table,parent->Drivers.Child)==EFI_SUCCESS?EFI_SUCCESS:EFI_NOT_READY;
+  BOOLEAN good=s==EFI_SUCCESS && DecodePost(parent,&state) && io->Mem.Read==read &&
+    OwnerGone(c->Table,parent->Drivers.Child)==EFI_SUCCESS;
+#ifdef GU_AD104_PROM_FULL_TEST
+  if(good){for(UINTN i=0;i<512;i++)PromPrefix[i]=bytes[i];PromPrefixGpu=gpu;PromPrefixIo=io;}
+#endif
+  return good?EFI_SUCCESS:EFI_NOT_READY;
 }
+#endif
+#ifdef GU_AD104_PROM_FULL_TEST
+#include "prom-full.h"
 #endif
 #ifdef GU_AD104_DECODE_OFF_TEST
 static BOOLEAN DecodeOffAttempted;
@@ -161,6 +171,9 @@ static EFI_STATUS DecodeStep(CAPTURE *c,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *io,
   if(!good)return EFI_NOT_READY;
 #ifdef GU_AD104_PROM_HEADER_TEST
   s=PromHeader(c,gpu,io,pins,&pre);if(s!=EFI_SUCCESS)return s;
+#ifdef GU_AD104_PROM_FULL_TEST
+  s=PromFull(c,gpu,io,pins,&pre);if(s!=EFI_SUCCESS)return s;
+#endif
 #endif
   s=EdKey(t,'V',NULL);
   x=ParentCollect(c,gpu,io,pins,pre.Drivers.Child,&final);gone=OwnerGone(t,pre.Drivers.Child);

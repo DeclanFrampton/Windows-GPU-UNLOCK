@@ -12,6 +12,9 @@
 #endif
 /* GPL-2.0-only. Read-only GA10x capture for the 3070 Ti headless port.
  * PCI config reads, BAR0 Mem.Read, PROM hash, loaded-image dumps only. */
+#if defined(GU_AD104_PROM_FULL_TEST) && !defined(GU_AD104_PROM_HEADER_TEST)
+#error Full PROM requires header and recovery tests
+#endif
 #if defined(GU_AD104_PROM_HEADER_TEST) && !defined(GU_AD104_DELAYED_READ_TEST)
 #error PROM header requires delayed read recovery
 #endif
@@ -612,10 +615,21 @@ EFI_STATUS GuProbeGpu(EFI_SYSTEM_TABLE *t,CAPTURE *c) {
 BOOLEAN GuTextOutputDisabled;
 #endif
 #include "ad104-edid.h"
+#ifdef GU_AD104_PROM_FULL_TEST
+EFI_STATUS GuEdidExperimentOnVolume(EFI_SYSTEM_TABLE *t,EFI_FILE_PROTOCOL *log,EFI_FILE_PROTOCOL *root,EFI_FILE_PROTOCOL *witness) {
+  if(!root || !witness || root==log || root==witness || log==witness)return EFI_INVALID_PARAMETER;
+#else
 EFI_STATUS GuEdidExperiment(EFI_SYSTEM_TABLE *t,EFI_FILE_PROTOCOL *log) {
+#endif
   if(!t || !t->BootServices || !log || !log->Write || !log->Flush)return EFI_INVALID_PARAMETER;
   static CAPTURE c;
-  c.Table=t;c.File=log;c.DumpRoot=NULL;c.Io=EFI_SUCCESS;c.Complete=FALSE;c.Used=0;c.Total=0;
+  c.Table=t;c.File=log;
+#ifdef GU_AD104_PROM_FULL_TEST
+  c.DumpRoot=root;c.Witness=witness;
+#else
+  c.DumpRoot=NULL;
+#endif
+  c.Io=EFI_SUCCESS;c.Complete=FALSE;c.Used=0;c.Total=0;
   EFI_HANDLE *handles=NULL,gpu=NULL;EFI_PCI_IO_PROTOCOL *target=NULL;UINTN count=0,found=0;
   EFI_STATUS s=t->BootServices->LocateHandleBuffer(ByProtocol,&PciGuidL,NULL,&count,&handles);
   if(s!=EFI_SUCCESS || !handles || !count || count>1024) {
@@ -640,4 +654,10 @@ EFI_STATUS GuEdidExperiment(EFI_SYSTEM_TABLE *t,EFI_FILE_PROTOCOL *log) {
   EFI_STATUS logged=EdFlush(&c);
   return logged!=EFI_SUCCESS?logged:s;
 }
+#ifdef GU_AD104_PROM_FULL_TEST
+EFI_STATUS GuEdidExperiment(EFI_SYSTEM_TABLE *t,EFI_FILE_PROTOCOL *log) {
+  (void)t;(void)log;return EFI_INVALID_PARAMETER;
+}
+#endif
+
 #endif

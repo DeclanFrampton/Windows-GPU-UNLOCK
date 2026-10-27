@@ -28,6 +28,11 @@ static EFI_STATUS EFIAPI QuietPrint(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *o,CHAR16 *s
 EFI_STATUS GuEdidExperiment(EFI_SYSTEM_TABLE *t,EFI_FILE_PROTOCOL *f) {
   (void)t;(void)f;RunCalls++;return Failure==1?EFI_NOT_READY:EFI_SUCCESS;
 }
+#ifdef GU_AD104_PROM_FULL_TEST
+EFI_STATUS GuEdidExperimentOnVolume(EFI_SYSTEM_TABLE *t,EFI_FILE_PROTOCOL *f,EFI_FILE_PROTOCOL *r,EFI_FILE_PROTOCOL *w) {
+  CHECK(r==Root && w==Witness && r!=f && w!=f && r!=w);return GuEdidExperiment(t,f);
+}
+#endif
 static EFI_STATUS EFIAPI LogWrite(EFI_FILE_PROTOCOL *f,UINTN *n,VOID *p) {
   (void)f;(void)n;(void)p;return Failure==2?EFI_DEVICE_ERROR:EFI_SUCCESS;
 }
