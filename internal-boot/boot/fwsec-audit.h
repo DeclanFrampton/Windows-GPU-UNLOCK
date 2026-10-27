@@ -9,3 +9,11 @@ typedef struct {
 } GU_FWSEC_AUDIT;
 BOOLEAN GuAuditFwsecGeometry(const struct gpu_unlock_fwsec *f,UINTN bytes);
 EFI_STATUS GuAuditCapturedFwsec(const UINT8 *rom,UINTN bytes,GU_FWSEC_AUDIT *out);
+
+/* A synthetic command encoding experiment on disjoint scratch RAM only. */
+typedef struct {
+  BOOLEAN SourceUnchanged,PatchMatch,SelectorMatrix,ScratchIntact;
+  UINT32 ChangedBytes;
+  UINT8 PatchedHash[32];
+} GU_FWSEC_REHEARSAL;
+EFI_STATUS GuRehearseCapturedFwsec(const UINT8 *rom,UINTN bytes,UINT8 *scratch,UINTN scratchBytes,GU_FWSEC_REHEARSAL *out);

@@ -76,6 +76,21 @@ static EFI_STATUS PromFull(CAPTURE *c,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *io,con
    * new hardware failure. Preserve transport evidence and normal safe recovery. */
   if(s==EFI_SUCCESS){PromAuditLog(c,buffer);s=EdFlush(c);if(s==EFI_SUCCESS && !PromFullState(c,gpu,io,pins,parent,read))s=EFI_NOT_READY;}
 #endif
+#ifdef GU_AD104_FWSEC_REHEARSAL_TEST
+  if(s==EFI_SUCCESS){
+    GU_FWSEC_REHEARSAL rehearsal;EFI_STATUS result=GuRehearseCapturedFwsec(buffer,0x100000,buffer+0x100000,0x100000,&rehearsal);
+    UINT8 after[32];GuSha256(buffer,0x100000,after);rehearsal.SourceUnchanged=PfEqual(after,digest,32);
+    EdStatus(c,"fwsec-ram-rehearsal",result);
+    Text(c,"ad104-fwsec-rehearsal source-unchanged=");Hex(c,rehearsal.SourceUnchanged,1);
+    Text(c," patch-match=");Hex(c,rehearsal.PatchMatch,1);Text(c," selector-matrix=");Hex(c,rehearsal.SelectorMatrix,1);
+    Text(c," scratch-intact=");Hex(c,rehearsal.ScratchIntact,1);
+    Text(c," changed-bytes=0x");Hex(c,rehearsal.ChangedBytes,8);
+    Text(c," synthetic-frts=0x100000000 live-fuse-read=0 uploaded=0 executed=0 authority=0\r\n");
+    Text(c,"ad104-fwsec-rehearsal patched-ram-sha256=");for(UINTN i=0;i<32;i++)Hex(c,rehearsal.PatchedHash[i],2);End(c);
+    s=EdFlush(c);if(s==EFI_SUCCESS && (!rehearsal.ScratchIntact || !PfEqual(after,digest,32)))s=EFI_COMPROMISED_DATA;
+    if(s==EFI_SUCCESS && !PromFullState(c,gpu,io,pins,parent,read))s=EFI_NOT_READY;
+  }
+#endif
   if(s==EFI_SUCCESS)s=PromSave(c,buffer,buffer+0x100000,digest);
   EFI_STATUS freed=c->Table->BootServices->FreePool(buffer);
   if(s==EFI_SUCCESS)s=freed;
