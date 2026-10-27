@@ -1,15 +1,14 @@
 # AD104: shared consumers and the unlock proof boundary
 
-English | [í•œêµ­ì–´](AD104-UNLOCK-EVIDENCE.ko.md)
+English | [한국어](AD104-UNLOCK-EVIDENCE.ko.md)
 
 ## Latest physical result
 
-[Twelfth run](AD104-TWELFTH-RESULT.en.md): text/GOP-consumer/EDID removal followed
-by direct owner-child Stop passed. Fresh enumeration found the old GOP child
-absent; input and user-confirmed Windows return succeeded. Three relationships
-remain: PCI ownership and both pointer relationships. All ten PCI snapshots are
-identical, command `0007`/BME enabled. Parent release and unlock remain unproven.
-Earlier sections below describe dated observations.
+[Runs 13–18](AD104-THIRTEENTH-EIGHTEENTH-RESULT.en.md): parent ownership release,
+limited decode enable, two matching register batches and verified decode disable
+completed, followed by user-confirmed direct Windows return in run 18.
+SS1=5 and VGA_BASE=0x10e09 differ from the pinned AD104 reference gate.
+No unlock transaction ran. Earlier sections describe historical observations.
 
 ## Actual graph replaces the simplified fixture
 
@@ -70,7 +69,8 @@ Thirty-one Python tests pass. No new firmware was built or staged for this work.
    graph transitions, keyboard state, limited decode enable and partial-failure
    handling. A predicted BME change is not an observed cold GPU state.
 3. Hardware cold-entry checks, including the required protected-memory state,
-   must pass after release. We have not collected that register evidence yet.
+   must pass after release. Runs 15–18 now provide register evidence, but the
+   reference SS1/VGA_BASE differences are unresolved.
 4. A machine-specific transaction must report the intended state changes and
    independent readbacks, with bounded failure handling. No transaction has run.
 5. Windows/driver recovery and controlled pre/post workloads must be verified
@@ -98,10 +98,10 @@ has only been simulated.
 | Gate | Current evidence |
 | --- | --- |
 | Exact identity, ownership and live discovery | Observed; EDID transition also demonstrated |
-| Remaining text/GOP consumers and PCI-owner release | Text/GOP/EDID consumers demonstrated together; PCI owner not released |
-| Limited decode enable and cold-entry/protected-memory admission | Not demonstrated; required register evidence absent |
+| Remaining text/GOP consumers and PCI-owner release | Five stages demonstrated; parent release leaves two pointer relationships |
+| Limited decode enable and cold-entry/protected-memory admission | Limited decode and live reads demonstrated; reference SS1/VGA_BASE differences remain |
 | Machine-specific unlock transaction and independent state readback | Not run |
-| Windows recovery and controlled stock/post-unlock workloads | Combined consumer return observed; no post-unlock workload exists |
+| Windows recovery and controlled stock/post-unlock workloads | Capture then decode-off returned directly in run 18; no post-unlock workload exists |
 
 These gates are not equally difficult and cannot support a meaningful percentage,
 number of remaining boots or completion date. Cold-state admission or immutable

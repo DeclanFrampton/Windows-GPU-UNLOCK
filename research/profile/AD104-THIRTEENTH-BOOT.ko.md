@@ -1,5 +1,8 @@
 # 열세 번째 AD104 시험: PCI 소유자 Stop 직접 호출
 
+실행 결과: [13–18차 및 복구 결과](AD104-THIRTEENTH-EIGHTEENTH-RESULT.ko.md). 아래 계약은 원래 13차 후보를 설명합니다.
+
+
 [English](AD104-THIRTEENTH-BOOT.en.md) | 한국어
 
 상태: 빌드와 호스트 시험 완료, USB 준비 및 실제 실행 전입니다.

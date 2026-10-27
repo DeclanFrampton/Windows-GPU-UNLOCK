@@ -1,5 +1,8 @@
 # Thirteenth AD104 test: direct PCI-owner Stop
 
+Executed result: [runs 13–18 and recovery findings](AD104-THIRTEENTH-EIGHTEENTH-RESULT.en.md). The contract below describes the original thirteenth candidate.
+
+
 English | [한국어](AD104-THIRTEENTH-BOOT.ko.md)
 
 Status: built and host-tested; not staged or physically executed. This adds a
