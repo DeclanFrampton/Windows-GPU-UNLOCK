@@ -17,6 +17,9 @@ static BOOLEAN ParentBinding(EFI_SYSTEM_TABLE *t,const PF_PIN *pins,const ED_STA
     (*binding)->ImageHandle==s->Drivers.Image[3] && (*binding)->Version==pins[3].Version &&
     (UINTN)(*binding)->Stop==(UINTN)s->Drivers.Base[3]+pins[3].Stop;
 }
+#ifdef GU_AD104_DECODE_READ_TEST
+#include "decode-read.h"
+#endif
 static EFI_STATUS ParentStep(CAPTURE *c,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *io,
                              const PF_PIN *pins,const ED_STATE *before) {
   EFI_SYSTEM_TABLE *t=c->Table;static ED_STATE pre,one,two,final;
@@ -45,6 +48,9 @@ static EFI_STATUS ParentStep(CAPTURE *c,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *io,
     ParentPost(&pre,&one) && ParentPost(&pre,&two);
   if(EdFlush(c)!=EFI_SUCCESS)return c->Io;
   if(!good)return EFI_NOT_READY;
+#ifdef GU_AD104_DECODE_READ_TEST
+  return DecodeStep(c,gpu,io,pins,&two);
+#endif
   s=EdKey(t,'V',NULL);
   a=ParentCollect(c,gpu,io,pins,pre.Drivers.Child,&final);gone=OwnerGone(t,pre.Drivers.Child);
   EdStatus(c,"parent-input-after",s);EdStatus(c,"parent-final-post",a);EdStatus(c,"parent-final-absent",gone);

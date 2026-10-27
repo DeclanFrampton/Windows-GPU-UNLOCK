@@ -1,3 +1,6 @@
+#if defined(GU_AD104_DECODE_READ_TEST) && !defined(GU_AD104_PARENT_TEST)
+#error Decode read test requires parent test
+#endif
 #if defined(GU_AD104_PARENT_TEST) && !defined(GU_AD104_OWNER_CHILD_TEST)
 #error Parent test requires owner child test
 #endif

@@ -57,7 +57,19 @@ static EFI_STATUS EFIAPI OwnerFlush(EFI_FILE_PROTOCOL *f) {
     if(ParentFault==10)return EFI_DEVICE_ERROR;
     if(ParentFault==11)Drivers[3].Stop=(VOID *)((UINTN)OwnerStop+1);
   }
-  if(Stage==5 && ++ParentPostFlushes==2 && ParentFault==14)return EFI_DEVICE_ERROR;
+  if(Stage==5 && ++ParentPostFlushes==2) {
+    if(ParentFault==14)return EFI_DEVICE_ERROR;
+#ifdef GU_AD104_DECODE_READ_TEST
+    if(DecodeFault==14)return EFI_DEVICE_ERROR;
+#endif
+  }
+#ifdef GU_AD104_DECODE_READ_TEST
+  if(Stage==6) {
+    DecodeFlushes++;
+    if(DecodeFault==23 && DecodeFlushes==2)Config[1]|=4;
+    if((DecodeFault==16 && DecodeFlushes==2) || (DecodeFault==17 && DecodeFlushes==3))return EFI_DEVICE_ERROR;
+  }
+#endif
 #endif
   if(Stage==3 && ++OwnerFlushes==2) {
     if(OwnerFault==9)return EFI_DEVICE_ERROR;
@@ -73,6 +85,9 @@ static EFI_STATUS EFIAPI OwnerKey(EFI_SIMPLE_TEXT_INPUT_PROTOCOL *i,EFI_INPUT_KE
     if(ParentFault==12)Config[1]|=7;
     if(ParentFault==13)k->UnicodeChar='x';
   }
+#endif
+#ifdef GU_AD104_DECODE_READ_TEST
+  if(s==EFI_SUCCESS && Stage==6 && DecodeFault==15)Config[1]|=4;
 #endif
   if(s==EFI_SUCCESS && Stage==4) {
     if(OwnerFault==10)Config[1]=3;

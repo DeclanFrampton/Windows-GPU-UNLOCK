@@ -6,9 +6,12 @@ static BOOLEAN PfEqual(const VOID *,const VOID *,UINTN);
 #undef ParentBranch
 static BOOLEAN ParentBranch(EFI_SYSTEM_TABLE *,EFI_HANDLE,const VOID *,UINTN);
 #define GU_AD104_PARENT_TEST
+#pragma push_macro("main")
+#undef main
 #define main OwnerMain
 #include "test_owner_child.c"
 #undef main
+#pragma pop_macro("main")
 static int BranchCalls;
 static BOOLEAN ParentBranch(EFI_SYSTEM_TABLE *t,EFI_HANDLE gpu,const VOID *base,UINTN size) {
   (void)t;(void)gpu;(void)base;(void)size;BranchCalls++;

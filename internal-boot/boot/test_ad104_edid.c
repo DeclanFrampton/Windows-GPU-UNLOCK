@@ -14,6 +14,9 @@ static EFI_SIMPLE_TEXT_INPUT_PROTOCOL Input;
 static EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL Output;
 static UINT32 Config[64];
 static UINT64 CurrentAttributes,SupportedAttributes;
+#ifdef GU_AD104_DECODE_READ_TEST
+static int DecodeFault,DecodeCalls,MmioCalls,DecodeFlushes;
+#endif
 #ifdef GU_AD104_GOP_TEST
 static int GopFault,ProtocolReads;
 #ifdef GU_AD104_CONSUMERS_TEST
@@ -41,7 +44,21 @@ static EFI_STATUS TextPcdCollect(EFI_SYSTEM_TABLE *t,TEXT_DISPLAY *out) {
 }
 static int QuietReady,EarlyDrained;
 #endif
-VOID Text(CAPTURE *c,const char *s){while(*s && c->Used<sizeof(c->Buffer))c->Buffer[c->Used++]=*s++;}
+VOID Text(CAPTURE *c,const char *s){
+#ifdef GU_AD104_DECODE_READ_TEST
+  /* Faithful auto-write behavior with a small buffer to force service calls. */
+  while(*s && c->Io==EFI_SUCCESS) {
+    if(c->Used==128) {
+      UINTN n=c->Used;c->Io=c->File->Write(c->File,&n,c->Buffer);
+      if(c->Io==EFI_SUCCESS && n!=c->Used)c->Io=EFI_DEVICE_ERROR;
+      c->Used=0;if(c->Io!=EFI_SUCCESS)return;
+    }
+    c->Buffer[c->Used++]=*s++;
+  }
+#else
+  while(*s && c->Used<sizeof(c->Buffer))c->Buffer[c->Used++]=*s++;
+#endif
+}
 VOID Hex(CAPTURE *c,UINT64 v,UINTN n){(void)v;(void)n;Text(c,"x");}
 VOID End(CAPTURE *c){Text(c,"\n");}
 #include "ad104-edid.h"
@@ -78,10 +95,29 @@ static EFI_STATUS EFIAPI Attributes(EFI_PCI_IO_PROTOCOL *io,EFI_PCI_IO_PROTOCOL_
   (void)io;(void)value;
   if(op==EfiPciIoAttributeOperationGet){*out=CurrentAttributes;return EFI_SUCCESS;}
   if(op==EfiPciIoAttributeOperationSupported){*out=SupportedAttributes;return EFI_SUCCESS;}
+#ifdef GU_AD104_DECODE_READ_TEST
+  if(op==EfiPciIoAttributeOperationEnable) {
+    Check(value==0x300 && !out && DecodeAttempted,"only one explicit IO/MEM Enable300");
+    DecodeCalls++;if(DecodeFault==1)return EFI_DEVICE_ERROR;
+    Stage=6;Config[1]|=3;CurrentAttributes=DecodeFault==3?0:0x300;
+    if(DecodeFault==4)Config[1]|=4;
+    if(DecodeFault==5)CurrentAttributes|=0x18;
+    if(DecodeFault==6)Config[4]++;
+    if(DecodeFault==7)Io.Mem.Read=NULL;
+    if(DecodeFault==8)Io.Attributes=NULL;
+    return DecodeFault==2?EFI_DEVICE_ERROR:EFI_SUCCESS;
+  }
+#endif
   Check(0,"attribute write forbidden");return EFI_UNSUPPORTED;
 }
 static EFI_STATUS EFIAPI Write(EFI_FILE_PROTOCOL *f,UINTN *n,VOID *p) {
   (void)f;(void)n;(void)p;Writes++;
+#ifdef GU_AD104_DECODE_READ_TEST
+  if(Stage==6 && MmioCalls==22) {
+    if(DecodeFault==24)return EFI_DEVICE_ERROR;
+    if(DecodeFault==25)Config[1]|=4;
+  }
+#endif
 #ifdef GU_AD104_CONSUMERS_TEST
   if(Stage==3 && ConsumerFault==8)return EFI_DEVICE_ERROR;
 #endif
