@@ -22,5 +22,5 @@ try {
  if($LASTEXITCODE -ne 0){throw 'PE verification failed'}
  [ordered]@{Mode='evga3090-one-text-membership-stop';HardwareTested=$false;CanUnlock=$false;CanStopTextMembership=$true;WindowsEspGuid=$WindowsEspGuid.ToString();Staged=$false
  EfiSha256=(Get-FileHash "$out/BOOTX64.EFI" -Algorithm SHA256).Hash.ToLowerInvariant();Sources=@(($sources+@('evga-text-stop.h','media.h',"$out/platform-config.h")) | ForEach-Object {[ordered]@{Path=$_;Sha256=(Get-FileHash $_ -Algorithm SHA256).Hash.ToLowerInvariant()}})} | ConvertTo-Json -Depth 5 | Set-Content "$out/manifest.json" -Encoding utf8
- Write-Output "Compiled $out/BOOTX64.EFI. NOT STAGED. Hardware execution requires the operator's explicit risk acceptance."
+ Write-Output "Compiled $out/BOOTX64.EFI. NOT STAGED. Read NEXT-EFI-TEST.en.md for risk and staging/run instructions; no separate confirmation reply is required."
 } finally {Pop-Location}
