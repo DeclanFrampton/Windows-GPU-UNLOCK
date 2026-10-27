@@ -6,6 +6,8 @@
 #define GU_WINDOWS_BOOT_BYTES 3U
 #define GU_WINDOWS_BOOT_SHA256 "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
 #include "handoff.c"
+STATIC_ASSERT(OFFSET_OF(EFI_FILE_INFO,FileSize)==8,"UEFI FileSize ABI");
+STATIC_ASSERT(OFFSET_OF(EFI_FILE_INFO,PhysicalSize)==16,"UEFI PhysicalSize ABI");
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
