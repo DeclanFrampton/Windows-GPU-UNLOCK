@@ -19,3 +19,5 @@ Native AMD64 EFI66,560bytes/noimports, SHA256:
 Host tests cover all18transport-failure positions, sentinel/chip/selector/method/state faults, intent/inter-batch/summary logging faults and informational mailbox drift. They simulate RAM callbacks and are not hardware proof.
 
 Attended instructions after verified staging: save work/fullshutdown/wait10s/UEFIUSB/Shift+G once; wait10s then Shift+V every2s up to3minutes. NoWindows after10minutes: poweroff/removeUSB/normalBootManager. Run once; preserve allcaptures before restage.
+
+[Actual result: guarded stop/manual recovery / 실제 결과: 보호 정지 및 수동 복구](AD104-TWENTY-FIFTH-RESULT.en.md).

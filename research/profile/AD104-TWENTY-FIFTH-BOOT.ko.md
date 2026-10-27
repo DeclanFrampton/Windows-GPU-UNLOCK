@@ -19,3 +19,5 @@
 호스트는18개 읽기 실패 위치, 센티널/칩/선택자/메서드/상태, 시작/배치 사이/요약 로그 오류와 메일박스 변화를 확인합니다. RAM 모의 콜백이며 하드웨어 증거가 아닙니다.
 
 검증된 스테이징 후 작업 저장/완전 종료/10초/UEFIUSB/Shift+G 한 번,10초 후 Shift+V를2초마다 최대3분 누릅니다.10분 후 Windows가 없으면 전원 차단/USB 제거/정상 Boot Manager를 선택합니다. 한 번만 실행하고 재스테이징 전에 모든 캡처를 보존합니다.
+
+[Actual result: guarded stop/manual recovery / 실제 결과: 보호 정지 및 수동 복구](AD104-TWENTY-FIFTH-RESULT.ko.md).
