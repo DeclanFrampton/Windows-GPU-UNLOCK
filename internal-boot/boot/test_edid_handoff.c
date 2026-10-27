@@ -125,5 +125,13 @@ int main(void) {
   CHECK(strstr(WitnessText,"main-log-close-returned status=0x8000000000000007") && !StartCalls);
   BootSetup(0);WitnessRecords=16;CHECK(WitnessRecord("bounded",EFI_SUCCESS)==EFI_NOT_READY && !WitnessWrites);
 #endif
+#ifdef GU_AD104_FALCON_REFUSAL_TEST
+  BootSetup(0);CHECK(GuRefusalWitness("falcon-observation-refused",EFI_NOT_READY)==EFI_SUCCESS);
+  CHECK(strstr(WitnessText,"falcon-observation-refused status=0x8000000000000006"));
+  BootSetup(8);CHECK(GuRefusalWitness("refusal-rechecks-complete",EFI_SUCCESS)!=EFI_SUCCESS);
+  BootSetup(9);CHECK(GuRefusalWitness("refusal-rechecks-complete",EFI_SUCCESS)!=EFI_SUCCESS);
+  BootSetup(0);WitnessRecords=16;CHECK(GuRefusalWitness("bounded",EFI_SUCCESS)==EFI_NOT_READY && !WitnessWrites);
+  BootSetup(0);WitnessExited=TRUE;CHECK(GuRefusalWitness("no-post-EBS",EFI_SUCCESS)==EFI_NOT_READY && !WitnessWrites);
+#endif
   printf("PASS EDID Windows handoff: %d checks, RAM-only mocks\n",checks);return 0;
 }

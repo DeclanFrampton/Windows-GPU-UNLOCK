@@ -6,6 +6,19 @@
 static int BatchFileCalls;
 #ifdef GU_AD104_FALCON_OBSERVE_TEST
 static int FalconFileCalls;
+#ifdef GU_AD104_FALCON_REFUSAL_TEST
+static int RecoveryWitnessRecords;
+EFI_STATUS GuRefusalWitness(const char *event,EFI_STATUS status){
+  RecoveryWitnessRecords++;
+  if(!strcmp(event,"falcon-observation-refused")){Check(status==EFI_NOT_READY,"original observation failure preserved");if(FalconFault==640)Config[1]|=4;}
+  else Check(status==EFI_SUCCESS,"recovery witness status");
+  if((FalconFault==630 && RecoveryWitnessRecords==1) || (FalconFault==631 && RecoveryWitnessRecords==2) || (FalconFault==643 && RecoveryWitnessRecords==3))return EFI_DEVICE_ERROR;
+  if(FalconFault==641 && RecoveryWitnessRecords==2)Io.Mem.Read=NULL;
+  if(FalconFault==642 && RecoveryWitnessRecords==2)Missing=-1;
+  if(FalconFault==644 && RecoveryWitnessRecords==3)Config[1]|=4;
+  return EFI_SUCCESS;
+}
+#endif
 #endif
 #ifdef GU_AD104_PROM_HEADER_TEST
 static int PromFileCalls;
@@ -15,6 +28,20 @@ static EFI_STATUS EFIAPI ReadBar(EFI_PCI_IO_PROTOCOL *io,EFI_PCI_IO_PROTOCOL_WID
   (void)io;Check(width==EfiPciIoWidthUint32 && !bar && count==1 && DecodeCalls==1 && Stage==6,
     "MMIO only after explicit decode Enable");
 #ifdef GU_AD104_FALCON_OBSERVE_TEST
+#ifdef GU_AD104_FALCON_REFUSAL_TEST
+  if(FalconRecoveryAttempted && MmioCalls>=262329){
+    UINTN n=MmioCalls-262329,j=n%7;Check(n<14 && offset==FalconRecoveryOffsets[j],"only bounded required recovery reads");
+    if(!j)FalconFileCalls=Writes+Flushes;
+    Check(Writes+Flushes==FalconFileCalls,"no file callbacks in recovery read batch");
+    MmioCalls++;UINT32 value=j==0 || j==6?0x194000a1:j==1?0x10:0;
+    if(FalconFault>=601 && FalconFault<=614 && n==(UINTN)(FalconFault-601))return EFI_DEVICE_ERROR;
+    if(FalconFault==620 && j==0)value=0xbadf5620;
+    if(FalconFault==621 && j==4)value^=1;
+    if(FalconFault==622 && j==2)Io.Mem.Read=NULL;
+    if(FalconFault==623 && n==6)Config[1]|=4;
+    *(UINT32 *)out=value;return EFI_SUCCESS;
+  }
+#endif
   if(MmioCalls>=262320){
     UINTN n=MmioCalls-262320,j=n%FalconWords;Check(n<2*FalconWords && offset==FalconOffsets[j],"exact Falcon read order and bound");
     if(!j)FalconFileCalls=Writes+Flushes;
@@ -35,6 +62,12 @@ static EFI_STATUS EFIAPI ReadBar(EFI_PCI_IO_PROTOCOL *io,EFI_PCI_IO_PROTOCOL_WID
 #ifdef GU_AD104_FALCON_CORE_TEST
     if(FalconFault>=400 && FalconFault<=402 && n>=FalconWords && j==(UINTN)(7+FalconFault-400))value=0x91;
     if(FalconFault>=500 && FalconFault<=505 && j==(UINTN)(7+(FalconFault-500)/2))value=FalconFault%2?0xbadf5620:MAX_UINT32;
+#endif
+#ifdef GU_AD104_FALCON_REFUSAL_TEST
+    if(offset==0x110100)value=0x10;
+    if(FalconFault>=600 && FalconFault<=655 && n==8){value=0xbadf5620;if(FalconFault==627)return EFI_DEVICE_ERROR;if(FalconFault==628)value=MAX_UINT32;if(FalconFault==629)value=0xbadf5621;}
+    if(FalconFault==626 && n==7)value=1;
+    if(FalconFault==656 && n==FalconWords+8)value=0xbadf5620;
 #endif
     *(UINT32 *)out=value;return EFI_SUCCESS;
   }
@@ -98,6 +131,9 @@ static EFI_STATUS EFIAPI ReadBar(EFI_PCI_IO_PROTOCOL *io,EFI_PCI_IO_PROTOCOL_WID
   Check(Writes+Flushes==BatchFileCalls,"no log service callbacks within an MMIO batch");
   Check(offset==DecodeOffsets[index] && offset<=0x1000000-4,"only bounded allowlisted registers");
   MmioCalls++;*(UINT32 *)out=(index==0 || index==21)?0x194000a1U:0;
+#ifdef GU_AD104_FALCON_REFUSAL_TEST
+  if(index==3)*(UINT32 *)out=0x10;
+#endif
 #ifdef GU_AD104_DELAYED_READ_TEST
   if(OffFault==18 && MmioCalls==36)*(UINT32 *)out=6;
   if(OffFault==19 && MmioCalls==38)*(UINT32 *)out=1;
@@ -170,6 +206,10 @@ static CAPTURE *FullSetup(int fault) {
   PromPrefixGpu=NULL;PromPrefixIo=NULL;FullAllocation=NULL;FilePosition=0;
 #ifdef GU_AD104_FALCON_OBSERVE_TEST
   FalconAttempted=FALSE;FalconFault=FalconIntentSeen=FalconSummarySeen=0;
+#ifdef GU_AD104_FALCON_REFUSAL_TEST
+  FalconRefusalObserved=FalconRecoveryAttempted=FalconRecoveryEligible=FALSE;
+  RecoveryIntentSeen=RecoverySummarySeen=RecoveryWitnessRecords=0;
+#endif
 #endif
   memset(&FullRoot,0,sizeof(FullRoot));memset(&FullFile,0,sizeof(FullFile));memset(&FullWitness,0,sizeof(FullWitness));
   FullRoot.Open=FullOpen;FullFile.Write=FullWrite;FullFile.Read=FullRead;FullFile.SetPosition=FullSeek;FullFile.Flush=FullFlush;FullFile.Close=FullClose;
@@ -222,6 +262,9 @@ int main(void) {
     Check(EdRun(c,(VOID *)1,&Io,Pins)==EFI_SUCCESS && OffCalls==1,"new core-state field drift remains observational");
   }
   for(int fault=500;fault<=505;fault++){
+#ifdef GU_AD104_FALCON_REFUSAL_TEST
+    if(fault==503)continue;
+#endif
     c=FullSetup(0);FalconFault=fault;
     Check(EdRun(c,(VOID *)1,&Io,Pins)!=EFI_SUCCESS && !OffCalls && MmioCalls==262328+(fault-500)/2,"every new core register sentinel blocks remaining reads");
   }
@@ -229,6 +272,24 @@ int main(void) {
   c=FullSetup(0);FalconAttempted=FALSE;FalconFault=40;
   Check(EdRun(c,(VOID *)1,&Io,Pins)==EFI_SUCCESS && OffCalls==1,"mailbox drift remains observational");
   FalconFault=0;
+#endif
+#ifdef GU_AD104_FALCON_REFUSAL_TEST
+  c=FullSetup(0);FalconFault=600;
+  Check(EdRun(c,(VOID *)1,&Io,Pins)==EFI_SUCCESS && FalconRefusalObserved && FalconRecoveryEligible && OffCalls==1 && MmioCalls==262343 && RecoveryWitnessRecords==3,"known refused observation reaches only guarded recovery");
+  Check(FalconRefusalAdmission(c,(VOID *)1,&Io,Pins,NULL,NULL,NULL)!=EFI_SUCCESS && MmioCalls==262343,"no recovery retry");
+  c=FullSetup(0);FalconFault=656;
+  Check(EdRun(c,(VOID *)1,&Io,Pins)!=EFI_SUCCESS && !FalconRecoveryAttempted && !OffCalls && !RecoveryWitnessRecords && MmioCalls==262343,"second optional batch refusal cannot enter recovery");
+  {int faults[]={1,3,7,10,12,13};for(UINTN i=0;i<sizeof(faults)/sizeof(faults[0]);i++){
+    c=FullSetup(0);FalconFault=600;OffFault=faults[i];
+    Check(EdRun(c,(VOID *)1,&Io,Pins)!=EFI_SUCCESS && OffCalls==((faults[i]==10 || faults[i]==12 || faults[i]==13)?0:1),"fresh V and decode-off guards remain mandatory after refusal");
+  }}
+  for(int fault=601;fault<=655;fault++){
+    if((fault>=615 && fault<=619) || (fault>=632 && fault<=639) || (fault>=645 && fault<=649) || fault==653)continue;
+    c=FullSetup(0);FalconFault=fault;
+    Check(EdRun(c,(VOID *)1,&Io,Pins)!=EFI_SUCCESS && OffCalls==((fault==643 || fault==644)?1:0),"recovery read/log/method/state/witness faults block handoff");
+    if(fault>=601 && fault<=614)Check(MmioCalls==262329+fault-600,"recovery read failure stops remaining MMIO");
+    if(fault==626 || fault==627 || fault==628 || fault==629 || fault==655)Check(!FalconRecoveryAttempted && MmioCalls==262329,"other engine/transport/sentinel states never enter recovery");
+  }
 #endif
   int points[]={0,1,127,128,1023,1024,131072,262142,262143,262144,262145};
   for(UINTN j=0;j<sizeof(points)/sizeof(points[0]);j++) {

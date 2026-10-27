@@ -23,6 +23,9 @@ static EFI_STATUS FalconBatch(EFI_PCI_IO_PROTOCOL *io,EFI_PCI_IO_PROTOCOL_IO_MEM
   }
   return EFI_SUCCESS;
 }
+#ifdef GU_AD104_FALCON_REFUSAL_TEST
+#include "falcon-refusal.h"
+#endif
 static EFI_STATUS FalconObserve(CAPTURE *c,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *io,const PF_PIN *pins,const ED_STATE *parent,const DECODE_READS *prior){
   EFI_PCI_IO_PROTOCOL_IO_MEM read=io->Mem.Read;FALCON_OBSERVATION batches[2]={0};
   if(FalconAttempted || !read || !prior || prior->Attempted!=22)return EFI_NOT_READY;
@@ -47,7 +50,13 @@ static EFI_STATUS FalconObserve(CAPTURE *c,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *i
     }
     EdStatus(c,"falcon-batch",s);EFI_STATUS log=EdFlush(c);
     if(log!=EFI_SUCCESS)return log;
-    if(!PromFullState(c,gpu,io,pins,parent,read) || s!=EFI_SUCCESS)return EFI_NOT_READY;
+    if(!PromFullState(c,gpu,io,pins,parent,read))return EFI_NOT_READY;
+    if(s!=EFI_SUCCESS){
+#ifdef GU_AD104_FALCON_REFUSAL_TEST
+      if(batch==0 && FalconExactRefusal(&batches[0],prior))FalconRefusalObserved=TRUE;
+#endif
+      return EFI_NOT_READY;
+    }
   }
 #ifdef GU_AD104_FALCON_MAILBOX_TEST
   Text(c,"ad104-falcon mailbox-only-stable=");Hex(c,PfEqual(batches[0].Values+2,batches[1].Values+2,2*sizeof(UINT32)),1);

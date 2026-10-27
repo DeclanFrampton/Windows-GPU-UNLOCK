@@ -179,7 +179,18 @@ static EFI_STATUS DecodeStep(CAPTURE *c,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *io,
 #endif
 #endif
 #ifdef GU_AD104_FALCON_OBSERVE_TEST
-  s=FalconObserve(c,gpu,io,pins,&pre,&b);if(s!=EFI_SUCCESS)return s;
+  s=FalconObserve(c,gpu,io,pins,&pre,&b);
+#ifdef GU_AD104_FALCON_REFUSAL_TEST
+  if(s!=EFI_SUCCESS){
+    EdStatus(c,"falcon-observation-result",s);
+    if(s!=EFI_NOT_READY || !FalconRefusalObserved)return s;
+    s=FalconRefusalAdmission(c,gpu,io,pins,&pre,&b,read);
+    EdStatus(c,"refusal-recovery-admission",s);if(EdFlush(c)!=EFI_SUCCESS)return c->Io;
+    if(s!=EFI_SUCCESS || !PromFullState(c,gpu,io,pins,&pre,read))return EFI_NOT_READY;
+  }
+#else
+  if(s!=EFI_SUCCESS)return s;
+#endif
 #endif
   s=EdKey(t,'V',NULL);
   x=ParentCollect(c,gpu,io,pins,pre.Drivers.Child,&final);gone=OwnerGone(t,pre.Drivers.Child);
@@ -187,6 +198,13 @@ static EFI_STATUS DecodeStep(CAPTURE *c,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *io,
   if(s!=EFI_SUCCESS || x!=EFI_SUCCESS || gone!=EFI_SUCCESS || !DecodePost(&pre,&final))s=EFI_NOT_READY;
 #ifdef GU_AD104_DECODE_OFF_TEST
   if(s==EFI_SUCCESS)s=DecodeOff(c,gpu,io,pins,&pre,&final);
+#endif
+#ifdef GU_AD104_FALCON_REFUSAL_TEST
+  if(s==EFI_SUCCESS && FalconRecoveryEligible){
+    s=GuRefusalWitness("refusal-decode-off-complete",EFI_SUCCESS);
+    if(s==EFI_SUCCESS){x=ParentCollect(c,gpu,io,pins,pre.Drivers.Child,&final);gone=OwnerGone(t,pre.Drivers.Child);
+      if(x!=EFI_SUCCESS || gone!=EFI_SUCCESS || !PfEqual(&pre,&final,sizeof(pre)))s=EFI_NOT_READY;}
+  }
 #endif
   EdStatus(c,"windows-eligible",s);if(EdFlush(c)!=EFI_SUCCESS)return c->Io;return s;
 }

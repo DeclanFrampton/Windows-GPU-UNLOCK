@@ -217,6 +217,9 @@ static EFI_STATUS WitnessRecord(const char *event,EFI_STATUS status) {
   EFI_FILE_PROTOCOL *saved=Log;Log=Witness;
   EFI_STATUS s=Record(NULL,event,status);Log=saved;return s;
 }
+#ifdef GU_AD104_FALCON_REFUSAL_TEST
+EFI_STATUS GuRefusalWitness(const char *event,EFI_STATUS status){return WitnessRecord(event,status);}
+#endif
 static EFI_STATUS WitnessOpen(VOID) {
   if(Witness || !Root || !Root->Open || !Table->BootServices->CreateEvent)return EFI_UNSUPPORTED;
   EFI_FILE_PROTOCOL *existing=NULL;

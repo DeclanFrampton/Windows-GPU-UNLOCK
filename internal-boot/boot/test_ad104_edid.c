@@ -10,6 +10,12 @@
 static int Writes,Flushes,Calls,Stage,KeyPhase,Reads,EdFault,Collections;
 #ifdef GU_AD104_FALCON_OBSERVE_TEST
 static int FalconFault,FalconIntentSeen,FalconSummarySeen;
+#ifdef GU_AD104_FALCON_REFUSAL_TEST
+static int RecoveryIntentSeen,RecoverySummarySeen;
+static EFI_STATUS EFIAPI RefusalAltRead(EFI_PCI_IO_PROTOCOL *io,EFI_PCI_IO_PROTOCOL_WIDTH width,UINT8 bar,UINT64 offset,UINTN count,VOID *out){
+  (void)io;(void)width;(void)bar;(void)offset;(void)count;(void)out;Check(0,"replacement reader must never run");return EFI_DEVICE_ERROR;
+}
+#endif
 #endif
 static EFI_PCI_IO_PROTOCOL Io;
 static EFI_FILE_PROTOCOL File;
@@ -57,6 +63,12 @@ static EFI_STATUS TextPcdCollect(EFI_SYSTEM_TABLE *t,TEXT_DISPLAY *out) {
 static int QuietReady,EarlyDrained;
 #endif
 VOID Text(CAPTURE *c,const char *s){
+#ifdef GU_AD104_FALCON_REFUSAL_TEST
+  if(strstr(s,"falcon-observation-result") && FalconFault==655)Io.Mem.Read=RefusalAltRead;
+  if(strstr(s,"refusal-recovery-admission") && FalconFault==654)Io.Mem.Read=NULL;
+  if(strstr(s,"ad104-falcon recovery-intent="))RecoveryIntentSeen=1;
+  if(strstr(s,"recovery-rechecks-complete=1"))RecoverySummarySeen=1;
+#endif
 #ifdef GU_AD104_FALCON_OBSERVE_TEST
   if(strstr(s,"ad104-falcon intent="))FalconIntentSeen=1;
   if(strstr(s,"ad104-falcon mailbox-dma-stable=") || strstr(s,"ad104-falcon mailbox-only-stable="))FalconSummarySeen=1;
@@ -129,7 +141,11 @@ static EFI_STATUS EFIAPI Attributes(EFI_PCI_IO_PROTOCOL *io,EFI_PCI_IO_PROTOCOL_
   if(op==EfiPciIoAttributeOperationDisable) {
     Check(value==0x300 && !out && DecodeOffAttempted && MmioCalls==
 #ifdef GU_AD104_FALCON_OBSERVE_TEST
+#ifdef GU_AD104_FALCON_REFUSAL_TEST
+    (FalconRecoveryEligible?262343:262320+2*FalconWords)
+#else
     262320+2*FalconWords
+#endif
 #elif defined(GU_AD104_PROM_FULL_TEST)
     262320
 #elif defined(GU_AD104_PROM_HEADER_TEST)
@@ -189,6 +205,11 @@ static EFI_STATUS EFIAPI Write(EFI_FILE_PROTOCOL *f,UINTN *n,VOID *p) {
 return EdFault==1 || (EdFault==15 && Stage)?EFI_DEVICE_ERROR:EFI_SUCCESS;
 }
 static EFI_STATUS EFIAPI FlushFile(EFI_FILE_PROTOCOL *f){(void)f;Flushes++;
+#ifdef GU_AD104_FALCON_REFUSAL_TEST
+  if(RecoveryIntentSeen && MmioCalls==262329){if(FalconFault==624)return EFI_DEVICE_ERROR;if(FalconFault==650)Config[1]|=4;}
+  if(RecoveryIntentSeen && MmioCalls==262336){if(FalconFault==651)Config[1]|=4;if(FalconFault==652)Missing=-1;}
+  if(RecoverySummarySeen && FalconFault==625)Config[1]|=4;
+#endif
 #ifdef GU_AD104_FALCON_OBSERVE_TEST
   if(FalconIntentSeen && MmioCalls==262320){
     if(FalconFault==30)return EFI_DEVICE_ERROR;
