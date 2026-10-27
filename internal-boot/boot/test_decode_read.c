@@ -12,7 +12,7 @@ static EFI_STATUS EFIAPI ReadBar(EFI_PCI_IO_PROTOCOL *io,EFI_PCI_IO_PROTOCOL_WID
   if(!index)BatchFileCalls=Writes+Flushes;
   Check(Writes+Flushes==BatchFileCalls,"no log service callbacks within an MMIO batch");
   Check(offset==DecodeOffsets[index] && offset<=0x1000000-4,"only bounded allowlisted registers");
-  MmioCalls++;*(UINT32 *)out=index?0:0x194000a1U;
+  MmioCalls++;*(UINT32 *)out=(index==0 || index==21)?0x194000a1U:0;
   if((DecodeFault>=100 && DecodeFault<122 && MmioCalls==DecodeFault-99) ||
      (DecodeFault>=200 && DecodeFault<222 && MmioCalls==DecodeFault-177))return EFI_DEVICE_ERROR;
   if(DecodeFault==9 && MmioCalls==7)return EFI_DEVICE_ERROR;

@@ -1,8 +1,9 @@
 /* GPL-2.0-only. Enable IO/MEM only, then bounded read-only BAR0 observations. */
 static BOOLEAN DecodeAttempted;
+/* Exclude inaccessible 0x840100; bookend each batch with chip identity. */
 static const UINT32 DecodeOffsets[]={0,0x118128,0x118234,0x110100,0x1fa824,0x1fa828,
   0x1fa7cc,0x1fa7c4,0x9a0148,0x823804,0x823814,0x823818,0x82381c,0x823820,
-  0x1183a4,0x625f04,0x1fa7c8,0x1fa82c,0x1fa830,0x824148,0x8241e0,0x840100};
+  0x1183a4,0x625f04,0x1fa7c8,0x1fa82c,0x1fa830,0x824148,0x8241e0,0};
 static BOOLEAN DecodePost(const ED_STATE *before,const ED_STATE *after) {
   ED_STATE expected=*before;expected.Config[1]|=3U;expected.Attributes=0x300;
   return PfEqual(&expected,after,sizeof(expected));
@@ -17,7 +18,7 @@ static EFI_STATUS DecodeBatch(EFI_PCI_IO_PROTOCOL *io,DECODE_READS *out,EFI_PCI_
     EFI_STATUS s=read(io,EfiPciIoWidthUint32,0,DecodeOffsets[i],1,&value);
     out->Values[i]=value;out->Status[i]=s;out->Attempted=i+1;
     if(io->Mem.Read!=read || s!=EFI_SUCCESS || value==MAX_UINT32 || (value&0xffff0000U)==0xbadf0000U ||
-       (!i && value!=0x194000a1U)){result=s==EFI_SUCCESS?EFI_NOT_READY:s;break;}
+       ((!i || i==21) && value!=0x194000a1U)){result=s==EFI_SUCCESS?EFI_NOT_READY:s;break;}
   }
   return result;
 }
