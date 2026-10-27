@@ -44,6 +44,10 @@ static EFI_STATUS EFIAPI Handle(EFI_HANDLE h,EFI_GUID *guid,VOID **out){
   if(guid==&Loaded && (UINTN)h>=10 && (UINTN)h<=12){*out=&Images[(UINTN)h-10];return EFI_SUCCESS;}
   if(guid==&Pci && h==H(4)){*out=&PciIo;return EFI_SUCCESS;}return EFI_UNSUPPORTED;
 }
+static EFI_STATUS EFIAPI ProtocolList(EFI_HANDLE h,EFI_GUID ***out,UINTN *n){
+  static EFI_GUID *list[1];if(h!=H(3))return EFI_UNSUPPORTED;
+  list[0]=&Text;*out=list;*n=1;return EFI_SUCCESS;
+}
 static EFI_STATUS EFIAPI Opens(EFI_HANDLE source,EFI_GUID *guid,EFI_OPEN_PROTOCOL_INFORMATION_ENTRY **out,UINTN *n){
   static EFI_OPEN_PROTOCOL_INFORMATION_ENTRY e[3];*out=e;*n=0;EFI_HANDLE agent=NULL,child=NULL;
   if(source==H(1)&&guid==&Gop){agent=H(10);child=H(2);}
@@ -73,7 +77,7 @@ static EFI_STATUS RecordMock(VOID *p,const char *name,EFI_STATUS s){
 static VOID Init(VOID){
   InterfaceFailure=0;Plan=(PLAN){0};Keys=Calls=Records=0;Removed=MarkerExists=BadHash=BadPost=FailRecord=FailStop=BadInventory=ExtraOwner=FALSE;
   Cancel=Timeout=ShortWrite=FlushFail=FALSE;
-  Bs=(EFI_BOOT_SERVICES){0};Bs.FreePool=Free;Bs.Stall=Stall;Bs.LocateHandleBuffer=Locate;Bs.HandleProtocol=Handle;Bs.OpenProtocolInformation=Opens;
+  Bs=(EFI_BOOT_SERVICES){0};Bs.FreePool=Free;Bs.Stall=Stall;Bs.LocateHandleBuffer=Locate;Bs.HandleProtocol=Handle;Bs.OpenProtocolInformation=Opens;Bs.ProtocolsPerHandle=ProtocolList;
   Input=(EFI_SIMPLE_TEXT_INPUT_PROTOCOL){0};Input.ReadKeyStroke=ReadKey;
   Output=(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL){0};Output.OutputString=SayMock;
   Table=(EFI_SYSTEM_TABLE){0};Table.BootServices=&Bs;Table.ConIn=&Input;Table.ConOut=&Output;Table.ConsoleOutHandle=H(3);Table.StandardErrorHandle=H(3);
