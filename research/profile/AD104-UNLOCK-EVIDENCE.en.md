@@ -4,11 +4,7 @@ English | [한국어](AD104-UNLOCK-EVIDENCE.ko.md)
 
 ## Latest physical result
 
-[Test21](AD104-TWENTY-FIRST-RESULT.en.md) captured/hash-verified1MiB PROM and
-returned automatically to Windows. Offline parsing located bounded FWSEC metadata
-and payload/signature-region byte hashes. No firmware authentication/execution
-or cold-entry approval is established. [Roadmap](ROADMAP.en.md):15/26 milestones
-complete(58% checklist only). SS1/VGA_BASE/reference ROM differences remain.
+[Test30](AD104-THIRTIETH-RESULT.en.md) deliberately held after BCR returned BADF5620. Windows handoff was not attempted; operator recovery details are uncertain. [Test29](AD104-TWENTY-NINTH-RESULT.en.md) separately demonstrated guarded recovery after the exact CPUCTL refusal and automatic Windows return. Three refused registers are excluded from [test31](AD104-THIRTY-FIRST-BOOT.en.md), which audits actual sampled layout inputs in CPU RAM only. PROM/FWSEC parsing, patch and signature assembly are evidence, not authentication or execution admission. [Roadmap](ROADMAP.en.md):15/26(58%) unchanged. SS1/VGA/reference-ROM and asset/entry qualifications remain.
 
 ## Actual graph replaces the simplified fixture
 
@@ -109,6 +105,3 @@ time estimate or number of remaining boots. Cold-entry or immutable hardware
 restrictions can still block execution. Next work follows the recorded ROM and
 admission differences, not a copied reference profile or callback success alone.
 
-[Test22 result / 테스트22 결과](AD104-TWENTY-SECOND-RESULT.en.md): parser/hash audit passed, automatic Windows return confirmed; no execution authority.
-
-[Test23 passed / 테스트23 통과](AD104-TWENTY-THIRD-RESULT.en.md). [Next: test24 / 다음: 테스트24](AD104-TWENTY-FOURTH-BOOT.en.md), sampled-version signature installation in RAM; no new GPU access or execution. Checklist remains15/26(58%).

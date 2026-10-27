@@ -4,10 +4,7 @@
 
 ## 최신 실제 결과
 
-[21차](AD104-TWENTY-FIRST-RESULT.ko.md)는1MiB PROM 캡처/해시 및 Windows 자동 복귀를
-완료했습니다. 오프라인 파싱으로 FWSEC 구조/범위와 payload/서명 영역 해시를 확인했지만
-펌웨어 인증·실행·cold-entry 허용은 아닙니다. [로드맵](ROADMAP.ko.md)은15/26(체크리스트58%)이며
-SS1/VGA_BASE/참조 ROM 차이는 남아 있습니다.
+[30차](AD104-THIRTIETH-RESULT.ko.md)는 BCR의 BADF5620 반환 후 의도적으로 중지했다. Windows 진입은 시도하지 않았고 사용자의 복구 상세 기억은 불확실하다. 별도 [29차](AD104-TWENTY-NINTH-RESULT.ko.md)는 정확한 CPUCTL 거부 후 제한 복구와 Windows 자동 복귀를 입증했다. [31차](AD104-THIRTY-FIRST-BOOT.ko.md)는 거부된 세 레지스터를 제외하고 실제 측정된 배치 입력을 CPU RAM에서만 감사한다. PROM/FWSEC 파싱, 패치, 서명 조립은 인증/실행 허용이 아니다. [로드맵](ROADMAP.ko.md)15/26(58%)는 유지하며 SS1/VGA/참조 ROM, 자산/진입 검증은 남아 있다.
 
 ## 단순화된 테스트 자료 대신 실제 그래프
 
@@ -104,6 +101,3 @@ PCI command는 `0007`이며 BME는 켜져 있습니다. 소비자 관계 하나�
 변경 불가능한 하드웨어 제한이 실행을 막을 수 있습니다. 다음 작업은 참조 프로필 복사나
 콜백 성공만이 아니라 기록된 ROM·허용 조건 차이를 근거로 진행합니다.
 
-[Test22 result / 테스트22 결과](AD104-TWENTY-SECOND-RESULT.ko.md): parser/hash audit passed, automatic Windows return confirmed; no execution authority.
-
-[Test23 passed / 테스트23 통과](AD104-TWENTY-THIRD-RESULT.ko.md). [Next: test24 / 다음: 테스트24](AD104-TWENTY-FOURTH-BOOT.ko.md), sampled-version signature installation in RAM; no new GPU access or execution. Checklist remains15/26(58%).

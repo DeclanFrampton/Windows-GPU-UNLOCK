@@ -20,3 +20,5 @@ Native AMD64 EFI67,584bytes, no imports/IAT/delay imports, SHA256:
 `d49aa002a509404d9bd8495005d8f022d977be5d315fabb0270b860ad9da349e`.
 
 After USB identity/source/hash checks and preservation of29, save work, fully shut down, wait10seconds, select the UEFI USB. Press Shift+G once, wait10seconds, then press Shift+V every2seconds for up to3minutes. The blinking cursor is not progress: video output stops after driver release. If Windows has not started within10minutes, power off, remove USB and select normal Windows Boot Manager. Recovery is not guaranteed. Run once; preserve captures before another attempt. Checklist15/26(58%) remains unchanged.
+
+[Actual result / 실제 결과](AD104-THIRTIETH-RESULT.en.md).

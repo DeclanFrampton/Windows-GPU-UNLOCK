@@ -2,7 +2,7 @@
 
 English | [한국어](ROADMAP.ko.md)
 
-As of physical test21, **15/26 milestones=58% checklist completion** (rounded).
+As of physical test30, **15/26 milestones=58% checklist completion** (rounded).
 Milestones are equally counted, not equally difficult. This is not a probability,
 time estimate or percentage of hardware unlocked. Unlock remains unproven.
 
@@ -48,12 +48,5 @@ is not guaranteed and broad platform safety has not been established.
 - [ ] Compare controlled stock/post-unlock workloads with state evidence
 - [ ] Repeat cold-boot behavior and recovery verification
 
-Latest evidence: [test21 full PROM and FWSEC](AD104-TWENTY-FIRST-RESULT.en.md).
-Next: [test22 observation-only EFI parser audit](AD104-TWENTY-SECOND-BOOT.en.md).
-Reference PROM hash and two descriptor offsets differ; SS1/VGA_BASE/BAR differences
-also remain. These can still block execution. More repeated captures or matching
-geometry alone must not be counted as accepted admission or unlock.
-
-[Test22 result / 테스트22 결과](AD104-TWENTY-SECOND-RESULT.en.md): EFI RAM audit passed; checklist remains 15/26 (58%).
-
-[Test23 passed / 테스트23 통과](AD104-TWENTY-THIRD-RESULT.en.md). [Next: test24 / 다음: 테스트24](AD104-TWENTY-FOURTH-BOOT.en.md), sampled-version signature installation in RAM; no new GPU access or execution. Checklist remains15/26(58%).
+Latest: [test29 guarded recovery](AD104-TWENTY-NINTH-RESULT.en.md), then [test30 BCR refusal/hold](AD104-THIRTIETH-RESULT.en.md). Operator recollection of30 recovery is uncertain; logs establish deliberate hold before Windows handoff.
+Next: [test31 measured-input audit](AD104-THIRTY-FIRST-BOOT.en.md), omitting all three refused registers. Tests22–24 established CPU-owned parser/patch/signature assembly;25–30 separated accessible observations from rejected data and one exact recovery path. None completes firmware-entry qualification. Full layout requires parsed/pinned assets, not file-byte counts. SS1/VGA/reference-ROM differences remain; repeated captures or arithmetic alone do not count as unlock/admission.

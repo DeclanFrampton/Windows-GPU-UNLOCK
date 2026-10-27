@@ -2,7 +2,7 @@
 
 [English](ROADMAP.en.md) | 한국어
 
-실제21차 기준 **15/26개 이정표=체크리스트58%**(반올림)입니다. 같은 수로 세지만 난이도는
+실제30차 기준 **15/26개 이정표=체크리스트58%**(반올림)입니다. 같은 수로 세지만 난이도는
 같지 않습니다. 성공 확률·남은 시간·하드웨어 unlock 비율이 아니며 unlock은 미입증입니다.
 
 | 단계 | 완료/전체 | 완료율 | 증거와 남은 작업 |
@@ -46,11 +46,5 @@
 - [ ] 상태 증거와 통제된 기본/unlock 후 작업 비교
 - [ ] 완전 종료 부팅 및 복구 반복 검증
 
-최신 증거: [21차 전체 PROM/FWSEC](AD104-TWENTY-FIRST-RESULT.ko.md).
-다음: [22차 관찰 전용 EFI 파서 검사](AD104-TWENTY-SECOND-BOOT.ko.md).
-참조 PROM 해시와 descriptor 두 오프셋, SS1/VGA_BASE/BAR 차이가 남아 실행을 막을 수 있습니다.
-반복 캡처나 구조 일치만으로 허용 조건·unlock 완료로 세지 않습니다.
-
-[Test22 result / 테스트22 결과](AD104-TWENTY-SECOND-RESULT.ko.md): EFI RAM audit passed; checklist remains 15/26 (58%).
-
-[Test23 passed / 테스트23 통과](AD104-TWENTY-THIRD-RESULT.ko.md). [Next: test24 / 다음: 테스트24](AD104-TWENTY-FOURTH-BOOT.ko.md), sampled-version signature installation in RAM; no new GPU access or execution. Checklist remains15/26(58%).
+최신: [29차 제한 복구](AD104-TWENTY-NINTH-RESULT.ko.md), 이후 [30차 BCR 거부/중지](AD104-THIRTIETH-RESULT.ko.md).30차 복구에 대한 사용자 기억은 불확실하며 로그는 Windows 진입 전 의도된 중지를 입증한다.
+다음: [31차 측정 입력 감사](AD104-THIRTY-FIRST-BOOT.ko.md). 거부된 세 레지스터를 제외한다.22~24차는 CPU 소유 파서/패치/서명 조립,25~30차는 접근 가능한 관측과 거부 데이터 및 정확한 한 복구 경로를 검증했다. 펌웨어 진입 자격을 완성하지는 않았다. 전체 배치는 파일 크기가 아닌 파싱/해시 고정 자산이 필요하다. SS1/VGA/참조 ROM 차이는 남으며 반복 캡처나 산술만으로 잠금 해제/허용 완료로 세지 않는다.
