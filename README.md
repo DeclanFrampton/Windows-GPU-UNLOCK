@@ -151,6 +151,22 @@ baseline: FP16 1.88–1.92×, BF16 1.92–1.95×, TF32 1.93–1.94× over two bo
 to their reported builds; a later successful build or host test does not extend
 the physical test record.
 
+## Check existing captures
+
+An [offline compatibility checker](docs/CHECK-COMPATIBILITY.en.md) explains whether
+existing probe captures fit the automatic local-profile route and what is missing.
+It needs only Python 3.10+ and runs no probe or unlock:
+
+```powershell
+python -I research/profile/check-compatibility.py "D:\RTX3090-UNLOCK"
+```
+
+A candidate still needs profile generation, host tests and hardware validation.
+An out-of-scope result does not rule out an exact existing fixed profile.
+Use `--json` for a reviewed-shareable report with limited model/topology observations;
+paste it into the optional offline report field in a [compatibility issue](https://github.com/impacifist/Windows-GPU-UNLOCK/issues/new?template=compatibility.yml).
+The guide also covers comparing two reports to investigate common differences.
+
 ## Implementation and boundaries
 
 Headless is a separate compile-time profile. Exact GPU/PROM/PCI state, firmware
@@ -174,8 +190,11 @@ can build and test its own local profile with the [new-machine pipeline](docs/NE
 This experimental workflow inventories NVIDIA display devices, but deep capture is
 limited to one RTX 3090 / 3090 Ti in the reviewed PCI/BAR state. A generated local
 profile does not add another verified machine profile. USB write builds require all
-19 host jobs and unchanged profile, fixtures and build inputs; hardware validation
-is still required. Staging the unlock package needs `-StageUnlock`.
+19 host jobs (20 when the firmware binds no EDID driver) and unchanged profile,
+fixtures and build inputs; hardware validation is still required. Within this envelope
+the bus is pinned per machine, and single-RTX systems may have no iGPU or separate
+EDID driver. Aggregate consoles and multiple NVIDIA GPUs are not generated.
+Staging the unlock package needs `-StageUnlock`.
 
 ## License and attribution
 
