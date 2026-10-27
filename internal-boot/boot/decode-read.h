@@ -30,6 +30,36 @@ static EFI_STATUS DecodeEmit(CAPTURE *c,const DECODE_READS *out,UINTN batch) {
   Text(c,"ad104-register batch=0x");Hex(c,batch,2);Text(c," attempted=0x");Hex(c,out->Attempted,2);End(c);
   return EdFlush(c);
 }
+#ifdef GU_AD104_DECODE_OFF_TEST
+static BOOLEAN DecodeOffAttempted;
+static EFI_STATUS DecodeOff(CAPTURE *c,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *io,const PF_PIN *pins,
+                            const ED_STATE *parent,const ED_STATE *decoded) {
+  static ED_STATE pre,one,two;
+  if(DecodeOffAttempted || !io->Attributes)return EFI_ALREADY_STARTED;
+  EFI_STATUS s=ParentCollect(c,gpu,io,pins,parent->Drivers.Child,&pre);
+  if(s!=EFI_SUCCESS || !PfEqual(decoded,&pre,sizeof(pre)) || !DecodePost(parent,&pre) ||
+     OwnerGone(c->Table,parent->Drivers.Child)!=EFI_SUCCESS)return EFI_NOT_READY;
+  Text(c,"ad104-display intent=one-disable-io-memory mask=0x300 target=verified-post-parent no-retry=1 no-more-mmio=1\r\n");
+  if(EdFlush(c)!=EFI_SUCCESS)return c->Io;
+  s=ParentCollect(c,gpu,io,pins,parent->Drivers.Child,&pre);
+  if(s!=EFI_SUCCESS || !PfEqual(decoded,&pre,sizeof(pre)) || !io->Attributes ||
+     OwnerGone(c->Table,parent->Drivers.Child)!=EFI_SUCCESS)return EFI_NOT_READY;
+  DecodeOffAttempted=TRUE;
+  EFI_STATUS callback=io->Attributes(io,EfiPciIoAttributeOperationDisable,0x300,NULL);
+  EFI_STATUS a=ParentCollect(c,gpu,io,pins,parent->Drivers.Child,&one);
+  EFI_STATUS b=ParentCollect(c,gpu,io,pins,parent->Drivers.Child,&two);
+  EFI_STATUS gone=OwnerGone(c->Table,parent->Drivers.Child);
+  EdStatus(c,"decode-off-return",callback);EdStatus(c,"decode-off-post",a);EdStatus(c,"decode-off-repeat",b);
+  EdDescribe(c,&one,"decode-off-post");EdDescribe(c,&two,"decode-off-repeat");
+  BOOLEAN good=callback==EFI_SUCCESS && a==EFI_SUCCESS && b==EFI_SUCCESS && gone==EFI_SUCCESS &&
+    PfEqual(parent,&one,sizeof(one)) && PfEqual(parent,&two,sizeof(two));
+  if(EdFlush(c)!=EFI_SUCCESS)return c->Io;
+  if(!good)return EFI_NOT_READY;
+  s=ParentCollect(c,gpu,io,pins,parent->Drivers.Child,&pre);
+  gone=OwnerGone(c->Table,parent->Drivers.Child);
+  return s==EFI_SUCCESS && gone==EFI_SUCCESS && PfEqual(parent,&pre,sizeof(pre))?EFI_SUCCESS:EFI_NOT_READY;
+}
+#endif
 static EFI_STATUS DecodeStep(CAPTURE *c,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *io,
                              const PF_PIN *pins,const ED_STATE *before) {
   EFI_SYSTEM_TABLE *t=c->Table;static ED_STATE pre,one,two,final;
@@ -76,5 +106,8 @@ static EFI_STATUS DecodeStep(CAPTURE *c,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *io,
   x=ParentCollect(c,gpu,io,pins,pre.Drivers.Child,&final);gone=OwnerGone(t,pre.Drivers.Child);
   EdStatus(c,"decode-input-after",s);EdStatus(c,"decode-final-post",x);EdDescribe(c,&final,"decode-final-post");
   if(s!=EFI_SUCCESS || x!=EFI_SUCCESS || gone!=EFI_SUCCESS || !DecodePost(&pre,&final))s=EFI_NOT_READY;
+#ifdef GU_AD104_DECODE_OFF_TEST
+  if(s==EFI_SUCCESS)s=DecodeOff(c,gpu,io,pins,&pre,&final);
+#endif
   EdStatus(c,"windows-eligible",s);if(EdFlush(c)!=EFI_SUCCESS)return c->Io;return s;
 }

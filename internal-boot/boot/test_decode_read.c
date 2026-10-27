@@ -29,8 +29,27 @@ static EFI_STATUS EFIAPI ReadBar(EFI_PCI_IO_PROTOCOL *io,EFI_PCI_IO_PROTOCOL_WID
 }
 static CAPTURE *DecodeSetup(int fault) {
   CAPTURE *c=ParentSetup(0);DecodeFault=fault;DecodeCalls=MmioCalls=DecodeFlushes=0;
-  DecodeAttempted=FALSE;Io.Mem.Read=ReadBar;return c;
+  DecodeAttempted=FALSE;Io.Mem.Read=ReadBar;
+#ifdef GU_AD104_DECODE_OFF_TEST
+  OffIntentSeen=0;
+#endif
+  return c;
 }
+#ifdef GU_AD104_DECODE_OFF_TEST
+int main(void) {
+  CAPTURE *c=DecodeSetup(0);DecodeOffAttempted=FALSE;OffFault=OffCalls=0;
+  Check(EdRun(c,(VOID *)1,&Io,Pins)==EFI_SUCCESS && OffCalls==1 && MmioCalls==44,"capture then one decode off qualifies Windows");
+  Check(CurrentAttributes==0 && !(Config[1]&7),"exact post-parent decode/BME state restored");
+  Check(DecodeOff(c,(VOID *)1,&Io,Pins,NULL,NULL)==EFI_ALREADY_STARTED && OffCalls==1,"no disable retry");
+  for(int f=1;f<=13;f++) {
+    c=DecodeSetup(0);DecodeOffAttempted=FALSE;OffFault=f;OffCalls=0;
+    Check(EdRun(c,(VOID *)1,&Io,Pins)!=EFI_SUCCESS && OffCalls==((f==6 || f==9 || f==10 || f>=11)?0:1) && MmioCalls==44,"disable error/partial/config/log drift blocks Windows without more MMIO");
+  }
+  c=DecodeSetup(10);DecodeOffAttempted=FALSE;OffFault=OffCalls=0;
+  Check(EdRun(c,(VOID *)1,&Io,Pins)!=EFI_SUCCESS && !OffCalls,"failed capture prevents disable");
+  printf("PASS capture then decode off: %d checks, RAM-only mocks\n",Checks);return 0;
+}
+#else
 int main(void) {
   CAPTURE *c=DecodeSetup(0);
   Check(EdRun(c,(VOID *)1,&Io,Pins)==EFI_SUCCESS && DecodeCalls==1 && MmioCalls==44,
@@ -53,3 +72,5 @@ int main(void) {
   Check(EdRun(c,(VOID *)1,&Io,Pins)!=EFI_SUCCESS && !DecodeCalls && !MmioCalls,"failed parent prevents decode and MMIO");
   printf("PASS limited decode and registers: %d checks, RAM-only mocks\n",Checks);return 0;
 }
+
+#endif

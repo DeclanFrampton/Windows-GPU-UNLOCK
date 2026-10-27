@@ -37,6 +37,10 @@ try {
  if($LASTEXITCODE -ne 0){throw 'Output mocks compile failed'}
  & ./build/capture-tests/output.exe
  if($LASTEXITCODE -ne 0){throw 'Output mocks failed'}
+ & $Clang @flags -Wno-unused-function -DGU_AD104_DECODE_OFF_TEST test_decode_read.c ../unlock/sha256.c -o build/capture-tests/decode-off.exe
+ if($LASTEXITCODE -ne 0){throw 'Decode-off compile failed'}
+ & ./build/capture-tests/decode-off.exe
+ if($LASTEXITCODE -ne 0){throw 'Decode-off mocks failed'}
  foreach($name in @('pcd_producer','text_display','text_lifecycle','gop_lifecycle','consumers_lifecycle','owner_child','owner_parent','decode_read')) {
   & $Clang @flags -Wno-unused-function "test_$name.c" ../unlock/sha256.c -o "build/capture-tests/$name.exe"
   if($LASTEXITCODE -ne 0){throw "$name mocks compile failed"}

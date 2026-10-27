@@ -16,6 +16,9 @@ static UINT32 Config[64];
 static UINT64 CurrentAttributes,SupportedAttributes;
 #ifdef GU_AD104_DECODE_READ_TEST
 static int DecodeFault,DecodeCalls,MmioCalls,DecodeFlushes;
+#ifdef GU_AD104_DECODE_OFF_TEST
+static int OffFault,OffCalls,OffIntentSeen;
+#endif
 #endif
 #ifdef GU_AD104_GOP_TEST
 static int GopFault,ProtocolReads;
@@ -45,6 +48,9 @@ static EFI_STATUS TextPcdCollect(EFI_SYSTEM_TABLE *t,TEXT_DISPLAY *out) {
 static int QuietReady,EarlyDrained;
 #endif
 VOID Text(CAPTURE *c,const char *s){
+#ifdef GU_AD104_DECODE_OFF_TEST
+  if(strstr(s,"intent=one-disable-io-memory"))OffIntentSeen=1;
+#endif
 #ifdef GU_AD104_DECODE_READ_TEST
   /* Faithful auto-write behavior with a small buffer to force service calls. */
   while(*s && c->Io==EFI_SUCCESS) {
@@ -96,6 +102,17 @@ static EFI_STATUS EFIAPI Attributes(EFI_PCI_IO_PROTOCOL *io,EFI_PCI_IO_PROTOCOL_
   if(op==EfiPciIoAttributeOperationGet){*out=CurrentAttributes;return EFI_SUCCESS;}
   if(op==EfiPciIoAttributeOperationSupported){*out=SupportedAttributes;return EFI_SUCCESS;}
 #ifdef GU_AD104_DECODE_READ_TEST
+#ifdef GU_AD104_DECODE_OFF_TEST
+  if(op==EfiPciIoAttributeOperationDisable) {
+    Check(value==0x300 && !out && DecodeOffAttempted && MmioCalls==44,"one disable only after complete capture");
+    OffCalls++;if(OffFault==1)return EFI_DEVICE_ERROR;
+    Stage=7;Config[1]&=~3U;CurrentAttributes=0;
+    if(OffFault==3)Config[1]|=4;
+    if(OffFault==4)CurrentAttributes=0x100;
+    if(OffFault==5)Config[4]++;
+    return OffFault==2?EFI_DEVICE_ERROR:EFI_SUCCESS;
+  }
+#endif
   if(op==EfiPciIoAttributeOperationEnable) {
     Check(value==0x300 && !out && DecodeAttempted,"only one explicit IO/MEM Enable300");
     DecodeCalls++;if(DecodeFault==1)return EFI_DEVICE_ERROR;
@@ -112,6 +129,12 @@ static EFI_STATUS EFIAPI Attributes(EFI_PCI_IO_PROTOCOL *io,EFI_PCI_IO_PROTOCOL_
 }
 static EFI_STATUS EFIAPI Write(EFI_FILE_PROTOCOL *f,UINTN *n,VOID *p) {
   (void)f;(void)n;(void)p;Writes++;
+#ifdef GU_AD104_DECODE_OFF_TEST
+  if(Stage==6 && MmioCalls==44 && OffFault==6)return EFI_DEVICE_ERROR;
+  if(Stage==7 && OffFault==7)return EFI_DEVICE_ERROR;
+  if(Stage==7 && OffFault==8)Config[1]|=4;
+  if(Stage==6 && MmioCalls==44 && OffFault==9)Io.Attributes=NULL;
+#endif
 #ifdef GU_AD104_DECODE_READ_TEST
   if(Stage==6 && MmioCalls==22) {
     if(DecodeFault==24)return EFI_DEVICE_ERROR;
@@ -124,6 +147,13 @@ static EFI_STATUS EFIAPI Write(EFI_FILE_PROTOCOL *f,UINTN *n,VOID *p) {
 return EdFault==1 || (EdFault==15 && Stage)?EFI_DEVICE_ERROR:EFI_SUCCESS;
 }
 static EFI_STATUS EFIAPI FlushFile(EFI_FILE_PROTOCOL *f){(void)f;Flushes++;
+#ifdef GU_AD104_DECODE_OFF_TEST
+  if(OffIntentSeen && !OffCalls) {
+    if(OffFault==11)return EFI_DEVICE_ERROR;
+    if(OffFault==12)Config[1]|=4;
+    if(OffFault==13)Io.Attributes=NULL;
+  }
+#endif
 #ifdef GU_AD104_CONSUMERS_TEST
   if(Stage==2 && ++ConsumerFlushes==2 && ConsumerFault==9)return EFI_DEVICE_ERROR;
 #endif
@@ -150,6 +180,9 @@ static EFI_STATUS EFIAPI ReadKey(EFI_SIMPLE_TEXT_INPUT_PROTOCOL *i,EFI_INPUT_KEY
 #endif
     :'V');
   if(EdFault==4)k->UnicodeChar='x';
+#ifdef GU_AD104_DECODE_OFF_TEST
+  if(Stage==6 && OffFault==10)k->UnicodeChar='x';
+#endif
   if(EdFault==18 && KeyPhase==2)Config[1]=3;
   KeyPhase=0;return EFI_SUCCESS;
 }

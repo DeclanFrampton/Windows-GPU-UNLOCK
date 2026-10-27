@@ -43,6 +43,9 @@
 #error GU_USB_PROBE is the read-only diagnostic probe only
 #endif
 
+#if defined(GU_AD104_DECODE_OFF_TEST) && !defined(GU_AD104_DECODE_READ_TEST)
+#error Decode off requires the decode read experiment
+#endif
 static EFI_GUID LoadedGuid=EFI_LOADED_IMAGE_PROTOCOL_GUID,FsGuid=EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_GUID;
 static EFI_GUID PathGuid=EFI_DEVICE_PATH_PROTOCOL_GUID;
 #ifndef GU_DIAGNOSTIC_ONLY

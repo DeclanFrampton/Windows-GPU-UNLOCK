@@ -191,7 +191,11 @@ static EFI_STATUS EdRun(CAPTURE *c,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *io,const 
 #ifdef GU_AD104_OWNER_CHILD_TEST
 #ifdef GU_AD104_PARENT_TEST
 #ifdef GU_AD104_DECODE_READ_TEST
+#ifdef GU_AD104_DECODE_OFF_TEST
+  s=EdKey(t,'G',L"CAPTURE THEN DECODE-OFF TEST\r\nNo unlock. Recovery is unproven.\r\nFive stops, IO/MEM enable, two read batches.\r\nThen ONE IO/MEM Disable(0x300).\r\nBME/VGA stay off. No reset or rollback.\r\nVerify exact post-parent state before Windows.\r\nShift+G accepts ALL stages.\r\nDisplay stops updating after G.\r\nWait 5 sec; tap Shift+V every 2 sec for 1 min.\r\nV authorizes decode-off then Windows.\r\nNo Windows after 5 min: power off, remove USB,\r\nboot normal Windows Boot Manager.\r\nRun once. Return captures before retry.\r\n");
+#else
   s=EdKey(t,'G',L"REGISTER + WINDOWS HANDOFF TEST\r\nNo unlock. Recovery is unproven.\r\nFive stops; enable IO/MEM, keep BME off.\r\nRead 21 registers twice; check chip ID.\r\nSkip 0x840100. Keep all error guards.\r\n\r\nShift+G: accept and start all stages.\r\nThen the display stops updating.\r\nA blinking cursor does NOT show progress.\r\nWait 5 seconds; tap Shift+V every 2 seconds.\r\nDo this for up to ONE minute.\r\nV works only after every check passes.\r\n\r\nNo Windows after FIVE minutes?\r\nPower off manually. Remove this USB.\r\nBoot normal Windows Boot Manager.\r\nNo automatic reset, retry or rollback.\r\nReturn captures before another attempt.\r\n");
+#endif
 #else
   s=EdKey(t,'G',L"PARENT STOP TEST: prior four stages THEN direct IMG29 zero-child Stop. May disable IO/MEM/BME/VGA. No restore/unlock. Recovery unproven.\r\nG permits all FIVE stages. Display/input/Windows may fail. Wait five seconds then tap uppercase V every two seconds up to one minute. No second prompt.\r\n");
 #endif
