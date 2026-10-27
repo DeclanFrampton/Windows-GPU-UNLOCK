@@ -2,7 +2,7 @@
 
 [English](AD104-TWENTY-NINTH-BOOT.en.md) | [한국어](AD104-TWENTY-NINTH-BOOT.ko.md)
 
-Built for review; approval PENDING, NOT USB-staged or physically executed. This changes handling of one optional read failure. It does not accept the failed register as valid or grant execution authority. USB remains executed test28 with originals intact.
+Built for review; user explicitly accepted the disclosed new failure-recovery risk and staging. Physical29 has NOT executed; test28 originals are preserved before verified staging. This changes handling of one optional read failure. It does not accept the failed register as valid or grant execution authority. The reviewed binary is staged only after USB/source/archive/hash verification.
 
 ## Offline finding
 
@@ -18,7 +18,7 @@ Require both chip bookends194000a1, CPUCTL and selectors/VGA equal the prior sam
 
 Only after all14rechecks and a separately logged recovery admission, require a fresh Shift+V and the existing final-state checks. Then make the established ONE Attributes Disable(0x300), verify exact saved post-parent state, record decode-off outcome in STATUS and recheck fresh PCI/ownership state. No GPU MMIO after Disable. An observation remains incomplete/NOT_READY even if the recovery experiment becomes eligible for Windows; a successful recovery experiment is not successful core-state sampling. STATUS independently preserves refusal/recheck/decode-off records plus normal Windows markers. Witness write/flush/budget/ExitBootServices protections remain.
 
-No new MMIO addresses, reset, core switch, start/stop, DMA launch, BME/VGA enable, firmware upload/execution, unlock, reconnect or automatic rollback. However, continuing after a rejected read is a NEW risk boundary: critical checks may not detect every hardware side effect. Display/input/Windows may fail or hang, manual power-off/USB removal may be needed, recovery remains unproven. Prior successful-path recovery approval does not authorize this branch; explicit approval is required before staging.
+No new MMIO addresses, reset, core switch, start/stop, DMA launch, BME/VGA enable, firmware upload/execution, unlock, reconnect or automatic rollback. However, continuing after a rejected read is a NEW risk boundary: critical checks may not detect every hardware side effect. Display/input/Windows may fail or hang, manual power-off/USB removal may be needed, recovery remains unproven. Prior successful-path recovery approval does not authorize this branch; explicit approval for this exact branch was received.
 
 Counts: normal complete observation path retains28additional reads/262348total. Exact refusal path uses9optional+14required=23additional/262343total, with no refused-register retry. Manifest separately flags CanRecoverKnownObservationRefusal=true, RecoveryRegisterReads14, RefusalPathAdditionalReads23; DMACTL/reset/firmwareexecution/unlock=false.
 
@@ -28,4 +28,4 @@ Native AMD64/noimports EFI69,632bytes SHA256:
 `f6de8e330777bd344c229ac37ec8844ac3f66b77f487d7dd09e3d3ee079c41c0`.
 Checklist remains15/26(58%); unlock and actual firmware execution are unproven.
 
-After explicit approval/verified staging: savework/fullshutdown/wait10s/UEFIUSB/Shift+G once. Wait10s then Shift+V every2s up to3minutes. If noWindows10minutes,poweroff/removeUSB/normalBootManager. Runonce and preserve captures. A failed recovery guard still cannot resume with keys.
+After verified staging: savework/fullshutdown/wait10s/UEFIUSB/Shift+G once. Wait10s then Shift+V every2s up to3minutes. If noWindows10minutes,poweroff/removeUSB/normalBootManager. Runonce and preserve captures. A failed recovery guard still cannot resume with keys.
