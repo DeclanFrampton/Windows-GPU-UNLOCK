@@ -47,3 +47,5 @@ IMG16/17, EDID, NVIDIA Stop, PCI 속성 쓰기, GPU MMIO, 리셋, DMA 시작, �
 수정 빌드와 첫 실행 근거: [FIRST-EFI-RESULT](FIRST-EFI-RESULT.ko.md). 위의 이전 파일 정보는 초기 빌드를 설명합니다.
 
 최신 호출 전 거부와 단계 진단 빌드: [SECOND-EFI-RESULT](SECOND-EFI-RESULT.ko.md).
+
+[관련 보고 및 증거의 한계](RELATED-ISSUES.ko.md)

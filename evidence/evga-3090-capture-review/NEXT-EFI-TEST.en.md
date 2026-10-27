@@ -1,6 +1,6 @@
 # Next attended test: one text-console membership Stop
 
-[English](NEXT-EFI-TEST.en.md) | [í•œêµ­ì–´](NEXT-EFI-TEST.ko.md)
+[English](NEXT-EFI-TEST.en.md) | [한국어](NEXT-EFI-TEST.ko.md)
 
 Status: implemented and compiled, hardware untested, not staged. This is the first EVGA3090 lifecycle test, not an unlock attempt. Read the risk below and choose whether to stage/run it; no separate confirmation reply is required.
 
