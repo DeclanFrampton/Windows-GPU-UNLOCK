@@ -30,7 +30,14 @@ if(Test-Path -LiteralPath (Join-Path $captures 'EVGA-TEXT-STOP.ARMED')){throw 'A
 $destination=Join-Path $root 'EFI/BOOT/BOOTX64.EFI'
 if(!(Test-Path -LiteralPath $destination)){throw 'Expected the existing capture EFI on this USB'}
 $backup=Join-Path $root 'EFI/BOOT/BOOTX64.before-evga-text-stop.efi'
-if(Test-Path -LiteralPath $backup){throw 'Backup already exists; preserve it and review current USB state'}
+if(Test-Path -LiteralPath $backup){
+ $found=$false
+ for($i=1;$i -le 99;$i++){
+  $candidate=Join-Path $root ('EFI/BOOT/BOOTX64.before-evga-text-stop.{0:D2}.efi' -f $i)
+  if(!(Test-Path -LiteralPath $candidate)){$backup=$candidate;$found=$true;break}
+ }
+ if(!$found){throw 'All backup slots are occupied; preserve them and review USB state'}
+}
 if($PSCmdlet.ShouldProcess($destination,'Back up existing capture EFI and stage the one-call EVGA text Stop experiment')) {
  Copy-Item -LiteralPath $destination -Destination $backup
  if((Get-FileHash -LiteralPath $destination).Hash -cne (Get-FileHash -LiteralPath $backup).Hash){throw 'Backup verification failed'}

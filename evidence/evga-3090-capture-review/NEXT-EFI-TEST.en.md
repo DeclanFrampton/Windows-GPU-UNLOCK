@@ -10,7 +10,7 @@ After a before-capture and fresh uppercase G, the EFI will call only captured IM
 
 It then checks that IMG13's two selected text-consumer opens are gone and the physical/virtual GOP handles, remaining GOP owners and code pins are unchanged. It captures the graph again, closes files, verifies the selected graph once more immediately before Windows StartImage, and attempts the already-loaded Windows Boot Manager. A successful Stop return without the expected edge changes fails.
 
-This changes live firmware console membership. The reviewed Stop path may free shared console state or run helper callbacks. Display/input may disappear, firmware may hang, or Windows may fail to start or initialize the GPU. Manual power-off and USB removal may be required. Recovery is unproven; there is no automatic restoration. Any failed guard holds. A marker means an attempt was armed, not proof the Stop call completed.
+This changes live firmware console membership. The reviewed Stop path may free shared console state or run helper callbacks. Display/input may disappear, firmware may hang, or Windows may fail to start or initialize the GPU. Manual power-off and USB removal may be required. Recovery is unproven; there is no automatic restoration. After a Stop starts, a failed guard holds. A logged refusal before any Stop now attempts normal Windows if file closure succeeds. A marker means an attempt was armed, not proof the Stop call completed.
 
 No Stop of IMG16, IMG17, EDID or NVIDIA; no PCI-attribute write, GPU MMIO, reset, DMA launch, firmware upload/execution, unlock or NVRAM write is added. PCI configuration is read for inventory. The tested consumer callback can itself have side effects, so those exclusions do not imply absence of all indirect hardware effects.
 
@@ -43,3 +43,5 @@ Save work, fully shut down, and select the UEFI USB. Wait for `Capture saved. NO
 - New EFI builds with warnings as errors; PE verification reports AMD64 EFI application, no imports/IAT/delay imports, NX and dynamic base. Local build: 18,944 bytes; SHA256 e25e20da76331b1246db96d6e5141b6c934befb5f12cf383876c53853fb4d15b with the contributor ESP pin and local toolchain. A different toolchain can produce another hash; record the actual build.
 
 Passing this test would establish only this exact membership removal and observed handoff on this machine. It would not qualify later consumers or prove unlock.
+
+Corrected build and first-run evidence: [FIRST-EFI-RESULT](FIRST-EFI-RESULT.en.md). The earlier artifact details above describe the initial build.

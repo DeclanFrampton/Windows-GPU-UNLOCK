@@ -418,6 +418,7 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE Image,EFI_SYSTEM_TABLE *St) {
 #ifdef GU_EVGA_STOP_ONLY
   Say(L"EVGA 3090 TEXT MEMBERSHIP TEST. NO UNLOCK.\r\nPress fresh Shift+G when ready (60 seconds), Esc cancels.\r\nScreen may stop updating. One IMG13 child Stop only; automatic Windows handoff on success.\r\nNo Windows after 3 minutes: power off, remove USB, use Windows Boot Manager. Recovery is unproven.\r\n");
   s=Prepare(NULL);
+  BOOLEAN evgaPrepared=s==EFI_SUCCESS;
   if(s==EFI_SUCCESS)s=Record(NULL,"evga-text-stop-capture-before",EFI_SUCCESS);
   if(s==EFI_SUCCESS)s=GuCaptureGraphOnVolume(Table,Log,Root);
   if(s==EFI_SUCCESS)Say(L"Capture saved. NOW press fresh Shift+G once. Esc cancels.\r\nAfter G this screen may freeze; successful checks automatically start Windows.\r\n");
@@ -426,6 +427,17 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE Image,EFI_SYSTEM_TABLE *St) {
   if(s==EFI_SUCCESS)s=GuCaptureGraphOnVolume(Table,Log,Root);
   if(s==EFI_SUCCESS)s=Record(NULL,"evga-text-stop-ready-windows",EFI_SUCCESS);
   if(s==EFI_SUCCESS)s=Windows(NULL);
+  if(s!=EFI_SUCCESS && evgaPrepared && !ResearchOutputDisabled) {
+    /* The test never reached the Stop call. Preserve the refusal and attempt
+     * the preloaded normal Windows entry without pretending release passed. */
+    EFI_STATUS refusal=s;
+    s=Record(NULL,"evga-pre-stop-refusal-normal-windows",refusal);
+    if(s==EFI_SUCCESS) {
+      Say(L"Test stopped BEFORE the driver call; no detach attempted. Starting normal Windows.\r\n");
+      s=CloseBootFiles(NULL,NULL);
+      if(s==EFI_SUCCESS)s=Table->BootServices->StartImage(WindowsImage,NULL,NULL);
+    }
+  }
 #elif defined(GU_FULL_UNLOCK)
   GU_FULL_FLOW_OPS ops={NULL,Prepare,FullChoice,FullCapture,FullRelease,FullVerifyCold,Unlock,Windows,FullWindows,Record};
   s=GuFullFlow(&ops);
