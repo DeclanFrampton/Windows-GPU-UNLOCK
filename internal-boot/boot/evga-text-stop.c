@@ -95,9 +95,16 @@ static EFI_STATUS Graph(EFI_SYSTEM_TABLE *t,BOOLEAN after,GU_EVGA_RECORD record)
   if(b->FreePool(handles)!=EFI_SUCCESS)s=EFI_DEVICE_ERROR;
   if(s!=EFI_SUCCESS || !physical || !virtual || !t->ConsoleOutHandle || t->StandardErrorHandle!=t->ConsoleOutHandle)return Checked(record,"evga-gop-shape",EFI_UNSUPPORTED);
   VOID *text=NULL,*gop=NULL;
-  if(b->HandleProtocol(virtual,&Text,&text)!=EFI_SUCCESS || !text ||
-     b->HandleProtocol(t->ConsoleOutHandle,&Text,&text)!=EFI_SUCCESS || !text ||
-     b->HandleProtocol(t->ConsoleOutHandle,&Gop,&gop)!=EFI_UNSUPPORTED)return Checked(record,"evga-console-interfaces",EFI_UNSUPPORTED);
+  s=b->HandleProtocol(virtual,&Text,&text);
+  EFI_STATUS io=Checked(record,"evga-virtual-text-interface",s);if(io!=s)return io;
+  if(s!=EFI_SUCCESS || !text)return Checked(record,"evga-virtual-text-interface-valid",EFI_UNSUPPORTED);
+  text=NULL;s=b->HandleProtocol(t->ConsoleOutHandle,&Text,&text);
+  io=Checked(record,"evga-system-text-interface",s);if(io!=s)return io;
+  if(s!=EFI_SUCCESS || !text)return Checked(record,"evga-system-text-interface-valid",EFI_UNSUPPORTED);
+  s=b->HandleProtocol(t->ConsoleOutHandle,&Gop,&gop);
+  io=Checked(record,"evga-system-gop-query",s);if(io!=s)return io;
+  io=Value(record,"evga-system-gop-pointer-present",gop?1:0);if(io!=EFI_SUCCESS)return io;
+  if(s!=EFI_UNSUPPORTED)return Checked(record,"evga-system-gop-absence",EFI_UNSUPPORTED);
   if(Plan.Physical && (Plan.Physical!=physical || Plan.Virtual!=virtual || Plan.Console!=t->ConsoleOutHandle))return EFI_ACCESS_DENIED;
   Plan.Physical=physical;Plan.Virtual=virtual;Plan.Console=t->ConsoleOutHandle;
   s=Checked(record,"evga-gfx-edges",Edges(b,physical,&Gop,virtual,TRUE,&Plan.Gfx,FALSE));if(s!=EFI_SUCCESS)return s;

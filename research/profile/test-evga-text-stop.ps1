@@ -15,5 +15,5 @@ try {
   & "./$out/$name.exe"
   if($LASTEXITCODE -ne 0){throw "Host scenario failed: $name/$LASTEXITCODE"}
  }
- '18 membership host checkpoints and 9 capture regression cases passed (mock protocols, hashes and Stop; no captured firmware executed).'
+ '22 membership host checkpoints and 9 capture regression cases passed (mock protocols, hashes and Stop; no captured firmware executed).'
 } finally {Pop-Location}
