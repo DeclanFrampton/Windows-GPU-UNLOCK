@@ -15,7 +15,14 @@ static PLAN Plan;
 #ifdef GU_EVGA_RELEASE_TEXT
 static EFI_DRIVER_BINDING_PROTOCOL *VirtualDriver;
 static BOOLEAN TextReleased;
+#ifdef GU_EVGA_RELEASE_GRAPHICS
+static EFI_DRIVER_BINDING_PROTOCOL *GraphicsDriver;
+static BOOLEAN GraphicsReleased;
+#undef ATTEMPT_PATH
+#define ATTEMPT_PATH L"\\RTX3090-UNLOCK\\EVGA-GFX-RELEASE.ARMED"
+#else
 #define ATTEMPT_PATH L"\\RTX3090-UNLOCK\\EVGA-TEXT-RELEASE.ARMED"
+#endif
 #else
 #define ATTEMPT_PATH L"\\RTX3090-UNLOCK\\EVGA-TEXT-STOP.ARMED"
 #endif
@@ -162,7 +169,13 @@ static EFI_STATUS Graph(EFI_SYSTEM_TABLE *t,BOOLEAN after,GU_EVGA_RECORD record)
   if(s!=EFI_SUCCESS || !text)return Checked(record,"evga-system-text-interface-valid",EFI_UNSUPPORTED);
   if(Plan.Physical && (Plan.Physical!=physical || Plan.Virtual!=virtual || Plan.Console!=t->ConsoleOutHandle))return EFI_ACCESS_DENIED;
   Plan.Physical=physical;Plan.Virtual=virtual;Plan.Console=t->ConsoleOutHandle;
-  s=Checked(record,"evga-gfx-edges",Edges(b,physical,&Gop,virtual,TRUE,&Plan.Gfx,FALSE));if(s!=EFI_SUCCESS)return s;
+  s=Checked(record,"evga-gfx-edges",Edges(b,physical,&Gop,virtual,TRUE,&Plan.Gfx,
+#ifdef GU_EVGA_RELEASE_GRAPHICS
+    GraphicsReleased
+#else
+    FALSE
+#endif
+  ));if(s!=EFI_SUCCESS)return s;
   s=Checked(record,"evga-virtual-text-edges",Edges(b,virtual,&Gop,NULL,FALSE,&Plan.VirtualText,
 #ifdef GU_EVGA_RELEASE_TEXT
     TextReleased
@@ -179,7 +192,13 @@ static EFI_STATUS Graph(EFI_SYSTEM_TABLE *t,BOOLEAN after,GU_EVGA_RECORD record)
 #ifdef GU_EVGA_RELEASE_TEXT
   }
 #endif
-  s=Checked(record,"evga-gfx-code",Code(b,Plan.Gfx,0x2180,0x1990,0x88c,17,"3f4c4ea26023ddf00990b59385d0fcf3139acb583c70406828777cdceab8cecb",NULL,record));if(s!=EFI_SUCCESS)return s;
+  s=Checked(record,"evga-gfx-code",Code(b,Plan.Gfx,0x2180,0x1990,0x88c,17,"3f4c4ea26023ddf00990b59385d0fcf3139acb583c70406828777cdceab8cecb",
+#ifdef GU_EVGA_RELEASE_GRAPHICS
+    &GraphicsDriver,
+#else
+    NULL,
+#endif
+    record));if(s!=EFI_SUCCESS)return s;
   s=Checked(record,"evga-virtual-text-code",Code(b,Plan.VirtualText,0x3bc0,0x1e00,0xb2c,16,"e5e68f0856c6e932da9bf3c680bac955dbf180eb083da78b64007388d89e24a7",
 #ifdef GU_EVGA_RELEASE_TEXT
     &VirtualDriver,
@@ -247,7 +266,17 @@ EFI_STATUS GuEvgaTextStop(EFI_SYSTEM_TABLE *t,EFI_FILE_PROTOCOL *root,GU_EVGA_RE
   s=VirtualDriver->Stop(VirtualDriver,Plan.Virtual,0,NULL);
   logged=record(NULL,"evga-virtual-text-stop-return",s);if(logged!=EFI_SUCCESS)return logged;if(s!=EFI_SUCCESS)return s;
   TextReleased=TRUE;s=Graph(t,TRUE,record);
-  return Checked(record,"evga-virtual-text-post-graph",s);
+  s=Checked(record,"evga-virtual-text-post-graph",s);if(s!=EFI_SUCCESS)return s;
+#ifdef GU_EVGA_RELEASE_GRAPHICS
+  s=record(NULL,"evga-graphics-stop-before",EFI_SUCCESS);if(s!=EFI_SUCCESS)return s;
+  EFI_HANDLE aggregate=Plan.Virtual;
+  s=GraphicsDriver->Stop(GraphicsDriver,Plan.Physical,1,&aggregate);
+  logged=record(NULL,"evga-graphics-stop-return",s);if(logged!=EFI_SUCCESS)return logged;if(s!=EFI_SUCCESS)return s;
+  GraphicsReleased=TRUE;s=Graph(t,TRUE,record);
+  return Checked(record,"evga-graphics-post-graph",s);
+#else
+  return EFI_SUCCESS;
+#endif
 #else
   return EFI_SUCCESS;
 #endif
