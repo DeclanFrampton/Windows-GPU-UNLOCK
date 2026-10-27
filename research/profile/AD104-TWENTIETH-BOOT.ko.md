@@ -1,5 +1,8 @@
 # 20차 참석 후보: 제한된 BAR PROM 앞부분
 
+실행 결과: [20차](AD104-TWENTIETH-RESULT.ko.md). 아래는 원래 후보 계약입니다.
+
+
 [English](AD104-TWENTIETH-BOOT.en.md) | 한국어
 
 빌드·호스트 검사 완료, 실제 실행 전입니다. 새 MMIO 위험이 있어 USB 준비 전에 명시적

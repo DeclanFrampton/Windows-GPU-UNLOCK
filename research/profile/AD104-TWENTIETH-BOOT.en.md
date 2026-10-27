@@ -1,5 +1,8 @@
 # Twentieth attended candidate: bounded BAR PROM prefix
 
+Executed result: [test20](AD104-TWENTIETH-RESULT.en.md). Original candidate contract follows.
+
+
 English | [한국어](AD104-TWENTIETH-BOOT.ko.md)
 
 Built and host-tested, not physically executed. New MMIO risk requires explicit
