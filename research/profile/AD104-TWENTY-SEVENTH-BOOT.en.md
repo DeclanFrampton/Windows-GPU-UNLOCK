@@ -2,7 +2,7 @@
 
 [English](AD104-TWENTY-SEVENTH-BOOT.en.md) | [한국어](AD104-TWENTY-SEVENTH-BOOT.ko.md)
 
-Built/host-tested for review. User explicitly accepted the disclosed new-MMIO risk and staging of this exact candidate. Physical test27 has NOT executed. Test26 originals/old EFI are preserved before verified staging. This extends the successful mailbox-only baseline with three published read-only register locations, leaving DMACTL excluded.
+Built/host-tested for review. User explicitly accepted the disclosed new-MMIO risk and staging of this exact candidate. Physical test27 completed successfully; see the linked result. Test26 originals/old EFI are preserved before verified staging. This extends the successful mailbox-only baseline with three published read-only register locations, leaving DMACTL excluded.
 
 Two eleven-DWORD batches:
 `0, 0x110100, 0x110040, 0x110044, 0x110008, 0x1100f4, 0x110108, 0x82381c, 0x823820, 0x625f04, 0`.
@@ -23,3 +23,5 @@ Manifest capability-observation=true, additionalreads22, DMACTL/firmwareexecutio
 No additional hardware access was needed for this calculation. In vendor/unlock_610.c: usableFB=0x2ffa00000; raw VGA workspace=0x10e0000, below usableFB-1MiB, so its existing layout policy selects usableFB-128KiB=0x2ff9e0000. Decoded MMU low=0x10000000, high=0x2ef9ff000, rounded exclusive top=0x2efa00000, exactly256MiB below usableFB. Therefore that code's top_lock predicate is false: this is not its top-of-FB reservation. These are consequences of the existing algorithm, not approval to use that policy on AD104. Assets, actual allocations/reservations, overlap/scrub constraints and exact-machine admission still need qualification. No numeric candidate is written to hardware and no full transaction layout is claimed valid. Checklist remains15/26(58%).
 
 After verified staging: save work/fullshutdown/wait10s/UEFIUSB/Shift+G once. Wait10s then Shift+V every2s up to3minutes. If noWindows after10minutes, poweroff/removeUSB/select normalBootManager. A guarded hold cannot resume with keys. Run once and preserve captures; recovery is unproven.
+
+[Actual result / 실제 결과](AD104-TWENTY-SEVENTH-RESULT.en.md).
