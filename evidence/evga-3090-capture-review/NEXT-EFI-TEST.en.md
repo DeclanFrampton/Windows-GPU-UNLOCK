@@ -1,6 +1,6 @@
 # Next attended test: one text-console membership Stop
 
-[English](NEXT-EFI-TEST.en.md) | [한국어](NEXT-EFI-TEST.ko.md)
+[English](NEXT-EFI-TEST.en.md) | [í•œêµ­ì–´](NEXT-EFI-TEST.ko.md)
 
 Status: implemented and compiled, hardware untested, not staged. This is the first EVGA3090 lifecycle test, not an unlock attempt. Read the risk below and choose whether to stage/run it; no separate confirmation reply is required.
 
@@ -47,3 +47,5 @@ Passing this test would establish only this exact membership removal and observe
 Corrected build and first-run evidence: [FIRST-EFI-RESULT](FIRST-EFI-RESULT.en.md). The earlier artifact details above describe the initial build.
 
 Latest pre-call refusal and phase-diagnostic build: [SECOND-EFI-RESULT](SECOND-EFI-RESULT.en.md).
+
+[Related reports and evidence limits](RELATED-ISSUES.en.md)
