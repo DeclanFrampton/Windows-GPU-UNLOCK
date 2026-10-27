@@ -1,5 +1,8 @@
 # AD104 ROM 체인 및 오프라인 EFI 분석
 
+추가 결과: [실제21차](AD104-TWENTY-FIRST-RESULT.ko.md)는 두 이미지 RAM 버퍼 밖의 NVIDIA NPDE 연속 이미지를 확인했습니다. 아래 일반 PCIR final 비트는 맞고 확장 해석은 별도입니다.
+
+
 [English](AD104-ROM-CHAIN.en.md) | 한국어
 
 [비공개 정보를 제외한 체인 증거](ad104-rom-chain-evidence.json)는 세 번째 부팅의

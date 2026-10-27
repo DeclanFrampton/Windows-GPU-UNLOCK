@@ -1,5 +1,8 @@
 # 21차 참석 후보: 전체 PROM 캡처와 검증 결합
 
+실행 결과: [21차](AD104-TWENTY-FIRST-RESULT.ko.md). 아래는 원래 후보 계약입니다.
+
+
 [English](AD104-TWENTY-FIRST-BOOT.en.md) | 한국어
 
 빌드·호스트 검사 완료, 실제 실행 전입니다. 확대 MMIO의 별도 승인이 필요합니다.

@@ -1,5 +1,8 @@
 # Captured AD104 ROM chain and offline EFI inspection
 
+Update: [physical test21](AD104-TWENTY-FIRST-RESULT.en.md) exposes NVIDIA NPDE continuation beyond this two-image RAM buffer. The ordinary PCIR final bit below is accurate; the extended interpretation is separate.
+
+
 English | [한국어](AD104-ROM-CHAIN.ko.md)
 
 The [sanitized chain evidence](ad104-rom-chain-evidence.json) was produced by

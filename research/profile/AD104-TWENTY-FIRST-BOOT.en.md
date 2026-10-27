@@ -1,5 +1,8 @@
 # Twenty-first attended candidate: combined full PROM capture and verification
 
+Executed result: [test21](AD104-TWENTY-FIRST-RESULT.en.md). Original candidate contract follows.
+
+
 English | [한국어](AD104-TWENTY-FIRST-BOOT.ko.md)
 
 Built/host-tested, not physically executed. Requires separate expanded-MMIO

@@ -4,10 +4,11 @@ English | [한국어](AD104-UNLOCK-EVIDENCE.ko.md)
 
 ## Latest physical result
 
-[Test19](AD104-NINETEENTH-RESULT.en.md) repeated two matching register batches
-with nominal1second delay and verified decode-off/direct Windows recovery.
-[Runs13–18](AD104-THIRTEENTH-EIGHTEENTH-RESULT.en.md) explain the earlier boundary.
-SS1/VGA_BASE reference differences remain unresolved; no unlock transaction ran.
+[Test21](AD104-TWENTY-FIRST-RESULT.en.md) captured/hash-verified1MiB PROM and
+returned automatically to Windows. Offline parsing located bounded FWSEC metadata
+and payload/signature-region byte hashes. No firmware authentication/execution
+or cold-entry approval is established. [Roadmap](ROADMAP.en.md):15/26 milestones
+complete(58% checklist only). SS1/VGA_BASE/reference ROM differences remain.
 
 ## Actual graph replaces the simplified fixture
 
@@ -102,8 +103,8 @@ has only been simulated.
 | Machine-specific unlock transaction and independent state readback | Not run |
 | Windows recovery and controlled stock/post-unlock workloads | Capture then decode-off returned directly in run 18; no post-unlock workload exists |
 
-These gates are not equally difficult and cannot support a meaningful percentage,
-number of remaining boots or completion date. Cold-state admission or immutable
-hardware restrictions could still prevent an unlock. The next decision should
-follow evidence about text cleanup and its display effects, not confidence from
-an unrelated successful callback. No additional boot is requested by this report.
+The [roadmap](ROADMAP.en.md) counts15/26 completed milestones(58%). Those items
+are not equally difficult: this is checklist completion, not an unlock probability,
+time estimate or number of remaining boots. Cold-entry or immutable hardware
+restrictions can still block execution. Next work follows the recorded ROM and
+admission differences, not a copied reference profile or callback success alone.
