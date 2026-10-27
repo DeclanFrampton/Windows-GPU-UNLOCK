@@ -11,3 +11,5 @@ The current automatic local-profile route refuses both captures with topology_sc
 [Sanitized results](capture-summary.json) preserve hashes and the checker output. Full diagnostics and firmware binaries remain private/ignored; no executable from the archive was run. Distinct capture hashes do not independently prove separate full shutdowns or Windows arrival. No profile generation, assets, GPU writes, firmware execution or unlock test was performed during this review.
 
 Next: obtain the contributor's confirmation of two full-shutdown capture runs and Windows outcomes, then inspect the two GOP device paths/owners and console state offline. Any widened topology requires a separately reviewed implementation and replay evidence; these results alone authorize no write build. The4070Ti branch and its staged test are separate and unchanged.
+
+[Next test and topology findings / 다음 시험과 토폴로지 결과](NEXT-TEST.en.md).
