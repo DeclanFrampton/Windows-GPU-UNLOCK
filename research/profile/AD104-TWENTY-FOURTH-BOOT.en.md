@@ -31,3 +31,5 @@ Native EFI65,536bytes, AMD64/noimports, SHA256:
 Physical test24 pending. Firmware execution and unlock remain false.
 
 Save work, full shutdown, wait10seconds, UEFI USB, Shift+G once. Wait10seconds then tap Shift+V every2seconds up to3minutes. If no Windows after10minutes, power off/removeUSB/select normal Windows Boot Manager. Recovery is unproven for this run; run once, preserve captures, do not blind retry.
+
+[Actual result / 실제 결과](AD104-TWENTY-FOURTH-RESULT.en.md).

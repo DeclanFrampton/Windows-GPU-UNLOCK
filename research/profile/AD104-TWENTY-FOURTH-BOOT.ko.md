@@ -31,3 +31,5 @@ EFI65,536바이트, AMD64/가져오기 없음, SHA256:
 테스트24 실제 실행 전이며 펌웨어 실행과 언락은 false입니다.
 
 작업 저장, 완전 종료,10초 후 UEFI USB, Shift+G 한 번.10초 후 Shift+V를2초마다 최대3분 누릅니다.10분 후에도 Windows가 없으면 전원을 끄고 USB를 제거해 정상 Windows Boot Manager를 선택합니다. 복구는 보장되지 않으며 한 번만 실행하고 캡처를 보존하십시오.
+
+[Actual result / 실제 결과](AD104-TWENTY-FOURTH-RESULT.ko.md).
