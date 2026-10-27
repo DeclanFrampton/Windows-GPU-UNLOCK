@@ -4,10 +4,9 @@
 
 ## 최신 실제 결과
 
-[13–18차 결과](AD104-THIRTEENTH-EIGHTEENTH-RESULT.ko.md): 부모 소유권 해제, 제한적
-디코딩 활성화, 동일한 두 레지스터 배치, 검증된 디코딩 비활성화 후 18차에서 사용자가
-직접 Windows 복귀를 확인했습니다. SS1=5와 VGA_BASE=0x10e09는 고정 AD104 참조
-조건과 다릅니다. unlock 트랜잭션은 실행하지 않았습니다. 아래 내용은 이전 관찰입니다.
+[19차](AD104-NINETEENTH-RESULT.ko.md)는 명목상1초 간격의 두 배치 일치 및 검증된
+decode-off/직접 Windows 복귀를 재현했습니다. [13–18차](AD104-THIRTEENTH-EIGHTEENTH-RESULT.ko.md)는
+이전 경계를 설명합니다. SS1/VGA_BASE 차이는 미해결이며 unlock은 실행하지 않았습니다.
 
 ## 단순화된 테스트 자료 대신 실제 그래프
 

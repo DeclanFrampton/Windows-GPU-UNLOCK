@@ -4,11 +4,10 @@ English | [한국어](AD104-UNLOCK-EVIDENCE.ko.md)
 
 ## Latest physical result
 
-[Runs 13–18](AD104-THIRTEENTH-EIGHTEENTH-RESULT.en.md): parent ownership release,
-limited decode enable, two matching register batches and verified decode disable
-completed, followed by user-confirmed direct Windows return in run 18.
-SS1=5 and VGA_BASE=0x10e09 differ from the pinned AD104 reference gate.
-No unlock transaction ran. Earlier sections describe historical observations.
+[Test19](AD104-NINETEENTH-RESULT.en.md) repeated two matching register batches
+with nominal1second delay and verified decode-off/direct Windows recovery.
+[Runs13–18](AD104-THIRTEENTH-EIGHTEENTH-RESULT.en.md) explain the earlier boundary.
+SS1/VGA_BASE reference differences remain unresolved; no unlock transaction ran.
 
 ## Actual graph replaces the simplified fixture
 

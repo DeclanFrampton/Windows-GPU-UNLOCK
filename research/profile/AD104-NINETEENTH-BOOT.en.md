@@ -1,5 +1,8 @@
 # Nineteenth attended test: delayed register stability
 
+Executed result: [test19](AD104-NINETEENTH-RESULT.en.md). Candidate contract below.
+
+
 English | [한국어](AD104-NINETEENTH-BOOT.ko.md)
 
 Built and host-tested; not yet physically executed. Extends successful

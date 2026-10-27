@@ -1,5 +1,8 @@
 # 19차 참석 시험: 시간차 레지스터 안정성
 
+실행 결과: [19차](AD104-NINETEENTH-RESULT.ko.md). 아래는 후보 계약입니다.
+
+
 [English](AD104-NINETEENTH-BOOT.en.md) | 한국어
 
 빌드·호스트 검사를 마친 후보이며 실제 실행 결과가 아닙니다. 성공한
