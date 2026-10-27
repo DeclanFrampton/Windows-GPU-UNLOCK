@@ -4,6 +4,9 @@
 #include "test_owner_parent.c"
 #undef main
 static int BatchFileCalls;
+#ifdef GU_AD104_FALCON_OBSERVE_TEST
+static int FalconFileCalls;
+#endif
 #ifdef GU_AD104_PROM_HEADER_TEST
 static int PromFileCalls;
 #endif
@@ -11,6 +14,22 @@ static EFI_STATUS EFIAPI ReadBar(EFI_PCI_IO_PROTOCOL *io,EFI_PCI_IO_PROTOCOL_WID
                                 UINT8 bar,UINT64 offset,UINTN count,VOID *out) {
   (void)io;Check(width==EfiPciIoWidthUint32 && !bar && count==1 && DecodeCalls==1 && Stage==6,
     "MMIO only after explicit decode Enable");
+#ifdef GU_AD104_FALCON_OBSERVE_TEST
+  if(MmioCalls>=262320){
+    UINTN n=MmioCalls-262320,j=n%9;Check(n<18 && offset==FalconOffsets[j],"exact Falcon read order and bound");
+    if(!j)FalconFileCalls=Writes+Flushes;
+    Check(Writes+Flushes==FalconFileCalls,"no file callbacks inside Falcon batch");
+    MmioCalls++;UINT32 value=j==0 || j==8?0x194000a1:0;
+    if(FalconFault==(int)n+1)return EFI_DEVICE_ERROR;
+    if(FalconFault==20 && j==2)value=MAX_UINT32;
+    if(FalconFault==21 && j==8)value=0;
+    if(FalconFault==22 && j==6)value^=1;
+    if(FalconFault==23 && j==4)Io.Mem.Read=NULL;
+    if(FalconFault==24 && n==8)Config[1]|=4;
+    if(FalconFault==25 && n==11)value=42;
+    *(UINT32 *)out=value;return EFI_SUCCESS;
+  }
+#endif
 #ifdef GU_AD104_PROM_FULL_TEST
   if(MmioCalls>=174) {
     UINTN n=MmioCalls-174;
@@ -140,12 +159,21 @@ static EFI_STATUS EFIAPI FullOpen(EFI_FILE_PROTOCOL *f,EFI_FILE_PROTOCOL **out,C
 static CAPTURE *FullSetup(int fault) {
   CAPTURE *c=DecodeSetup(0);OffCalls=OffFault=0;DecodeOffAttempted=PromHeaderAttempted=PromFullAttempted=FALSE;PromFault=fault;
   PromPrefixGpu=NULL;PromPrefixIo=NULL;FullAllocation=NULL;FilePosition=0;
+#ifdef GU_AD104_FALCON_OBSERVE_TEST
+  FalconAttempted=FALSE;FalconFault=FalconIntentSeen=FalconSummarySeen=0;
+#endif
   memset(&FullRoot,0,sizeof(FullRoot));memset(&FullFile,0,sizeof(FullFile));memset(&FullWitness,0,sizeof(FullWitness));
   FullRoot.Open=FullOpen;FullFile.Write=FullWrite;FullFile.Read=FullRead;FullFile.SetPosition=FullSeek;FullFile.Flush=FullFlush;FullFile.Close=FullClose;
   c->DumpRoot=&FullRoot;c->Witness=&FullWitness;SavedAllocate=Bs.AllocatePool;SavedFree=Bs.FreePool;Bs.AllocatePool=FullAllocate;Bs.FreePool=FullFree;return c;
 }
 int main(void) {
-  CAPTURE *c=FullSetup(0);Check(EdRun(c,(VOID *)1,&Io,Pins)==EFI_SUCCESS && OffCalls==1 && MmioCalls==262320 && !FullAllocation,"full capture/file readback then recovery");
+  CAPTURE *c=FullSetup(0);Check(EdRun(c,(VOID *)1,&Io,Pins)==EFI_SUCCESS && OffCalls==1 && MmioCalls==
+#ifdef GU_AD104_FALCON_OBSERVE_TEST
+  262338
+#else
+  262320
+#endif
+  && !FullAllocation,"full capture/file readback then recovery");
   for(int f=20;f<=
 #ifdef GU_AD104_FWSEC_AUDIT_TEST
   57
@@ -156,6 +184,19 @@ int main(void) {
     if(f==45 || f==46 || f==51 || f==53)continue;
     c=FullSetup(f);Check(EdRun(c,(VOID *)1,&Io,Pins)!=EFI_SUCCESS && !OffCalls && !FullAllocation,"full read/file/cleanup/state faults block handoff");
   }
+#ifdef GU_AD104_FALCON_OBSERVE_TEST
+  for(int fault=1;fault<=39;fault++){
+    if(fault==19 || (fault>=25 && fault<=29))continue;
+    c=FullSetup(0);FalconAttempted=FALSE;FalconFault=fault;
+    Check(EdRun(c,(VOID *)1,&Io,Pins)!=EFI_SUCCESS && !OffCalls && !FullAllocation,"Falcon transport/sentinel/state/method faults block handoff");
+    if(fault>=30 && fault<=33)Check(MmioCalls==262320,"intent log drift prevents all Falcon reads");
+    if(fault>=34 && fault<=37)Check(MmioCalls==262329,"batch log drift prevents second batch");
+    if(fault<=18)Check(MmioCalls==262320+fault,"Falcon failure stops remaining reads");
+  }
+  c=FullSetup(0);FalconAttempted=FALSE;FalconFault=25;
+  Check(EdRun(c,(VOID *)1,&Io,Pins)==EFI_SUCCESS && OffCalls==1,"mailbox drift remains observational");
+  FalconFault=0;
+#endif
   int points[]={0,1,127,128,1023,1024,131072,262142,262143,262144,262145};
   for(UINTN j=0;j<sizeof(points)/sizeof(points[0]);j++) {
     c=FullSetup(2000+points[j]);Check(EdRun(c,(VOID *)1,&Io,Pins)!=EFI_SUCCESS && !OffCalls && MmioCalls==175+points[j] && !FullAllocation,"selected boundary transport errors stop without retry");

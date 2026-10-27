@@ -57,7 +57,7 @@ try {
  if($LASTEXITCODE -ne 0){throw 'FWSEC audit compile failed'}
  & ./build/capture-tests/fwsec-audit.exe
  if($LASTEXITCODE -ne 0){throw 'FWSEC audit mocks failed'}
- & $Clang @flags -Wno-unused-function -DGU_AD104_DECODE_OFF_TEST -DGU_AD104_DELAYED_READ_TEST -DGU_AD104_PROM_HEADER_TEST -DGU_AD104_PROM_FULL_TEST -DGU_AD104_FWSEC_AUDIT_TEST -DGU_AD104_FWSEC_REHEARSAL_TEST -DGU_AD104_FWSEC_SIGNATURE_TEST test_decode_read.c fwsec-audit.c ../unlock/sha256.c -o build/capture-tests/audit-recovery.exe
+ & $Clang @flags -Wno-unused-function -DGU_AD104_DECODE_OFF_TEST -DGU_AD104_DELAYED_READ_TEST -DGU_AD104_PROM_HEADER_TEST -DGU_AD104_PROM_FULL_TEST -DGU_AD104_FWSEC_AUDIT_TEST -DGU_AD104_FWSEC_REHEARSAL_TEST -DGU_AD104_FWSEC_SIGNATURE_TEST -DGU_AD104_FALCON_OBSERVE_TEST test_decode_read.c fwsec-audit.c ../unlock/sha256.c -o build/capture-tests/audit-recovery.exe
  if($LASTEXITCODE -ne 0){throw 'Audit recovery compile failed'}
  & ./build/capture-tests/audit-recovery.exe
  if($LASTEXITCODE -ne 0){throw 'Audit recovery mocks failed'}

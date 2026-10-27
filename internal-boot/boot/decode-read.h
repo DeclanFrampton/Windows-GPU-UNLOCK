@@ -87,6 +87,9 @@ static EFI_STATUS PromHeader(CAPTURE *c,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *io,
 #endif
 #ifdef GU_AD104_PROM_FULL_TEST
 #include "prom-full.h"
+#ifdef GU_AD104_FALCON_OBSERVE_TEST
+#include "falcon-observe.h"
+#endif
 #endif
 #ifdef GU_AD104_DECODE_OFF_TEST
 static BOOLEAN DecodeOffAttempted;
@@ -174,6 +177,9 @@ static EFI_STATUS DecodeStep(CAPTURE *c,EFI_HANDLE gpu,EFI_PCI_IO_PROTOCOL *io,
 #ifdef GU_AD104_PROM_FULL_TEST
   s=PromFull(c,gpu,io,pins,&pre,&b);if(s!=EFI_SUCCESS)return s;
 #endif
+#endif
+#ifdef GU_AD104_FALCON_OBSERVE_TEST
+  s=FalconObserve(c,gpu,io,pins,&pre,&b);if(s!=EFI_SUCCESS)return s;
 #endif
   s=EdKey(t,'V',NULL);
   x=ParentCollect(c,gpu,io,pins,pre.Drivers.Child,&final);gone=OwnerGone(t,pre.Drivers.Child);

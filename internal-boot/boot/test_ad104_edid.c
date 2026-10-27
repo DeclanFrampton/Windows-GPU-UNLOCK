@@ -8,6 +8,9 @@
 #include <IndustryStandard/Acpi.h>
 #include "diagnostic.h"
 static int Writes,Flushes,Calls,Stage,KeyPhase,Reads,EdFault,Collections;
+#ifdef GU_AD104_FALCON_OBSERVE_TEST
+static int FalconFault,FalconIntentSeen,FalconSummarySeen;
+#endif
 static EFI_PCI_IO_PROTOCOL Io;
 static EFI_FILE_PROTOCOL File;
 static EFI_SIMPLE_TEXT_INPUT_PROTOCOL Input;
@@ -54,6 +57,10 @@ static EFI_STATUS TextPcdCollect(EFI_SYSTEM_TABLE *t,TEXT_DISPLAY *out) {
 static int QuietReady,EarlyDrained;
 #endif
 VOID Text(CAPTURE *c,const char *s){
+#ifdef GU_AD104_FALCON_OBSERVE_TEST
+  if(strstr(s,"ad104-falcon intent="))FalconIntentSeen=1;
+  if(strstr(s,"ad104-falcon mailbox-dma-stable="))FalconSummarySeen=1;
+#endif
 #ifdef GU_AD104_FWSEC_AUDIT_TEST
   if(strstr(s,"ad104-fwsec-audit prom-match="))AuditSeen=1;
 #endif
@@ -121,7 +128,9 @@ static EFI_STATUS EFIAPI Attributes(EFI_PCI_IO_PROTOCOL *io,EFI_PCI_IO_PROTOCOL_
 #ifdef GU_AD104_DECODE_OFF_TEST
   if(op==EfiPciIoAttributeOperationDisable) {
     Check(value==0x300 && !out && DecodeOffAttempted && MmioCalls==
-#ifdef GU_AD104_PROM_FULL_TEST
+#ifdef GU_AD104_FALCON_OBSERVE_TEST
+    262338
+#elif defined(GU_AD104_PROM_FULL_TEST)
     262320
 #elif defined(GU_AD104_PROM_HEADER_TEST)
     174
@@ -180,6 +189,21 @@ static EFI_STATUS EFIAPI Write(EFI_FILE_PROTOCOL *f,UINTN *n,VOID *p) {
 return EdFault==1 || (EdFault==15 && Stage)?EFI_DEVICE_ERROR:EFI_SUCCESS;
 }
 static EFI_STATUS EFIAPI FlushFile(EFI_FILE_PROTOCOL *f){(void)f;Flushes++;
+#ifdef GU_AD104_FALCON_OBSERVE_TEST
+  if(FalconIntentSeen && MmioCalls==262320){
+    if(FalconFault==30)return EFI_DEVICE_ERROR;
+    if(FalconFault==31)Config[1]|=4;
+    if(FalconFault==32)Io.Mem.Read=NULL;
+    if(FalconFault==33)Missing=-1;
+  }
+  if(FalconIntentSeen && MmioCalls==262329){
+    if(FalconFault==34)return EFI_DEVICE_ERROR;
+    if(FalconFault==35)Config[1]|=4;
+    if(FalconFault==36)Missing=-1;
+    if(FalconFault==37)Io.Mem.Read=NULL;
+  }
+  if(FalconSummarySeen){if(FalconFault==38)Config[1]|=4;if(FalconFault==39)return EFI_DEVICE_ERROR;}
+#endif
 #ifdef GU_AD104_PROM_HEADER_TEST
   if(PromIntentSeen && !PromHeaderAttempted) {
     if(PromFault==10)return EFI_DEVICE_ERROR;
