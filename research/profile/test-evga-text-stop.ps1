@@ -27,5 +27,11 @@ try {
  if($LASTEXITCODE -ne 0){throw 'Graphics release host link failed'}
  & "./$out/graphics-test.exe"
  if($LASTEXITCODE -ne 0){throw "Graphics release scenario failed: $LASTEXITCODE"}
- '25 membership host checkpoints, 7 combined-release checkpoints, 8 graphics-release checkpoints and 9 capture regression cases passed (mock protocols, hashes and Stop; no captured firmware executed).'
+ & $Clang -target x86_64-pc-windows-msvc -std=c11 -ffreestanding -fno-builtin -fno-stack-protector -O1 -Wall -Wextra -Werror -DGU_EVGA_RELEASE_TEXT -DGU_EVGA_RELEASE_GRAPHICS -DGU_EVGA_RELEASE_EDID -I deps/edk2/MdePkg/Include -I deps/edk2/MdePkg/Include/X64 -c internal-boot/boot/test_evga_text_stop.c -o "$out/edid.host.obj"
+ if($LASTEXITCODE -ne 0){throw 'EDID host compile failed'}
+ & $LldLink /nologo /nodefaultlib /subsystem:console /entry:main /machine:x64 "/out:$out/edid-test.exe" "$out/edid.host.obj" "$out/efi_runtime.host.obj"
+ if($LASTEXITCODE -ne 0){throw 'EDID host link failed'}
+ & "./$out/edid-test.exe"
+ if($LASTEXITCODE -ne 0){throw "EDID scenario failed: $LASTEXITCODE"}
+ '25 membership host checkpoints, 7 combined-release checkpoints, 8 graphics-release checkpoints, 12 EDID checkpoints and 9 capture regression cases passed (mock protocols, hashes and Stop; no captured firmware executed).'
 } finally {Pop-Location}

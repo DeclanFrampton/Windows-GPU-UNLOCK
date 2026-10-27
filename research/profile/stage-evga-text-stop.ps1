@@ -6,7 +6,7 @@ $repo=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $build=Join-Path $repo 'internal-boot/boot/build/evga-text-stop'
 $source=Join-Path $build 'BOOTX64.EFI'
 $manifest=Get-Content -LiteralPath (Join-Path $build 'manifest.json') -Raw | ConvertFrom-Json
-if($manifest.Mode -notin @('evga3090-one-text-membership-stop','evga3090-two-text-stops','evga3090-three-consumer-stops') -or $manifest.CanUnlock -ne $false){throw 'Wrong build mode'}
+if($manifest.Mode -notin @('evga3090-one-text-membership-stop','evga3090-two-text-stops','evga3090-three-consumer-stops','evga3090-four-consumer-stops') -or $manifest.CanUnlock -ne $false){throw 'Wrong build mode'}
 $hash=(Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash.ToLowerInvariant()
 if($hash -cne $manifest.EfiSha256){throw 'EFI differs from build manifest; rebuild'}
 $boot=Join-Path $repo 'internal-boot/boot'
@@ -26,15 +26,19 @@ if($disk.BusType -ne 'USB' -or $partition[0].IsSystem -or $partition[0].IsBoot){
 $root=$letter+':\'
 $captures=Join-Path $root 'RTX3090-UNLOCK'
 if(!(Test-Path -LiteralPath (Join-Path $captures 'DIAG00.TXT')) -or !(Test-Path -LiteralPath (Join-Path $captures 'DIAG01.TXT'))){throw 'Original capture pair must remain on the USB'}
-$attempt=if($manifest.Mode -eq 'evga3090-three-consumer-stops'){'EVGA-GFX-RELEASE.ARMED'}elseif($manifest.Mode -eq 'evga3090-two-text-stops','evga3090-three-consumer-stops'){'EVGA-TEXT-RELEASE.ARMED'}else{'EVGA-TEXT-STOP.ARMED'}
+$attempt=if($manifest.Mode -eq 'evga3090-four-consumer-stops'){'EVGA-EDID-RELEASE.ARMED'}elseif($manifest.Mode -eq 'evga3090-three-consumer-stops'){'EVGA-GFX-RELEASE.ARMED'}elseif($manifest.Mode -in @('evga3090-two-text-stops','evga3090-three-consumer-stops','evga3090-four-consumer-stops')){'EVGA-TEXT-RELEASE.ARMED'}else{'EVGA-TEXT-STOP.ARMED'}
 if(Test-Path -LiteralPath (Join-Path $captures $attempt)){throw 'An attempt is already armed; preserve evidence instead of repeating'}
-if($manifest.Mode -eq 'evga3090-two-text-stops','evga3090-three-consumer-stops') {
+if($manifest.Mode -in @('evga3090-two-text-stops','evga3090-three-consumer-stops','evga3090-four-consumer-stops')) {
  $baseline=Join-Path $captures 'EVGA05.TXT'
  if(!(Test-Path -LiteralPath $baseline) -or (Get-FileHash -LiteralPath $baseline -Algorithm SHA256).Hash.ToLowerInvariant() -ne 'cbbfad6aadb858cdc6311f656c819e6707e52f274e8e0959df4348c51fbbec1a'){throw 'Expected reviewed EVGA05 baseline; preserve captures and send the error'}
 }
-if($manifest.Mode -eq 'evga3090-three-consumer-stops') {
+if($manifest.Mode -in @('evga3090-three-consumer-stops','evga3090-four-consumer-stops')) {
  $baseline=Join-Path $captures 'EVGA06.TXT'
  if(!(Test-Path -LiteralPath $baseline) -or (Get-FileHash -LiteralPath $baseline -Algorithm SHA256).Hash.ToLowerInvariant() -ne 'cf7fb3897910da7f05d17cc08a70d8595de89398bea85f5e287e9e3c64c5d89f'){throw 'Expected reviewed EVGA06 baseline; preserve captures and send the error'}
+}
+if($manifest.Mode -eq 'evga3090-four-consumer-stops') {
+ $baseline=Join-Path $captures 'EVGA07.TXT'
+ if(!(Test-Path -LiteralPath $baseline) -or (Get-FileHash -LiteralPath $baseline -Algorithm SHA256).Hash.ToLowerInvariant() -ne '4fd72a6ad44025d31909900acde4db086ca56c7d678084df258c585936c42818'){throw 'Expected reviewed EVGA07 baseline; preserve captures and send the error'}
 }
 $destination=Join-Path $root 'EFI/BOOT/BOOTX64.EFI'
 if(!(Test-Path -LiteralPath $destination)){throw 'Expected the existing capture EFI on this USB'}

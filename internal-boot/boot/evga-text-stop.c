@@ -1,4 +1,4 @@
-/* GPL-2.0-only. IMG13 membership Stop; optional pinned IMG16 release. No unlock. */
+/* GPL-2.0-only. Pinned EVGA consumer Stop sequence. No unlock. */
 #include "evga-text-stop.h"
 #include <Protocol/GraphicsOutput.h>
 #include <Protocol/DevicePath.h>
@@ -12,6 +12,13 @@ static EFI_GUID Path=EFI_DEVICE_PATH_PROTOCOL_GUID,Binding=EFI_DRIVER_BINDING_PR
 static EFI_GUID Loaded=EFI_LOADED_IMAGE_PROTOCOL_GUID,Pci=EFI_PCI_IO_PROTOCOL_GUID;
 typedef struct {EFI_HANDLE Physical,Virtual,Console,Gfx,VirtualText,TextAgent;EFI_DRIVER_BINDING_PROTOCOL *Driver;} PLAN;
 static PLAN Plan;
+#ifdef GU_EVGA_RELEASE_EDID
+#include <Protocol/EdidDiscovered.h>
+static EFI_GUID Edid=EFI_EDID_DISCOVERED_PROTOCOL_GUID;
+static EFI_HANDLE EdidAgent,EdidHandles[3];
+static EFI_DRIVER_BINDING_PROTOCOL *EdidDriver;
+static BOOLEAN EdidReleased;
+#endif
 #ifdef GU_EVGA_RELEASE_TEXT
 static EFI_DRIVER_BINDING_PROTOCOL *VirtualDriver;
 static BOOLEAN TextReleased;
@@ -19,7 +26,11 @@ static BOOLEAN TextReleased;
 static EFI_DRIVER_BINDING_PROTOCOL *GraphicsDriver;
 static BOOLEAN GraphicsReleased;
 #undef ATTEMPT_PATH
+#ifdef GU_EVGA_RELEASE_EDID
+#define ATTEMPT_PATH L"\\RTX3090-UNLOCK\\EVGA-EDID-RELEASE.ARMED"
+#else
 #define ATTEMPT_PATH L"\\RTX3090-UNLOCK\\EVGA-GFX-RELEASE.ARMED"
+#endif
 #else
 #define ATTEMPT_PATH L"\\RTX3090-UNLOCK\\EVGA-TEXT-RELEASE.ARMED"
 #endif
@@ -61,7 +72,7 @@ static EFI_STATUS Edges(EFI_BOOT_SERVICES *b,EFI_HANDLE source,EFI_GUID *protoco
   }
   return s;
 }
-static EFI_STATUS Code(EFI_BOOT_SERVICES *b,EFI_HANDLE agent,UINTN bytes,UINTN codeBytes,
+static EFI_STATUS Code(EFI_BOOT_SERVICES *b,EFI_HANDLE agent,UINTN bytes,UINTN codeRva,UINTN codeBytes,
                        UINTN stop,UINT32 version,const char *hash,EFI_DRIVER_BINDING_PROTOCOL **out,GU_EVGA_RECORD record) {
   EFI_DRIVER_BINDING_PROTOCOL *d=NULL;EFI_LOADED_IMAGE_PROTOCOL *image=NULL;
   EFI_STATUS s=b->HandleProtocol(agent,&Binding,(VOID **)&d);
@@ -69,11 +80,11 @@ static EFI_STATUS Code(EFI_BOOT_SERVICES *b,EFI_HANDLE agent,UINTN bytes,UINTN c
   if(s!=EFI_SUCCESS || !d || d->DriverBindingHandle!=agent || !d->ImageHandle || !d->Stop || d->Version!=version)return Checked(record,"evga-code-binding",EFI_UNSUPPORTED);
   s=b->HandleProtocol(d->ImageHandle,&Loaded,(VOID **)&image);
   if(s==EFI_SUCCESS && image){s=Value(record,"evga-observed-image-bytes",image->ImageSize);if(s!=EFI_SUCCESS)return s;}
-  if(s!=EFI_SUCCESS || !image || !image->ImageBase || image->ImageSize!=bytes || bytes<=0x2a0 || codeBytes>bytes-0x2a0)return Checked(record,"evga-code-loaded-image",EFI_UNSUPPORTED);
+  if(s!=EFI_SUCCESS || !image || !image->ImageBase || image->ImageSize!=bytes || bytes<=codeRva || codeBytes>bytes-codeRva)return Checked(record,"evga-code-loaded-image",EFI_UNSUPPORTED);
   UINTN base=(UINTN)image->ImageBase;
   if((UINTN)d->Stop>=base){s=Value(record,"evga-observed-stop-rva",(UINTN)d->Stop-base);if(s!=EFI_SUCCESS)return s;}
-  if(base>~(UINTN)0-bytes || (UINTN)d->Stop!=base+stop || stop<0x2a0 || stop-0x2a0>=codeBytes)return Checked(record,"evga-code-stop-address",EFI_UNSUPPORTED);
-  if(!GuHashMatches((UINT8 *)image->ImageBase+0x2a0,codeBytes,hash))return Checked(record,"evga-code-section-hash",EFI_CRC_ERROR);
+  if(base>~(UINTN)0-bytes || (UINTN)d->Stop!=base+stop || stop<codeRva || stop-codeRva>=codeBytes)return Checked(record,"evga-code-stop-address",EFI_UNSUPPORTED);
+  if(!GuHashMatches((UINT8 *)image->ImageBase+codeRva,codeBytes,hash))return Checked(record,"evga-code-section-hash",EFI_CRC_ERROR);
   if(out)*out=d;return EFI_SUCCESS;
 }
 static EFI_STATUS Inventory(EFI_BOOT_SERVICES *b,GU_EVGA_RECORD record) {
@@ -137,6 +148,30 @@ static EFI_STATUS VirtualInterfaces(EFI_SYSTEM_TABLE *t,BOOLEAN released) {
   return ugas==0 && texts==(released?0U:1U) && extras==(released?0U:1U)?EFI_SUCCESS:EFI_ACCESS_DENIED;
 }
 #endif
+#ifdef GU_EVGA_RELEASE_EDID
+static EFI_STATUS EdidState(EFI_SYSTEM_TABLE *t,GU_EVGA_RECORD record) {
+  EFI_BOOT_SERVICES *b=t->BootServices;EFI_HANDLE *handles=NULL;UINTN n=0;
+  EFI_STATUS s=b->LocateHandleBuffer(ByProtocol,&Edid,NULL,&n,&handles);
+  if(s!=EFI_SUCCESS || !handles || n!=3){if(handles)b->FreePool(handles);return EFI_UNSUPPORTED;}
+  UINTN physical=0;
+  for(UINTN i=0;i<n;i++) {
+    for(UINTN j=0;j<i;j++)if(handles[j]==handles[i])s=EFI_COMPROMISED_DATA;
+    if(s!=EFI_SUCCESS)break;
+    if(EdidHandles[0]) {
+      BOOLEAN found=FALSE;for(UINTN j=0;j<3;j++)if(EdidHandles[j]==handles[i])found=TRUE;
+      if(!found){s=EFI_ACCESS_DENIED;break;}
+    }
+    if(handles[i]==Plan.Physical)physical++;
+    s=Edges(b,handles[i],&Edid,NULL,FALSE,&EdidAgent,EdidReleased && handles[i]==Plan.Physical);
+    if(s!=EFI_SUCCESS)break;
+  }
+  if(s==EFI_SUCCESS && physical!=1)s=EFI_ACCESS_DENIED;
+  if(s==EFI_SUCCESS && !EdidHandles[0])for(UINTN i=0;i<3;i++)EdidHandles[i]=handles[i];
+  if(b->FreePool(handles)!=EFI_SUCCESS)s=EFI_DEVICE_ERROR;
+  s=Checked(record,"evga-edid-edges",s);if(s!=EFI_SUCCESS)return s;
+  return Checked(record,"evga-edid-code",Code(b,EdidAgent,0x9000,0x1000,0x37da,0x14d4,1,"a015d52f55fa6441414458e2b699ba2edcb53f03b001ac6367e45bcd908c418e",&EdidDriver,record));
+}
+#endif
 static EFI_STATUS Graph(EFI_SYSTEM_TABLE *t,BOOLEAN after,GU_EVGA_RECORD record) {
   EFI_BOOT_SERVICES *b=t->BootServices;EFI_HANDLE *handles=NULL;UINTN count=0;
   EFI_STATUS s=b->LocateHandleBuffer(ByProtocol,&Gop,NULL,&count,&handles);
@@ -192,21 +227,27 @@ static EFI_STATUS Graph(EFI_SYSTEM_TABLE *t,BOOLEAN after,GU_EVGA_RECORD record)
 #ifdef GU_EVGA_RELEASE_TEXT
   }
 #endif
-  s=Checked(record,"evga-gfx-code",Code(b,Plan.Gfx,0x2180,0x1990,0x88c,17,"3f4c4ea26023ddf00990b59385d0fcf3139acb583c70406828777cdceab8cecb",
+  s=Checked(record,"evga-gfx-code",Code(b,Plan.Gfx,0x2180,0x2a0,0x1990,0x88c,17,"3f4c4ea26023ddf00990b59385d0fcf3139acb583c70406828777cdceab8cecb",
 #ifdef GU_EVGA_RELEASE_GRAPHICS
     &GraphicsDriver,
 #else
     NULL,
 #endif
     record));if(s!=EFI_SUCCESS)return s;
-  s=Checked(record,"evga-virtual-text-code",Code(b,Plan.VirtualText,0x3bc0,0x1e00,0xb2c,16,"e5e68f0856c6e932da9bf3c680bac955dbf180eb083da78b64007388d89e24a7",
+  s=Checked(record,"evga-virtual-text-code",Code(b,Plan.VirtualText,0x3bc0,0x2a0,0x1e00,0xb2c,16,"e5e68f0856c6e932da9bf3c680bac955dbf180eb083da78b64007388d89e24a7",
 #ifdef GU_EVGA_RELEASE_TEXT
     &VirtualDriver,
 #else
     NULL,
 #endif
     record));if(s!=EFI_SUCCESS)return s;
-  return Checked(record,"evga-text-splitter-code",Code(b,Plan.TextAgent,0x6ae0,0x5620,0x104c,16,"e2b072199726ae784f749057c3c5453ed8db0bb3fbe1a73ccca7e6f302325291",&Plan.Driver,record));
+  s=Checked(record,"evga-text-splitter-code",Code(b,Plan.TextAgent,0x6ae0,0x2a0,0x5620,0x104c,16,"e2b072199726ae784f749057c3c5453ed8db0bb3fbe1a73ccca7e6f302325291",&Plan.Driver,record));
+  if(s!=EFI_SUCCESS)return s;
+#ifdef GU_EVGA_RELEASE_EDID
+  return EdidState(t,record);
+#else
+  return EFI_SUCCESS;
+#endif
 }
 EFI_STATUS GuEvgaTextStopVerify(EFI_SYSTEM_TABLE *t) {
   if(!t || !t->BootServices || !Plan.Driver || !Plan.TextAgent)return EFI_INVALID_PARAMETER;
@@ -240,7 +281,11 @@ EFI_STATUS GuEvgaTextStop(EFI_SYSTEM_TABLE *t,EFI_FILE_PROTOCOL *root,GU_EVGA_RE
   if(s!=EFI_NOT_FOUND)return s;
   s=root->Open(root,&marker,ATTEMPT_PATH,EFI_FILE_MODE_READ|EFI_FILE_MODE_WRITE|EFI_FILE_MODE_CREATE,0);
   if(s!=EFI_SUCCESS || !marker)return EFI_DEVICE_ERROR;
-#ifdef GU_EVGA_RELEASE_TEXT
+#if defined(GU_EVGA_RELEASE_EDID)
+  char tag[]="IMG13/16/17 then physical EDID Stop armed; no retry\r\n";
+#elif defined(GU_EVGA_RELEASE_GRAPHICS)
+  char tag[]="IMG13/16/17 Stop armed; preserve evidence; no retry\r\n";
+#elif defined(GU_EVGA_RELEASE_TEXT)
   char tag[]="IMG13 then IMG16 Stop armed; preserve evidence; no retry\r\n";
 #else
   char tag[]="one IMG13 child Stop attempted; preserve evidence; no retry\r\n";
@@ -273,7 +318,16 @@ EFI_STATUS GuEvgaTextStop(EFI_SYSTEM_TABLE *t,EFI_FILE_PROTOCOL *root,GU_EVGA_RE
   s=GraphicsDriver->Stop(GraphicsDriver,Plan.Physical,1,&aggregate);
   logged=record(NULL,"evga-graphics-stop-return",s);if(logged!=EFI_SUCCESS)return logged;if(s!=EFI_SUCCESS)return s;
   GraphicsReleased=TRUE;s=Graph(t,TRUE,record);
-  return Checked(record,"evga-graphics-post-graph",s);
+  s=Checked(record,"evga-graphics-post-graph",s);if(s!=EFI_SUCCESS)return s;
+#ifdef GU_EVGA_RELEASE_EDID
+  s=record(NULL,"evga-edid-stop-before",EFI_SUCCESS);if(s!=EFI_SUCCESS)return s;
+  s=EdidDriver->Stop(EdidDriver,Plan.Physical,0,NULL);
+  logged=record(NULL,"evga-edid-stop-return",s);if(logged!=EFI_SUCCESS)return logged;if(s!=EFI_SUCCESS)return s;
+  EdidReleased=TRUE;s=Graph(t,TRUE,record);
+  return Checked(record,"evga-edid-post-graph",s);
+#else
+  return EFI_SUCCESS;
+#endif
 #else
   return EFI_SUCCESS;
 #endif
