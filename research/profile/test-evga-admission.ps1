@@ -5,7 +5,7 @@ $repo=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 Push-Location $repo
 try {
  $out='internal-boot/boot/build/evga-text-stop';New-Item -ItemType Directory -Path $out -Force | Out-Null
- $flags=@('-target','x86_64-pc-windows-msvc','-std=c11','-ffreestanding','-fno-builtin','-fno-stack-protector','-O1','-Wall','-Wextra','-Werror','-I','internal-boot/unlock','-I','deps/edk2/MdePkg/Include','-I','deps/edk2/MdePkg/Include/X64')
+ $flags=@('-target','x86_64-pc-windows-msvc','-std=c11','-ffreestanding','-fno-builtin','-fno-stack-protector','-O1','-Wall','-Wextra','-Werror','-DGU_PROFILE_EVGA_Z790_3090','-DGU_EVGA_TRANSACTION_DEVELOPMENT','-I','internal-boot/unlock','-I','deps/edk2/MdePkg/Include','-I','deps/edk2/MdePkg/Include/X64')
  foreach($src in @('internal-boot/unlock/evga-admission.c','internal-boot/unlock/checks.c','internal-boot/unlock/tests/test_evga_admission.c','internal-boot/efi_runtime.c')) {
   $obj="$out/admission-"+[IO.Path]::GetFileNameWithoutExtension($src)+'.obj'
   & $Clang @flags -c $src -o $obj

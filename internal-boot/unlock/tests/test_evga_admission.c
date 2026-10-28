@@ -7,7 +7,7 @@ static BOOLEAN Eq(const char *a,const char *b){while(*a && *a==*b){a++;b++;}retu
 BOOLEAN GuHashMatches(const VOID *p,UINTN n,const char *hash){HashCalls++;return !BadHash && p==&Prom && n==GU_EVGA_PROM_BYTES && Eq(hash,GU_EVGA_PROM_HASH);}
 int main(VOID){
  GU_CAPS caps;GU_EVGA_COLD c={0xb72000a1,0x8b8f,0x3ff,0x10,0,0xffffff8f,0x30053014,7,0x6000};
- if(!GuEvgaAdmit(Config,0,1,0,0,&c,&Prom,GU_EVGA_PROM_BYTES,&caps) || caps.pm!=0x60 || caps.msi!=0x68 || caps.pcie!=0x78 || HashCalls!=1)return 1;
+ if(!GuEvgaAdmit(Config,0,1,0,0,&c,&Prom,GU_EVGA_PROM_BYTES,&caps) || caps.pm!=0x60 || caps.msi!=0x68 || caps.pcie!=0x78 || HashCalls!=1 || !GuCheckConfig(Config,0,1,0,0,&caps))return 1;
  if(GuEvgaAdmit(Config,0,2,0,0,&c,&Prom,GU_EVGA_PROM_BYTES,&caps))return 2;
  UINT32 original=Config[0];Config[0]^=1;if(GuEvgaAdmit(Config,0,1,0,0,&c,&Prom,GU_EVGA_PROM_BYTES,&caps))return 3;Config[0]=original;
  original=Config[11];Config[11]^=1;if(GuEvgaAdmit(Config,0,1,0,0,&c,&Prom,GU_EVGA_PROM_BYTES,&caps))return 4;Config[11]=original;
