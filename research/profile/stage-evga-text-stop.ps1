@@ -33,7 +33,9 @@ if($AttemptUnlock){
  if(!(Test-Path -LiteralPath (Join-Path $captures 'EVGA-UNLOCK.ARMED')) -or !(Test-Path -LiteralPath $prior) -or (Get-FileHash -LiteralPath $prior -Algorithm SHA256).Hash.ToLowerInvariant() -ne 'fb0dd12b5eacc5bd7e289be04827aa1b15f9ce94bf768e63fabcd98b39bedb46'){throw 'Expected original unlock marker and reviewed EVGA17; preserve evidence'}
  $second=Join-Path $captures 'EVGA18.TXT'
  if(!(Test-Path -LiteralPath (Join-Path $captures 'EVGA-UNLOCK2.ARMED')) -or !(Test-Path -LiteralPath $second) -or (Get-FileHash -LiteralPath $second -Algorithm SHA256).Hash.ToLowerInvariant() -ne '7f2c070f80d680d49997ee990b99aefbe1040707db2a40f59bd5a16aa43244a4'){throw 'Expected second unlock marker and reviewed EVGA18; preserve evidence'}
- $attempt='EVGA-UNLOCK3.ARMED'
+ $third=Join-Path $captures 'EVGA19.TXT'
+ if(!(Test-Path -LiteralPath (Join-Path $captures 'EVGA-UNLOCK3.ARMED')) -or !(Test-Path -LiteralPath $third) -or (Get-FileHash -LiteralPath $third -Algorithm SHA256).Hash.ToLowerInvariant() -ne 'dfd6a0e0e58b8bc794e87a6c1b0e774ac674d5b483985ba36439b53fbc597537'){throw 'Expected third unlock marker and reviewed EVGA19; preserve evidence'}
+ $attempt='EVGA-UNLOCK4.ARMED'
 }
 if(Test-Path -LiteralPath (Join-Path $captures $attempt)){throw 'An attempt is already armed; preserve evidence instead of repeating'}
 if($manifest.Mode -in @('evga3090-two-text-stops','evga3090-three-consumer-stops','evga3090-four-consumer-stops','evga3090-six-consumer-stops','evga3090-nvidia-preflight','evga3090-nvidia-three-child-stop','evga3090-nvidia-parent-stop','evga3090-decode-probe','evga3090-state-probe','evga3090-platform-probe','evga3090-resources-probe','evga3090-experimental-unlock')) {
