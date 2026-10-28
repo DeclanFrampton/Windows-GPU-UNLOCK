@@ -35,4 +35,3 @@ Local verification: 28 real vendor-core/compatibility/port scenarios using the c
 EVGA17 returned ACCESS_DENIED after exclusive PCI acquisition. The earlier stable selector was 0x30053015, while admission required 0x30053014; the later transaction read was not logged, so the exact refusal remains unconfirmed. This build accepts only those two observed selector values and still requires the entry value to remain unchanged. Their hardware equivalence and successful recovery are unproven. It records the transaction-local cold state and admission outcome.
 
 Staging requires the original EVGA-UNLOCK.ARMED and the exact reviewed EVGA17.TXT. Preserve both. The new one-shot marker is EVGA-UNLOCK2.ARMED; do not delete it or repeat. The risk and boot instructions below still apply. The first attempt did not prove an unlock.
-
