@@ -33,3 +33,7 @@ Windows에서 영어 문서의 `read-shared-esp-unlock.ps1`로 새 로컬 폴더
 ```powershell
 ./research/profile/finish-shared-esp-unlock.ps1 -WindowsEspGuid 'c36c3e86-02aa-4f76-af1b-96e327f9d1c1' -Drive D -AttemptSlot <slot> -OriginalSha256 '<hash>' -OutputDirectory 'G:/Movian/SULK01-results'
 ```
+
+## SULK01 실제 하드웨어 결과
+
+2026-10-28 기여자는 슬롯 8 실행 마커와 SULK01 로그(SHA-256 `c0cb1b121fbe24610e84dfdaee52da512856af39a65768a8441012e4236e5f23`)를 제공했습니다. 로그는 트랜잭션 결과 0, FLR=1, quiesced=1, fault=0, retained=0, maps=0, 성공적인 트랜잭션 반환과 자산 해제 및 디코드 복원, 완료된 캡처 두 개와 Windows 준비 성공을 기록합니다. 기여자는 Windows에서 수집기를 실행하고 종료 명령이 성공했다고 보고했습니다. 이는 공유 ESP에서 처음 기록된 성공 트랜잭션이나 성능 향상이나 지속적인 자동 부팅을 증명하지 않습니다. 추가 종료 또는 재부팅 전에 동일 바이너리의 벤치마크를 요청했습니다.
