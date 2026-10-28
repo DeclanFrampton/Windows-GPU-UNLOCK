@@ -3,7 +3,9 @@
 #include <Uefi.h>
 #include <Protocol/DevicePath.h>
 
-#ifdef GU_SHARED_ESP_ASSETS
+#ifdef GU_SHARED_ESP_RETAIN
+#include "build/shared-esp-retain/platform-config.h"
+#elif defined(GU_SHARED_ESP_ASSETS)
 #include "build/shared-esp-assets/platform-config.h"
 #elif defined(GU_SHARED_ESP_AUDIT)
 #include "build/shared-esp-audit/platform-config.h"

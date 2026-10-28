@@ -33,7 +33,10 @@ static EFI_STATUS CheckEspAssets(EFI_BOOT_SERVICES *bs,EFI_HANDLE device){
  for(UINTN i=0;i<sizeof(AssetSpecs)/sizeof(AssetSpecs[0]) && s==EFI_SUCCESS;i++)s=CheckOneAsset(bs,root,&AssetSpecs[i]);
  EFI_STATUS closed=root->Close(root);return s==EFI_SUCCESS?closed:s;
 }
-EFI_STATUS EFIAPI efi_main(EFI_HANDLE image,EFI_SYSTEM_TABLE *table){
+#ifndef GU_ASSET_ENTRY
+#define GU_ASSET_ENTRY efi_main
+#endif
+EFI_STATUS EFIAPI GU_ASSET_ENTRY(EFI_HANDLE image,EFI_SYSTEM_TABLE *table){
  if(!table || !table->BootServices || !table->ConOut)return EFI_INVALID_PARAMETER;
  EFI_BOOT_SERVICES *bs=table->BootServices;EFI_LOADED_IMAGE_PROTOCOL *loaded=NULL;
  EFI_STATUS s=bs->HandleProtocol(image,&LoadedGuid,(VOID **)&loaded);
