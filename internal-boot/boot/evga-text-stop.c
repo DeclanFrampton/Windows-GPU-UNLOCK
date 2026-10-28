@@ -18,6 +18,9 @@ static EFI_GUID Edid=EFI_EDID_DISCOVERED_PROTOCOL_GUID;
 static EFI_HANDLE EdidAgent,EdidHandles[3];
 static EFI_DRIVER_BINDING_PROTOCOL *EdidDriver;
 static BOOLEAN EdidReleased;
+#ifdef GU_EVGA_RELEASE_EDID_SIBLINGS
+static EFI_HANDLE EdidSiblingReleased[2];
+#endif
 #endif
 #ifdef GU_EVGA_RELEASE_TEXT
 static EFI_DRIVER_BINDING_PROTOCOL *VirtualDriver;
@@ -27,7 +30,11 @@ static EFI_DRIVER_BINDING_PROTOCOL *GraphicsDriver;
 static BOOLEAN GraphicsReleased;
 #undef ATTEMPT_PATH
 #ifdef GU_EVGA_RELEASE_EDID
+#ifdef GU_EVGA_RELEASE_EDID_SIBLINGS
+#define ATTEMPT_PATH L"\\RTX3090-UNLOCK\\EVGA-EDID-SIBLINGS.ARMED"
+#else
 #define ATTEMPT_PATH L"\\RTX3090-UNLOCK\\EVGA-EDID-RELEASE.ARMED"
+#endif
 #else
 #define ATTEMPT_PATH L"\\RTX3090-UNLOCK\\EVGA-GFX-RELEASE.ARMED"
 #endif
@@ -154,6 +161,9 @@ static EFI_STATUS EdidState(EFI_SYSTEM_TABLE *t,GU_EVGA_RECORD record) {
   EFI_STATUS s=b->LocateHandleBuffer(ByProtocol,&Edid,NULL,&n,&handles);
   if(s!=EFI_SUCCESS || !handles || n!=3){if(handles)b->FreePool(handles);return EFI_UNSUPPORTED;}
   UINTN physical=0;
+#ifdef GU_EVGA_RELEASE_EDID_SIBLINGS
+  UINTN pathBits=0;
+#endif
   for(UINTN i=0;i<n;i++) {
     for(UINTN j=0;j<i;j++)if(handles[j]==handles[i])s=EFI_COMPROMISED_DATA;
     if(s!=EFI_SUCCESS)break;
@@ -162,9 +172,33 @@ static EFI_STATUS EdidState(EFI_SYSTEM_TABLE *t,GU_EVGA_RECORD record) {
       if(!found){s=EFI_ACCESS_DENIED;break;}
     }
     if(handles[i]==Plan.Physical)physical++;
-    s=Edges(b,handles[i],&Edid,NULL,FALSE,&EdidAgent,EdidReleased && handles[i]==Plan.Physical);
+#ifdef GU_EVGA_RELEASE_EDID_SIBLINGS
+    /* Exact captured PCI parent plus three distinct ACPI ADR children. */
+    static const UINT8 expected[36]={0x02,0x01,0x0c,0x00,0xd0,0x41,0x03,0x0a,0,0,0,0,0x01,0x01,0x06,0,0,1,0x01,0x01,0x06,0,0,0,0x02,0x03,0x08,0,0x20,0x03,0x01,0x80,0x7f,0xff,4,0};
+    UINT8 *path=NULL;s=b->HandleProtocol(handles[i],&Path,(VOID **)&path);
+    if(s!=EFI_SUCCESS || !path){s=EFI_UNSUPPORTED;break;}
+    for(UINTN off=0;off<36;) {
+      for(UINTN j=0;j<4;j++)if(path[off+j]!=expected[off+j])s=EFI_ACCESS_DENIED;
+      if(s!=EFI_SUCCESS)break;
+      UINTN length=expected[off+2];
+      for(UINTN j=4;j<length;j++)if(off+j!=28 && path[off+j]!=expected[off+j])s=EFI_ACCESS_DENIED;
+      if(s!=EFI_SUCCESS)break;off+=length;
+    }
+    if(s!=EFI_SUCCESS)break;
+    UINTN bit=path[28]==0x20?1:(path[28]==0x40?2:(path[28]==0x70?4:0));
+    if(!bit || (pathBits&bit) || ((handles[i]==Plan.Physical)!=(bit==1)))s=EFI_ACCESS_DENIED;
+    if(s!=EFI_SUCCESS)break;pathBits|=bit;
+#endif
+    BOOLEAN absent=EdidReleased && handles[i]==Plan.Physical;
+#ifdef GU_EVGA_RELEASE_EDID_SIBLINGS
+    for(UINTN j=0;j<2;j++)if(EdidSiblingReleased[j]==handles[i])absent=TRUE;
+#endif
+    s=Edges(b,handles[i],&Edid,NULL,FALSE,&EdidAgent,absent);
     if(s!=EFI_SUCCESS)break;
   }
+#ifdef GU_EVGA_RELEASE_EDID_SIBLINGS
+  if(s==EFI_SUCCESS && pathBits!=7)s=EFI_ACCESS_DENIED;
+#endif
   if(s==EFI_SUCCESS && physical!=1)s=EFI_ACCESS_DENIED;
   if(s==EFI_SUCCESS && !EdidHandles[0])for(UINTN i=0;i<3;i++)EdidHandles[i]=handles[i];
   if(b->FreePool(handles)!=EFI_SUCCESS)s=EFI_DEVICE_ERROR;
@@ -281,7 +315,9 @@ EFI_STATUS GuEvgaTextStop(EFI_SYSTEM_TABLE *t,EFI_FILE_PROTOCOL *root,GU_EVGA_RE
   if(s!=EFI_NOT_FOUND)return s;
   s=root->Open(root,&marker,ATTEMPT_PATH,EFI_FILE_MODE_READ|EFI_FILE_MODE_WRITE|EFI_FILE_MODE_CREATE,0);
   if(s!=EFI_SUCCESS || !marker)return EFI_DEVICE_ERROR;
-#if defined(GU_EVGA_RELEASE_EDID)
+#if defined(GU_EVGA_RELEASE_EDID_SIBLINGS)
+  char tag[]="IMG13/16/17 and three EDID Stops armed; no retry\r\n";
+#elif defined(GU_EVGA_RELEASE_EDID)
   char tag[]="IMG13/16/17 then physical EDID Stop armed; no retry\r\n";
 #elif defined(GU_EVGA_RELEASE_GRAPHICS)
   char tag[]="IMG13/16/17 Stop armed; preserve evidence; no retry\r\n";
@@ -324,7 +360,23 @@ EFI_STATUS GuEvgaTextStop(EFI_SYSTEM_TABLE *t,EFI_FILE_PROTOCOL *root,GU_EVGA_RE
   s=EdidDriver->Stop(EdidDriver,Plan.Physical,0,NULL);
   logged=record(NULL,"evga-edid-stop-return",s);if(logged!=EFI_SUCCESS)return logged;if(s!=EFI_SUCCESS)return s;
   EdidReleased=TRUE;s=Graph(t,TRUE,record);
-  return Checked(record,"evga-edid-post-graph",s);
+  s=Checked(record,"evga-edid-post-graph",s);if(s!=EFI_SUCCESS)return s;
+#ifdef GU_EVGA_RELEASE_EDID_SIBLINGS
+  UINTN done=0;
+  for(UINTN i=0;i<3;i++) {
+    if(EdidHandles[i]==Plan.Physical)continue;
+    if(done>=2)return EFI_COMPROMISED_DATA;
+    s=record(NULL,done?"evga-edid-sibling2-before":"evga-edid-sibling1-before",EFI_SUCCESS);if(s!=EFI_SUCCESS)return s;
+    s=EdidDriver->Stop(EdidDriver,EdidHandles[i],0,NULL);
+    logged=record(NULL,done?"evga-edid-sibling2-return":"evga-edid-sibling1-return",s);if(logged!=EFI_SUCCESS)return logged;if(s!=EFI_SUCCESS)return s;
+    EdidSiblingReleased[done]=EdidHandles[i];
+    s=Graph(t,TRUE,record);
+    s=Checked(record,done?"evga-edid-sibling2-post-graph":"evga-edid-sibling1-post-graph",s);if(s!=EFI_SUCCESS)return s;
+    done++;
+  }
+  if(done!=2)return EFI_COMPROMISED_DATA;
+#endif
+  return EFI_SUCCESS;
 #else
   return EFI_SUCCESS;
 #endif
