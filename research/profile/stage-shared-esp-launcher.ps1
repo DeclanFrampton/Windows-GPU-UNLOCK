@@ -1,6 +1,6 @@
 # GPL-2.0-only. Stage only to a USB FAT32 volume with no existing EFI directory.
 [CmdletBinding(SupportsShouldProcess)]
-param([Parameter(Mandatory)][ValidatePattern('^[A-Za-z]$')][string]$Drive,[Parameter(Mandatory)][guid]$WindowsEspGuid)
+param([Parameter(Mandatory)][ValidatePattern('^[A-Za-z]$')][string]$Drive,[Parameter(Mandatory)][guid]$WindowsEspGuid,[switch]$ReuseExisting)
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'shared-esp-audit-stage-lib.ps1')
 $repo=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
@@ -23,12 +23,25 @@ if($part.Count -ne 1 -or $volume.FileSystem -ne 'FAT32' -or $part[0].IsSystem -o
 $disk=Get-Disk -Number $part[0].DiskNumber
 if($disk.BusType -ne 'USB'){throw 'Target disk is not USB'}
 $root=$letter+':\';$efi=Join-Path $root 'EFI'
-if(Test-Path -LiteralPath $efi){throw 'EFI directory already exists on target; no overwrite attempted'}
+if((Test-Path -LiteralPath $efi) -and !$ReuseExisting){throw 'EFI directory already exists on target; use a separate USB or explicit -ReuseExisting'}
+if($ReuseExisting){
+ $boot=Get-AuditCheckedPath $root @('EFI','BOOT') $true
+ $existing=Get-AuditCheckedPath $root @('EFI','BOOT','BOOTX64.EFI') $false
+ $backup=[IO.Path]::Combine($boot,'BOOTX64.before-shared-audit.efi')
+ if(Test-Path -LiteralPath $backup){throw 'Backup already exists; preserve and inspect before proceeding'}
+}
 if($PSCmdlet.ShouldProcess($root,'Create EFI/BOOT/BOOTX64.EFI on USB')){
- [void][IO.Directory]::CreateDirectory($efi)
- $boot=[IO.Path]::Combine($efi,'BOOT');[void][IO.Directory]::CreateDirectory($boot)
+ if($ReuseExisting){
+  $oldHash=(Get-FileHash -LiteralPath $existing).Hash
+  $i=$null;$o=$null
+  try {$i=[IO.File]::Open($existing,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read);$o=[IO.File]::Open($backup,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None);$i.CopyTo($o);$o.Flush($true)} finally {if($o){$o.Dispose()};if($i){$i.Dispose()}}
+  if((Get-FileHash -LiteralPath $backup).Hash -ine $oldHash -or (Get-FileHash -LiteralPath $existing).Hash -ine $oldHash){throw 'Backup or original changed; preserve files and stop'}
+ }else{
+  [void][IO.Directory]::CreateDirectory($efi)
+  $boot=[IO.Path]::Combine($efi,'BOOT');[void][IO.Directory]::CreateDirectory($boot)
+ }
  $target=[IO.Path]::Combine($boot,'BOOTX64.EFI');$i=$null;$o=$null
- try {$i=[IO.File]::Open($source,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read);$o=[IO.File]::Open($target,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None);$i.CopyTo($o);$o.Flush($true)} finally {if($o){$o.Dispose()};if($i){$i.Dispose()}}
+ try {$i=[IO.File]::Open($source,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read);$mode=if($ReuseExisting){[IO.FileMode]::Truncate}else{[IO.FileMode]::CreateNew};$o=[IO.File]::Open($target,$mode,[IO.FileAccess]::Write,[IO.FileShare]::None);$i.CopyTo($o);$o.Flush($true)} finally {if($o){$o.Dispose()};if($i){$i.Dispose()}}
  if((Get-FileHash -LiteralPath $target).Hash -ine $m.EfiSha256 -or (Get-FileHash -LiteralPath $audit).Hash -ine 'cfd24d9a1bdcf9fba0c1a7cd0bd314bf494d91c00bb39e3e30d2da87bcd4bbe5'){throw 'Post-copy verification failed; preserve files and report'}
- "USB launcher staged at $target; staged audit hash verified. No firmware entries changed."
+ "USB launcher staged at $target; staged audit hash verified. Backup: $backup. No firmware entries changed."
 }
