@@ -10,6 +10,8 @@
 
 이후 Movian은 자신의 USB에서 드라이런이 슬롯 7을 선택하고 예상된 WhatIf 작업을 표시했다고 보고했습니다. 이는 보고된 드라이런 선택만 확인하며 실제 빌드, 스테이징 또는 부팅은 검증하지 않습니다.
 
+이후 캡처된 EVGA22와 검증된 자산을 사용하는 로컬 시험 환경에서 전체 래퍼가 슬롯 7을 빌드하고 스테이징했습니다. 저장소 장치 정보는 모의 처리했으며 시험 마커를 보존하고 기존 시험 EFI를 백업했습니다. Movian의 실제 USB 스테이징이나 하드웨어 실행을 증명하지는 않습니다.
+
 ```powershell
 ./research/profile/prepare-evga-attended.ps1 -Drive D -WindowsEspGuid "c36c3e86-02aa-4f76-af1b-96e327f9d1c1" -Clang "C:/Program Files/LLVM/bin/clang.exe" -LldLink "C:/Program Files/LLVM/bin/lld-link.exe" -WhatIf
 ```

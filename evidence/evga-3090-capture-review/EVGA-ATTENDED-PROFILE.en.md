@@ -10,6 +10,8 @@ An experimental preparation wrapper can select the next contiguous slot and invo
 
 Movian subsequently reported the dry run on his USB selected slot 7 and displayed the expected WhatIf operation. This confirms the reported dry-run selection; it does not verify an actual build, staging or boot.
 
+The full wrapper subsequently built and staged slot 7 in a local fixture using captured EVGA22 and verified assets, with mocked storage inventory. It preserved fixture markers and backed up the prior fixture EFI. This does not prove staging on Movian's physical USB or execution on his hardware.
+
 ```powershell
 ./research/profile/prepare-evga-attended.ps1 -Drive D -WindowsEspGuid "c36c3e86-02aa-4f76-af1b-96e327f9d1c1" -Clang "C:/Program Files/LLVM/bin/clang.exe" -LldLink "C:/Program Files/LLVM/bin/lld-link.exe" -WhatIf
 ```
