@@ -15,5 +15,5 @@ try {
  if($LASTEXITCODE -ne 0){throw 'Link failed'}
  & "./$out/admission-test.exe"
  if($LASTEXITCODE -ne 0){throw "Admission case failed: $LASTEXITCODE"}
- '25 captured-config and mutated-state checks passed; PROM hash callback mocked; no hardware accessed.'
+ 'Captured-config and mutated-state checks passed; PROM hash callback mocked; no hardware accessed.'
 } finally {Pop-Location}

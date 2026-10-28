@@ -10,7 +10,9 @@ try {
  function Get-Disk {param($Number) [pscustomobject]@{BusType='USB'}}
  foreach($i in 5..16){Copy-Item -LiteralPath (Join-Path $repo ('research/profile/build/evga-first-live-result/EVGA{0:D2}.TXT' -f $i)) -Destination "$testRoot/RTX3090-UNLOCK"}
  Copy-Item -LiteralPath 'research/profile/build/evga-first-live-result/EVGA17.TXT' -Destination "$testRoot/RTX3090-UNLOCK/EVGA17.TXT"
+ Copy-Item -LiteralPath 'research/profile/build/evga-first-live-result/EVGA18.TXT' -Destination "$testRoot/RTX3090-UNLOCK/EVGA18.TXT"
  Set-Content -LiteralPath "$testRoot/RTX3090-UNLOCK/EVGA-UNLOCK.ARMED" -Value 'prior attempt marker'
+ Set-Content -LiteralPath "$testRoot/RTX3090-UNLOCK/EVGA-UNLOCK2.ARMED" -Value 'second attempt marker'
  Set-Content -LiteralPath "$testRoot/RTX3090-UNLOCK/DIAG00.TXT" -Value 'synthetic existence fixture'
  Set-Content -LiteralPath "$testRoot/RTX3090-UNLOCK/DIAG01.TXT" -Value 'synthetic existence fixture'
  Set-Content -LiteralPath "$testRoot/RTX3090-UNLOCK/EVGA-PLATFORM-PROBE.ARMED" -Value 'preserve old marker'
@@ -26,7 +28,7 @@ try {
  if((Get-FileHash "$testRoot/EFI/BOOT/BOOTX64.EFI").Hash -ne (Get-FileHash 'internal-boot/boot/build/evga-text-stop/BOOTX64.EFI').Hash){throw 'EFI mismatch'}
  if(!(Test-Path "$testRoot/RTX3090-UNLOCK/EVGA-PLATFORM-PROBE.ARMED") -or !(Test-Path "$testRoot/RTX3090-UNLOCK/EVGA-RESOURCES-PROBE.ARMED")){throw 'old marker removed'}
  foreach($a in (Get-Content internal-boot/unlock/assets.json -Raw | ConvertFrom-Json)){if((Get-FileHash "$testRoot/RTX3090-UNLOCK/ASSETS/$($a.Name)").Hash.ToLowerInvariant() -ne $a.Sha256){throw 'asset mismatch'}}
- Set-Content -LiteralPath "$testRoot/RTX3090-UNLOCK/EVGA-UNLOCK2.ARMED" -Value 'synthetic spent marker'
+ Set-Content -LiteralPath "$testRoot/RTX3090-UNLOCK/EVGA-UNLOCK3.ARMED" -Value 'synthetic spent marker'
  $refused=$false;try {& ./research/profile/stage-evga-text-stop.ps1 -Drive Q -AttemptUnlock}catch{if($_ -match 'attempt is already armed'){$refused=$true}else{throw}}
  if(!$refused){throw 'spent marker not refused'}
  'Unlock staging fixture passed explicit mode, WhatIf no writes, exact EFI/asset copies, backup, old marker preservation and spent-marker refusal. Storage inventory mocked; no USB accessed.'

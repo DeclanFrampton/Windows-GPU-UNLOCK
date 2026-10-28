@@ -9,7 +9,7 @@ static EFI_SYSTEM_TABLE Table;static EFI_BOOT_SERVICES Bs;static EFI_PCI_IO_PROT
 static UINT32 Config[64]={0x220410deU,0x00100002U,0x030000a1U,0x00800010U,0x84000000U,0x0000000cU,0x00000040U,0x0000000cU,0x00000048U,0x00005001U,0x00000000U,0x33873842U,0x85000000U,0x00000060U,0x00000000U,0x000001ffU,0x33873842U,0x00000000U,0x00000000U,0x00000000U,0x00000000U,0x00000001U,0x0023d6ceU,0x00000000U,0x48036801U,0x00000008U,0x00807805U,0x00000000U,0x00000000U,0x00000000U,0x0012b410U,0x112c8de1U,0x00092930U,0x00454d04U,0x11040140U,0x00000000U,0x00000000U,0x00000000U,0x00000000U,0x00070813U,0x00000400U,0x0180001eU,0x001e0004U,0x00000000U,0x00000000U,0x01140009U,0x00000000U,0x00000000U,0x00000000U,0x00000000U,0x00050011U,0x00b90000U,0x00ba0000U,0x00000000U,0x00000000U,0x00000000U,0x00000000U,0x00000000U,0x00000000U,0x00000000U,0x00000000U,0x00000000U,0x00000000U,0x00000000U};
 static UINT8 Prom[GU_EVGA_PROM_BYTES],Asset;
 static unsigned Claims,Graphs,ConfigReads,Unlocks,Clears,Releases,HashCalls,LogChecks,Handles;static unsigned FailLogAt,FailGraphAt,FailHandleAt;
-static BOOLEAN BadAsset,BadGraph,BadClaim,BadBar,BadConfig,BadCold,BadLatch,FailLoad,FailUnlock,FailClear,FailSafe;
+static BOOLEAN BadAsset,BadGraph,BadClaim,BadBar,BadConfig,BadCold,BadLatch,FailLoad,FailUnlock,FailClear,FailSafe;static UINT32 TestSs0;
 static EFI_ACPI_ADDRESS_SPACE_DESCRIPTOR Bar;static UINT8 *Unused;
 static struct {EFI_ACPI_ADDRESS_SPACE_DESCRIPTOR desc;UINT8 end[2];} Descriptor;
 void GuInit(EFI_BOOT_SERVICES *b,EFI_PCI_IO_PROTOCOL *p){memset(&Gu,0,sizeof(Gu));Gu.bs=b;Gu.pci=p;}
@@ -18,8 +18,8 @@ BOOLEAN GuHashMatches(const VOID *p,UINTN n,const char *h){(void)h;HashCalls++;r
 VOID *GuAlloc(size_t n){return n==sizeof(Prom)?Prom:NULL;}
 VOID GuFree(VOID *p){(void)p;}
 VOID GuCopyFromIo(VOID *d,const VOID *s,size_t n){(void)d;(void)s;(void)n;}
-UINT32 GuRead32(UINT32 o){switch(o){case 0:return 0xb72000a1;case 0x118128:return 0x8b8f;case 0x118234:return 0x3ff;case 0x110100:return 0x10;case 0x1fa828:return 0;case 0x823804:return 0xffffff8f;case 0x82381c:return BadCold?0:0x30053014;case 0x823820:return 7;case 0x1183a4:return 0x6000;default:Gu.fault=TRUE;return 0;}}
-BOOLEAN GuLatchEntrySelectors(UINT32 a,UINT32 b){return !BadLatch && Gu.prom_verified && a==0x30053014 && b==7;}
+UINT32 GuRead32(UINT32 o){switch(o){case 0:return 0xb72000a1;case 0x118128:return 0x8b8f;case 0x118234:return 0x3ff;case 0x110100:return 0x10;case 0x1fa828:return 0;case 0x823804:return 0xffffff8f;case 0x82381c:return BadCold?0xffffffffU:TestSs0;case 0x823820:return 7;case 0x1183a4:return 0x6000;default:Gu.fault=TRUE;return 0;}}
+BOOLEAN GuLatchEntrySelectors(UINT32 a,UINT32 b){return !BadLatch && Gu.prom_verified && a==TestSs0 && b==7;}
 EFI_STATUS GuClaimController(VOID){Claims++;if(BadClaim)return EFI_ACCESS_DENIED;Gu.owned=TRUE;return EFI_SUCCESS;}
 EFI_STATUS GuClearMaster(VOID){Clears++;return FailClear?EFI_DEVICE_ERROR:EFI_SUCCESS;}
 BOOLEAN GuSafeToReturn(VOID){return !FailSafe;}
@@ -36,6 +36,7 @@ static BOOLEAN Graph(EFI_HANDLE p,EFI_HANDLE i,BOOLEAN owned){(void)p;(void)i;(v
 static VOID Init(VOID){
  GuEvgaTestReset();Claims=Graphs=ConfigReads=Unlocks=Clears=Releases=HashCalls=LogChecks=Handles=FailLogAt=FailGraphAt=FailHandleAt=0;
  BadAsset=BadGraph=BadClaim=BadBar=BadConfig=BadCold=BadLatch=FailLoad=FailUnlock=FailClear=FailSafe=FALSE;
+ TestSs0=0x30053014U;
  Pci=(EFI_PCI_IO_PROTOCOL){0};Pci.GetLocation=Location;Pci.GetBarAttributes=BarQuery;Pci.Attributes=Attr;Pci.Pci.Read=Read;
  /* Non-null unused methods pass adapter availability gates; no mock calls them. */
  Pci.Pci.Write=(EFI_PCI_IO_PROTOCOL_CONFIG)1;Pci.Mem.Read=(EFI_PCI_IO_PROTOCOL_IO_MEM)1;Pci.Mem.Write=(EFI_PCI_IO_PROTOCOL_IO_MEM)1;
@@ -73,5 +74,6 @@ int main(VOID){EFI_STATUS s;
  Init();FailHandleAt=6;s=Run();if(s==EFI_SUCCESS || Unlocks)return 19;
  Init();FailLogAt=2;s=Run();if(s==EFI_SUCCESS || Unlocks)return 20;
  Init();FailLogAt=3;s=Run();if(s==EFI_SUCCESS || Unlocks)return 21;
+ Init();TestSs0=0x12053015U;s=Run();if(s!=EFI_SUCCESS || Unlocks!=1)return 22;
  return 0;
 }

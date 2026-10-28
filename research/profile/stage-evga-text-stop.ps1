@@ -31,7 +31,9 @@ $attempt=if($manifest.Mode -eq 'evga3090-experimental-unlock'){'EVGA-UNLOCK.ARME
 if($AttemptUnlock){
  $prior=Join-Path $captures 'EVGA17.TXT'
  if(!(Test-Path -LiteralPath (Join-Path $captures 'EVGA-UNLOCK.ARMED')) -or !(Test-Path -LiteralPath $prior) -or (Get-FileHash -LiteralPath $prior -Algorithm SHA256).Hash.ToLowerInvariant() -ne 'fb0dd12b5eacc5bd7e289be04827aa1b15f9ce94bf768e63fabcd98b39bedb46'){throw 'Expected original unlock marker and reviewed EVGA17; preserve evidence'}
- $attempt='EVGA-UNLOCK2.ARMED'
+ $second=Join-Path $captures 'EVGA18.TXT'
+ if(!(Test-Path -LiteralPath (Join-Path $captures 'EVGA-UNLOCK2.ARMED')) -or !(Test-Path -LiteralPath $second) -or (Get-FileHash -LiteralPath $second -Algorithm SHA256).Hash.ToLowerInvariant() -ne '7f2c070f80d680d49997ee990b99aefbe1040707db2a40f59bd5a16aa43244a4'){throw 'Expected second unlock marker and reviewed EVGA18; preserve evidence'}
+ $attempt='EVGA-UNLOCK3.ARMED'
 }
 if(Test-Path -LiteralPath (Join-Path $captures $attempt)){throw 'An attempt is already armed; preserve evidence instead of repeating'}
 if($manifest.Mode -in @('evga3090-two-text-stops','evga3090-three-consumer-stops','evga3090-four-consumer-stops','evga3090-six-consumer-stops','evga3090-nvidia-preflight','evga3090-nvidia-three-child-stop','evga3090-nvidia-parent-stop','evga3090-decode-probe','evga3090-state-probe','evga3090-platform-probe','evga3090-resources-probe','evga3090-experimental-unlock')) {
