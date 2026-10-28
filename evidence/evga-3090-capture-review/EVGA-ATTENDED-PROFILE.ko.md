@@ -12,6 +12,8 @@
 
 이후 캡처된 EVGA22와 검증된 자산을 사용하는 로컬 시험 환경에서 전체 래퍼가 슬롯 7을 빌드하고 스테이징했습니다. 저장소 장치 정보는 모의 처리했으며 시험 마커를 보존하고 기존 시험 EFI를 백업했습니다. Movian의 실제 USB 스테이징이나 하드웨어 실행을 증명하지는 않습니다.
 
+이후 Movian이 자신의 USB에 슬롯 7을 빌드하고 스테이징한 출력을 제공했습니다. 빌드와 스테이징 SHA-256 `20ce56394feefefb6bb249a8bfc0100c27d1d58a46d9c7cd903e70fd3cf70cb4`가 일치하며 이전 EFI는 백업됐습니다. 이는 기여자가 제공한 출력이며 슬롯 7 EFI 부팅과 하드웨어 동작은 아직 검증되지 않았습니다.
+
 ```powershell
 ./research/profile/prepare-evga-attended.ps1 -Drive D -WindowsEspGuid "c36c3e86-02aa-4f76-af1b-96e327f9d1c1" -Clang "C:/Program Files/LLVM/bin/clang.exe" -LldLink "C:/Program Files/LLVM/bin/lld-link.exe" -WhatIf
 ```

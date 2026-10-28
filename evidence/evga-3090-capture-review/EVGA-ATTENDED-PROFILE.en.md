@@ -12,6 +12,8 @@ Movian subsequently reported the dry run on his USB selected slot 7 and displaye
 
 The full wrapper subsequently built and staged slot 7 in a local fixture using captured EVGA22 and verified assets, with mocked storage inventory. It preserved fixture markers and backed up the prior fixture EFI. This does not prove staging on Movian's physical USB or execution on his hardware.
 
+Movian subsequently supplied output showing slot 7 was built and staged on his USB with matching build/staged SHA-256 `20ce56394feefefb6bb249a8bfc0100c27d1d58a46d9c7cd903e70fd3cf70cb4`, with the previous EFI backed up. This is contributor-reported output; the slot-7 EFI boot and hardware behavior remain unverified.
+
 ```powershell
 ./research/profile/prepare-evga-attended.ps1 -Drive D -WindowsEspGuid "c36c3e86-02aa-4f76-af1b-96e327f9d1c1" -Clang "C:/Program Files/LLVM/bin/clang.exe" -LldLink "C:/Program Files/LLVM/bin/lld-link.exe" -WhatIf
 ```
