@@ -12,5 +12,6 @@ try {
  if($LASTEXITCODE -ne 0){throw 'Launcher link failed'}
  & $Python -I ../unlock/verify_pe.py "$out/LAUNCHER.EFI" "$out/LAUNCHER.map" --output "$out/launcher-pe-verification.json"
  if($LASTEXITCODE -ne 0){throw 'Launcher PE verification failed'}
+ [ordered]@{Mode='shared-esp-usb-launcher';WindowsEspGuid=$WindowsEspGuid.ToString();EfiSha256=(Get-FileHash "$out/LAUNCHER.EFI").Hash;LauncherSourceSha256=(Get-FileHash 'shared-esp-launcher.c').Hash;AuditSourceSha256=(Get-FileHash 'shared-esp-audit.c').Hash;MediaSha256=(Get-FileHash 'media.h').Hash} | ConvertTo-Json | Set-Content "$out/launcher-manifest.json" -Encoding utf8
  'Launcher built; no USB or firmware changes.'
 } finally {Pop-Location}

@@ -33,3 +33,11 @@ Send the output or error. Do not delete files or repeat a refused staging attemp
 ## Contributor staging result
 
 On 2026-10-28, the contributor reported a 4,096-byte build with SHA-256 `cfd24d9a1bdcf9fba0c1a7cd0bd314bf494d91c00bb39e3e30d2da87bcd4bbe5`, ten passing host mocks, and successful create-new staging with both existing boot-file hash checks. This is reported script output, not an independently inspected ESP or a boot test. No boot entry was changed.
+
+## USB launcher test
+
+A separate USB launcher locates the pinned ESP and loads the staged audit from that ESP without changing firmware entries or boot order. The audit then attempts a direct Windows handoff. This tests same-ESP loading but does not provide an installed or automatic unlock, access the GPU, or establish that either handoff works on firmware. The launcher checks the loaded image device; it does not hash the audit at runtime. The staging script checks the previously reported audit hash from Windows before and after copying the launcher, but cannot prevent later changes.
+
+Use a separate FAT32 USB with no `EFI` directory; the script refuses an existing directory and never formats the drive. It verifies the disk reports USB and is not a system/boot partition, but unexpected storage errors and interruption can still cause data loss. Back up the USB. Firmware may hang or refuse an unsigned EFI; if it does not reach Windows, power off, remove the USB and select the normal Limine or Windows boot entry. Recovery is not guaranteed. The test makes no persistent firmware configuration changes by design, but does not prove boot recovery.
+
+Build and run the host tests, then stage to the chosen USB using `stage-shared-esp-launcher.ps1 -Drive <letter> -WindowsEspGuid <guid>`; `-WhatIf` skips the copy. No existing EFI or capture USB is overwritten. Preserve any partial files after failure. The launcher and staging have passed simulated tests only; a real boot remains pending.
