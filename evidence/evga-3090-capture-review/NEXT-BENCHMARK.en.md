@@ -6,7 +6,7 @@ Run this after EVGA12 and before any unlock attempt. Update the current branch w
 
 Run each block separately in PowerShell; continue only if the previous block succeeds. Setup downloads hash-verified NVIDIA CUDA 12.6 components into this repository, without an installer. It also refreshes the two pinned upstream reference files in benchmark/. Preserve any local edits first. Run setup only for a fresh package directory; if it reports an existing/partial package directory, send the error rather than deleting it. No system CUDA installation is needed.
 
-The second block discovers installed Visual C++ tools rather than assuming VS2019. CUDA 12.6 may reject a newer compiler. If it does, send the complete error; do not change compiler guards or reinstall tools blindly. Preflight checks binary metadata without a GPU workload. Only the final block measures GPU performance.
+The second block discovers VS2019 C++ x64 tools across editions (including Community), avoiding a newer side-by-side installation. EVGA contributor reported VS2019 and VS2026 installed; the earlier unrestricted latest query selected an unsupported compiler. If setup already completed, skip the first block and resume at build; do not rerun setup. CUDA 12.6 may reject a newer compiler. If it does, send the complete error; do not change compiler guards or reinstall tools blindly. Preflight checks binary metadata without a GPU workload. Only the final block measures GPU performance.
 
 ```powershell
 cd E:\UNLOCK\Windows-GPU-UNLOCK
@@ -14,11 +14,7 @@ powershell -NoProfile -File .\benchmark\setup.ps1
 ```
 
 ```powershell
-$vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-$vs = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
-if (!$vs) { throw 'No Visual C++ x64 toolchain found; send this error' }
-$vcvars = Join-Path $vs 'VC\Auxiliary\Build\vcvars64.bat'
-powershell -NoProfile -File .\benchmark\build.ps1 -Card 3090 -VcVars $vcvars
+powershell -NoProfile -File .\benchmark\build.ps1 -Card 3090
 ```
 
 ```powershell

@@ -6,7 +6,7 @@ EVGA12 이후, 잠금 해제 시도 전에 실행합니다. GitHub Desktop에서
 
 각 블록을 따로 실행하고 이전 단계가 성공했을 때만 계속합니다. setup은 해시를 검증한 NVIDIA CUDA 12.6 구성 요소를 저장소 안에 다운로드하며 설치 프로그램을 사용하지 않습니다. benchmark/의 고정된 업스트림 참조 파일 2개도 갱신하므로 로컬 수정은 먼저 보존합니다. 패키지 디렉터리가 처음 생성될 때만 setup을 실행합니다. 기존/부분 디렉터리 오류가 나면 삭제하지 말고 오류를 보내 주세요. 시스템 CUDA 설치는 필요 없습니다.
 
-두 번째 블록은 VS2019 경로를 가정하지 않고 설치된 C++ 도구를 검색합니다. CUDA 12.6이 최신 컴파일러를 거부할 수 있습니다. 이 경우 전체 오류를 보내고 검사 우회나 무작정 재설치는 하지 마세요. Preflight는 GPU 부하 없이 메타데이터를 확인합니다. 마지막 블록만 실제 성능을 측정합니다.
+두 번째 블록은 Community를 포함한 VS2019 C++ x64 도구를 검색하여 함께 설치된 최신 버전 선택을 피합니다. 기여자는 VS2019와 VS2026이 설치되어 있다고 보고했으며 이전 latest 검색은 지원되지 않는 컴파일러를 선택했습니다. setup이 이미 완료되었다면 첫 블록은 건너뛰고 빌드부터 다시 실행합니다. CUDA 12.6이 최신 컴파일러를 거부할 수 있습니다. 이 경우 전체 오류를 보내고 검사 우회나 무작정 재설치는 하지 마세요. Preflight는 GPU 부하 없이 메타데이터를 확인합니다. 마지막 블록만 실제 성능을 측정합니다.
 
 ```powershell
 cd E:\UNLOCK\Windows-GPU-UNLOCK
@@ -14,11 +14,7 @@ powershell -NoProfile -File .\benchmark\setup.ps1
 ```
 
 ```powershell
-$vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-$vs = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
-if (!$vs) { throw 'No Visual C++ x64 toolchain found; send this error' }
-$vcvars = Join-Path $vs 'VC\Auxiliary\Build\vcvars64.bat'
-powershell -NoProfile -File .\benchmark\build.ps1 -Card 3090 -VcVars $vcvars
+powershell -NoProfile -File .\benchmark\build.ps1 -Card 3090
 ```
 
 ```powershell
