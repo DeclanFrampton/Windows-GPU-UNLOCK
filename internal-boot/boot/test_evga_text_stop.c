@@ -6,8 +6,8 @@ static EFI_SIMPLE_TEXT_INPUT_PROTOCOL Input;
 static EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL Output;
 static EFI_GRAPHICS_OUTPUT_PROTOCOL Graphics[2];
 static EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE Modes[2];
-static EFI_DRIVER_BINDING_PROTOCOL Drivers[4];
-static EFI_LOADED_IMAGE_PROTOCOL Images[4];
+static EFI_DRIVER_BINDING_PROTOCOL Drivers[5];
+static EFI_LOADED_IMAGE_PROTOCOL Images[5];
 static EFI_PCI_IO_PROTOCOL PciIo;
 static EFI_FILE_PROTOCOL Root,Marker;
 static UINTN Keys,Calls,Records;
@@ -25,6 +25,10 @@ static BOOLEAN RemovedEdid,FailEdid,BadEdid,BadEdidInventory,ExtraEdidOwner;
 static UINTN SiblingBits,FailSibling,BadSibling;
 static BOOLEAN WrongEdidPath;
 #endif
+#endif
+#ifdef GU_EVGA_AUDIT_NVIDIA
+static UINT8 PrivateContext[0xa0];
+static BOOLEAN BadNvidiaChildren,PrivateFailure,UnknownStored;
 #endif
 static UINTN InterfaceFailure,GopConsoleQueries;
 static EFI_HANDLE H(UINTN n){return (EFI_HANDLE)n;}
@@ -68,8 +72,14 @@ static EFI_STATUS EFIAPI Handle(EFI_HANDLE h,EFI_GUID *guid,VOID **out){
   if(guid==&Text && h==H(2) && RemovedVirtual)return EFI_UNSUPPORTED;
 #endif
   if(guid==&Text && (h==H(2)||h==H(3))){*out=&Output;return EFI_SUCCESS;}
-  if(guid==&Binding && (UINTN)h>=10 && (UINTN)h<=13){*out=&Drivers[(UINTN)h-10];return EFI_SUCCESS;}
-  if(guid==&Loaded && (UINTN)h>=10 && (UINTN)h<=13){*out=&Images[(UINTN)h-10];return EFI_SUCCESS;}
+  if(guid==&Binding && (UINTN)h>=10 && (UINTN)h<=14){*out=&Drivers[(UINTN)h-10];return EFI_SUCCESS;}
+  if(guid==&Loaded && (UINTN)h>=10 && (UINTN)h<=14){*out=&Images[(UINTN)h-10];return EFI_SUCCESS;}
+#ifdef GU_EVGA_AUDIT_NVIDIA
+  if(h==H(4) && guid->Data1==0xfe47349a){
+    if(PrivateFailure)return EFI_UNSUPPORTED;
+    *(EFI_HANDLE *)(PrivateContext+0x88)=UnknownStored?H(99):H(1);*out=PrivateContext;return EFI_SUCCESS;
+  }
+#endif
   if(guid==&Pci && h==H(4)){*out=&PciIo;return EFI_SUCCESS;}return EFI_UNSUPPORTED;
 }
 static EFI_STATUS EFIAPI ProtocolList(EFI_HANDLE h,EFI_GUID ***out,UINTN *n){
@@ -110,6 +120,13 @@ static EFI_STATUS EFIAPI Opens(EFI_HANDLE source,EFI_GUID *guid,EFI_OPEN_PROTOCO
     agent=H(13);if(ExtraEdidOwner && source==H(5))agent=H(99);
   }
 #endif
+#ifdef GU_EVGA_AUDIT_NVIDIA
+  if(source==H(4)&&guid==&Pci)agent=H(14);
+  if(source==H(4)&&guid==&Path){
+    for(UINTN i=0;i<3;i++)e[i]=(EFI_OPEN_PROTOCOL_INFORMATION_ENTRY){H(14),H(i==0?1:(i==1?5:6)),8,1};
+    *n=BadNvidiaChildren?2:3;return EFI_SUCCESS;
+  }
+#endif
   if(!agent)return EFI_UNSUPPORTED;
   e[0]=(EFI_OPEN_PROTOCOL_INFORMATION_ENTRY){agent,source,16,1};*n=1;
   if(child){e[1]=(EFI_OPEN_PROTOCOL_INFORMATION_ENTRY){agent,child,8,1};*n=2;}
@@ -148,6 +165,10 @@ static EFI_STATUS RecordMock(VOID *p,const char *name,EFI_STATUS s){
   (void)p;(void)name;(void)s;Records++;return FailRecord?EFI_DEVICE_ERROR:EFI_SUCCESS;
 }
 static VOID Init(VOID){
+#ifdef GU_EVGA_AUDIT_NVIDIA
+  NvidiaParent=NvidiaAgent=NvidiaStoredChild=NULL;NvidiaSaved=FALSE;NvidiaChildClass=NvidiaFlag=0;
+  BadNvidiaChildren=PrivateFailure=UnknownStored=FALSE;for(UINTN i=0;i<sizeof(PrivateContext);i++)PrivateContext[i]=0;
+#endif
 #ifdef GU_EVGA_RELEASE_EDID
 #ifdef GU_EVGA_RELEASE_EDID_SIBLINGS
   WrongEdidPath=FALSE;EdidSiblingReleased[0]=EdidSiblingReleased[1]=NULL;SiblingBits=FailSibling=BadSibling=0;
@@ -169,15 +190,31 @@ static VOID Init(VOID){
   Table=(EFI_SYSTEM_TABLE){0};Table.BootServices=&Bs;Table.ConIn=&Input;Table.ConOut=&Output;Table.ConsoleOutHandle=H(3);Table.StandardErrorHandle=H(3);
   for(UINTN i=0;i<2;i++){Modes[i]=(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE){0};Graphics[i]=(EFI_GRAPHICS_OUTPUT_PROTOCOL){0};Graphics[i].Mode=&Modes[i];}
   Modes[0].FrameBufferBase=0x100000;Modes[0].FrameBufferSize=0x200000;
-  UINTN bytes[4]={0x2180,0x3bc0,0x6ae0,0x9000},stops[4]={0x88c,0xb2c,0x104c,0x14d4};
-  for(UINTN i=0;i<4;i++){
-    Drivers[i]=(EFI_DRIVER_BINDING_PROTOCOL){0};Drivers[i].DriverBindingHandle=Drivers[i].ImageHandle=H(10+i);Drivers[i].Version=i==3?1:(i?16:17);Drivers[i].Stop=MockStop;
+  UINTN bytes[5]={0x2180,0x3bc0,0x6ae0,0x9000,0x2b700},stops[5]={0x88c,0xb2c,0x104c,0x14d4,0x698};
+  for(UINTN i=0;i<5;i++){
+    Drivers[i]=(EFI_DRIVER_BINDING_PROTOCOL){0};Drivers[i].DriverBindingHandle=Drivers[i].ImageHandle=H(10+i);Drivers[i].Version=i==4?0x60009:(i==3?1:(i?16:17));Drivers[i].Stop=MockStop;
     Images[i]=(EFI_LOADED_IMAGE_PROTOCOL){0};Images[i].ImageBase=(VOID *)((UINTN)MockStop-stops[i]);Images[i].ImageSize=bytes[i];
   }
   PciIo=(EFI_PCI_IO_PROTOCOL){0};PciIo.Pci.Read=ReadPci;
   Root=(EFI_FILE_PROTOCOL){0};Root.Open=FileOpen;Marker=(EFI_FILE_PROTOCOL){0};Marker.Close=FileClose;Marker.Write=FileWrite;Marker.Flush=FileFlush;
 }
-#ifdef GU_EVGA_RELEASE_EDID_SIBLINGS
+#ifdef GU_EVGA_AUDIT_NVIDIA
+int main(VOID){
+  BOOLEAN started=FALSE;EFI_STATUS s;
+  Init();s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s!=EFI_SUCCESS||Calls!=6||!NvidiaSaved||NvidiaChildClass!=1)return 1;
+  UINTN saved=Records;if(GuEvgaTextStopVerify(&Table)!=EFI_SUCCESS||saved!=Records)return 2;
+  Init();BadNvidiaChildren=TRUE;s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s==EFI_SUCCESS||Calls)return 3;
+  Init();PrivateFailure=TRUE;s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s==EFI_SUCCESS||Calls)return 4;
+  Init();UnknownStored=TRUE;s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s==EFI_SUCCESS||Calls)return 5;
+  Init();Drivers[4].Version++;s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s==EFI_SUCCESS||Calls)return 6;
+  Init();PrivateContext[0x98]=2;s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s==EFI_SUCCESS||Calls)return 7;
+  Init();s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s!=EFI_SUCCESS)return 8;
+  PrivateContext[0x98]=1;if(GuEvgaTextStopVerify(&Table)==EFI_SUCCESS)return 9;
+  Init();MarkerExists=TRUE;s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s!=EFI_ALREADY_STARTED||Calls)return 10;
+  Init();FailSibling=1;s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s==EFI_SUCCESS||Calls!=5)return 11;
+  return 0;
+}
+#elif defined(GU_EVGA_RELEASE_EDID_SIBLINGS)
 int main(VOID){
   BOOLEAN started=FALSE;EFI_STATUS s;
   Init();s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s!=EFI_SUCCESS||Calls!=6||SiblingBits!=3)return 1;

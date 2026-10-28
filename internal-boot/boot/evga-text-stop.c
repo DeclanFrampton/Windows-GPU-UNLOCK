@@ -12,6 +12,11 @@ static EFI_GUID Path=EFI_DEVICE_PATH_PROTOCOL_GUID,Binding=EFI_DRIVER_BINDING_PR
 static EFI_GUID Loaded=EFI_LOADED_IMAGE_PROTOCOL_GUID,Pci=EFI_PCI_IO_PROTOCOL_GUID;
 typedef struct {EFI_HANDLE Physical,Virtual,Console,Gfx,VirtualText,TextAgent;EFI_DRIVER_BINDING_PROTOCOL *Driver;} PLAN;
 static PLAN Plan;
+#ifdef GU_EVGA_AUDIT_NVIDIA
+static EFI_HANDLE NvidiaParent,NvidiaAgent,NvidiaStoredChild;
+static UINTN NvidiaChildClass,NvidiaFlag;
+static BOOLEAN NvidiaSaved;
+#endif
 #ifdef GU_EVGA_RELEASE_EDID
 #include <Protocol/EdidDiscovered.h>
 static EFI_GUID Edid=EFI_EDID_DISCOVERED_PROTOCOL_GUID;
@@ -31,7 +36,11 @@ static BOOLEAN GraphicsReleased;
 #undef ATTEMPT_PATH
 #ifdef GU_EVGA_RELEASE_EDID
 #ifdef GU_EVGA_RELEASE_EDID_SIBLINGS
+#ifdef GU_EVGA_AUDIT_NVIDIA
+#define ATTEMPT_PATH L"\\RTX3090-UNLOCK\\EVGA-NVIDIA-AUDIT.ARMED"
+#else
 #define ATTEMPT_PATH L"\\RTX3090-UNLOCK\\EVGA-EDID-SIBLINGS.ARMED"
+#endif
 #else
 #define ATTEMPT_PATH L"\\RTX3090-UNLOCK\\EVGA-EDID-RELEASE.ARMED"
 #endif
@@ -103,7 +112,11 @@ static EFI_STATUS Inventory(EFI_BOOT_SERVICES *b,GU_EVGA_RECORD record) {
     s=b->HandleProtocol(handles[i],&Pci,(VOID **)&pci);
     if(s!=EFI_SUCCESS || !pci){s=EFI_UNSUPPORTED;break;}
     s=pci->Pci.Read(pci,EfiPciIoWidthUint32,0,16,cfg);if(s!=EFI_SUCCESS)break;
-    if((cfg[2]>>24)==3){displays++;if(cfg[0]==0x220410deU && cfg[11]==0x33873842U)matches++;}
+    if((cfg[2]>>24)==3){displays++;if(cfg[0]==0x220410deU && cfg[11]==0x33873842U){matches++;
+#ifdef GU_EVGA_AUDIT_NVIDIA
+      NvidiaParent=handles[i];
+#endif
+    }}
   }
   if(b->FreePool(handles)!=EFI_SUCCESS)s=EFI_DEVICE_ERROR;
   EFI_STATUS io=Value(record,"evga-observed-display-count",displays);if(io!=EFI_SUCCESS)return io;
@@ -283,14 +296,57 @@ static EFI_STATUS Graph(EFI_SYSTEM_TABLE *t,BOOLEAN after,GU_EVGA_RECORD record)
   return EFI_SUCCESS;
 #endif
 }
+#ifdef GU_EVGA_AUDIT_NVIDIA
+/* CPU protocol data only. Never call NVIDIA Stop or any private method. */
+static EFI_STATUS NvidiaAudit(EFI_SYSTEM_TABLE *t,GU_EVGA_RECORD record) {
+  EFI_BOOT_SERVICES *b=t->BootServices;
+  if(!NvidiaParent)return EFI_UNSUPPORTED;
+  EFI_STATUS s=Checked(record,"evga-nvidia-pci-owner",Edges(b,NvidiaParent,&Pci,NULL,FALSE,&NvidiaAgent,FALSE));if(s!=EFI_SUCCESS)return s;
+  s=Checked(record,"evga-nvidia-code",Code(b,NvidiaAgent,0x2b700,0x280,0x23d82,0x698,0x60009,"d045cee2113e461c7c678ec21542b1d0f18356765c0fc6a0bf2dcf824088e011",NULL,record));if(s!=EFI_SUCCESS)return s;
+  EFI_OPEN_PROTOCOL_INFORMATION_ENTRY *e=NULL;UINTN n=0,bits=0;
+  s=b->OpenProtocolInformation(NvidiaParent,&Path,&e,&n);
+  if(s!=EFI_SUCCESS || n>64 || (n&&!e))return EFI_COMPROMISED_DATA;
+  for(UINTN i=0;i<n;i++) {
+    if(e[i].Attributes==1 || e[i].Attributes==2 || e[i].Attributes==4)continue;
+    UINTN bit=0;for(UINTN j=0;j<3;j++)if(e[i].ControllerHandle==EdidHandles[j])bit=(UINTN)1<<j;
+    if(e[i].Attributes!=8 || e[i].OpenCount!=1 || e[i].AgentHandle!=NvidiaAgent || !bit || (bits&bit)){s=EFI_ACCESS_DENIED;break;}
+    bits|=bit;
+  }
+  if(e && b->FreePool(e)!=EFI_SUCCESS)s=EFI_DEVICE_ERROR;
+  if(s==EFI_SUCCESS && bits!=7)s=EFI_ACCESS_DENIED;
+  s=Checked(record,"evga-nvidia-three-children",s);if(s!=EFI_SUCCESS)return s;
+  EFI_GUID privateGuid={0xfe47349a,0x7f0d,0x4641,{0x82,0x2b,0x34,0xba,0xa2,0x8e,0xcd,0xd0}};
+  UINT8 *context=NULL;s=b->HandleProtocol(NvidiaParent,&privateGuid,(VOID **)&context);
+  s=Checked(record,"evga-nvidia-private-interface",s);if(s!=EFI_SUCCESS || !context)return EFI_UNSUPPORTED;
+  if((UINTN)context>~(UINTN)0-0x99)return EFI_COMPROMISED_DATA;
+  EFI_HANDLE child=*(EFI_HANDLE *)(context+0x88);UINTN flag=context[0x98];
+  UINTN kind=child?4:0;
+  if(child==Plan.Physical)kind=1;
+  else for(UINTN j=0;j<3;j++)if(child==EdidHandles[j])kind=2;
+  s=Value(record,"evga-nvidia-stored-child-class",kind);if(s!=EFI_SUCCESS)return s;
+  s=Value(record,"evga-nvidia-parent-flag98",flag);if(s!=EFI_SUCCESS)return s;
+  /* Classes:0 null,1 physical GOP,2 EDID-only sibling,4 unknown. */
+  if(kind==4 || flag>1)return EFI_UNSUPPORTED;
+  if(NvidiaSaved && (child!=NvidiaStoredChild || kind!=NvidiaChildClass || flag!=NvidiaFlag))return EFI_ACCESS_DENIED;
+  NvidiaStoredChild=child;NvidiaChildClass=kind;NvidiaFlag=flag;NvidiaSaved=TRUE;
+  return Checked(record,"evga-nvidia-audit",EFI_SUCCESS);
+}
+#endif
 EFI_STATUS GuEvgaTextStopVerify(EFI_SYSTEM_TABLE *t) {
   if(!t || !t->BootServices || !Plan.Driver || !Plan.TextAgent)return EFI_INVALID_PARAMETER;
-  return Graph(t,TRUE,NULL); /* Files are closed: no logging on the final check. */
+  EFI_STATUS s=Graph(t,TRUE,NULL); /* Files are closed: no logging on the final check. */
+#ifdef GU_EVGA_AUDIT_NVIDIA
+  if(s==EFI_SUCCESS)s=NvidiaAudit(t,NULL);
+#endif
+  return s;
 }
 EFI_STATUS GuEvgaTextStop(EFI_SYSTEM_TABLE *t,EFI_FILE_PROTOCOL *root,GU_EVGA_RECORD record,BOOLEAN *started) {
   if(!t || !t->BootServices || !t->ConIn || !root || !record || !started)return EFI_INVALID_PARAMETER;
   *started=FALSE;EFI_STATUS s=Checked(record,"evga-pci-inventory",Inventory(t->BootServices,record));if(s!=EFI_SUCCESS)return s;
   s=Checked(record,"evga-initial-graph",Graph(t,FALSE,record));if(s!=EFI_SUCCESS)return s;
+#ifdef GU_EVGA_AUDIT_NVIDIA
+  s=NvidiaAudit(t,record);if(s!=EFI_SUCCESS)return s;
+#endif
   if(!t->ConOut || !t->ConOut->OutputString)return EFI_UNSUPPORTED;
   s=t->ConOut->OutputString(t->ConOut,L"Live guards passed. NOW press fresh Shift+G once (60 seconds); Esc cancels.\r\n");
   if(s!=EFI_SUCCESS)return s;
@@ -315,7 +371,9 @@ EFI_STATUS GuEvgaTextStop(EFI_SYSTEM_TABLE *t,EFI_FILE_PROTOCOL *root,GU_EVGA_RE
   if(s!=EFI_NOT_FOUND)return s;
   s=root->Open(root,&marker,ATTEMPT_PATH,EFI_FILE_MODE_READ|EFI_FILE_MODE_WRITE|EFI_FILE_MODE_CREATE,0);
   if(s!=EFI_SUCCESS || !marker)return EFI_DEVICE_ERROR;
-#if defined(GU_EVGA_RELEASE_EDID_SIBLINGS)
+#if defined(GU_EVGA_AUDIT_NVIDIA)
+  char tag[]="Six consumer Stops plus NVIDIA CPU audit armed; no retry\r\n";
+#elif defined(GU_EVGA_RELEASE_EDID_SIBLINGS)
   char tag[]="IMG13/16/17 and three EDID Stops armed; no retry\r\n";
 #elif defined(GU_EVGA_RELEASE_EDID)
   char tag[]="IMG13/16/17 then physical EDID Stop armed; no retry\r\n";
@@ -375,6 +433,9 @@ EFI_STATUS GuEvgaTextStop(EFI_SYSTEM_TABLE *t,EFI_FILE_PROTOCOL *root,GU_EVGA_RE
     done++;
   }
   if(done!=2)return EFI_COMPROMISED_DATA;
+#ifdef GU_EVGA_AUDIT_NVIDIA
+  s=NvidiaAudit(t,record);if(s!=EFI_SUCCESS)return s;
+#endif
 #endif
   return EFI_SUCCESS;
 #else
