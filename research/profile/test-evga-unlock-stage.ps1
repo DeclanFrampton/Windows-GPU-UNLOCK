@@ -38,6 +38,8 @@ try {
   $refused=$false;try {& ./research/profile/stage-evga-text-stop.ps1 -Drive Q -AttemptUnlock}catch{if($_ -match 'complete successful cleanup'){$refused=$true}else{throw}}
   if(!$refused){throw 'incomplete previous attempt was not refused'}
   @('evga-unlock-slot-05 status=0x0000000000000000','capture-complete=1','evga-unlock-transaction-return status=0x0000000000000000','evga-unlock-assets-released status=0x0000000000000000','capture-complete=1','evga-text-stop-ready-windows status=0x0000000000000000') | Set-Content -LiteralPath "$testRoot/RTX3090-UNLOCK/EVGA21.TXT"
+  $realPrevious=Join-Path $repo 'research/profile/build/evga-first-live-result/EVGA21.TXT'
+  if(Test-Path -LiteralPath $realPrevious){Copy-Item -LiteralPath $realPrevious -Destination "$testRoot/RTX3090-UNLOCK/EVGA21.TXT" -Force}
  }
  Move-Item -LiteralPath "$testRoot/RTX3090-UNLOCK/EVGA19.TXT" -Destination "$testRoot/EVGA19.saved"
  $refused=$false;try {& ./research/profile/stage-evga-text-stop.ps1 -Drive Q -AttemptUnlock}catch{if($_ -match 'reviewed EVGA19'){$refused=$true}else{throw}}
