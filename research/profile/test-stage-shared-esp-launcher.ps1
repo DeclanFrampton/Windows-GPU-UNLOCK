@@ -25,5 +25,11 @@ try {
  if((Get-FileHash -LiteralPath 'X:\EFI\BOOT\BOOTX64.before-shared-audit.efi').Hash -ne $original){throw 'Backup mismatch'}
  & (Join-Path $PSScriptRoot 'restore-shared-esp-launcher.ps1') -Drive X -OriginalSha256 $original -Confirm:$false
  if((Get-FileHash -LiteralPath 'X:\EFI\BOOT\BOOTX64.EFI').Hash -ne $original){throw 'Restore mismatch'}
+ & (Join-Path $PSScriptRoot 'stage-shared-esp-launcher.ps1') -Drive X -WindowsEspGuid c36c3e86-02aa-4f76-af1b-96e327f9d1c1 -ReuseExisting -Confirm:$false
+ & (Join-Path $PSScriptRoot 'restore-shared-esp-launcher.ps1') -Drive X -OriginalSha256 $original -Confirm:$false
+ [IO.File]::WriteAllText('X:\EFI\BOOT\BOOTX64.before-shared-audit.efi','different backup')
+ $refused=$false
+ try {& (Join-Path $PSScriptRoot 'stage-shared-esp-launcher.ps1') -Drive X -WindowsEspGuid c36c3e86-02aa-4f76-af1b-96e327f9d1c1 -ReuseExisting -Confirm:$false}catch{$refused=$true}
+ if(!$refused -or (Get-FileHash -LiteralPath 'X:\EFI\BOOT\BOOTX64.EFI').Hash -ne $original){throw 'Changed backup should be refused without changing boot file'}
  'USB staging mock passed: WhatIf, copy, and refusal; no physical ESP or USB accessed.'
 } finally {& subst X: /D;Remove-Item -LiteralPath $fixture -Recurse -Force}

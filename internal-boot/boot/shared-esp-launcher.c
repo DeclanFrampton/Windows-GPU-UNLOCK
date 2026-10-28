@@ -25,6 +25,8 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE image,EFI_SYSTEM_TABLE *table) {
  if(s!=EFI_SUCCESS || !child)return s==EFI_SUCCESS?EFI_LOAD_ERROR:s;
  EFI_LOADED_IMAGE_PROTOCOL *loaded=NULL;s=bs->HandleProtocol(child,&LoadedGuid,(VOID **)&loaded);
  if(s!=EFI_SUCCESS || !loaded || loaded->DeviceHandle!=esp){bs->UnloadImage(child);return EFI_SECURITY_VIOLATION;}
- table->ConOut->OutputString(table->ConOut,L"Starting staged ESP audit.\r\n");
+ table->ConOut->OutputString(table->ConOut,L"AUDIT LOADED FROM PINNED ESP. Starting in 10 seconds.\r\n");
+ if(!bs->Stall){bs->UnloadImage(child);return EFI_UNSUPPORTED;}
+ s=bs->Stall(10000000);if(s!=EFI_SUCCESS){bs->UnloadImage(child);return s;}
  return bs->StartImage(child,NULL,NULL);
 }

@@ -28,13 +28,18 @@ if($ReuseExisting){
  $boot=Get-AuditCheckedPath $root @('EFI','BOOT') $true
  $existing=Get-AuditCheckedPath $root @('EFI','BOOT','BOOTX64.EFI') $false
  $backup=[IO.Path]::Combine($boot,'BOOTX64.before-shared-audit.efi')
- if(Test-Path -LiteralPath $backup){throw 'Backup already exists; preserve and inspect before proceeding'}
+ if(Test-Path -LiteralPath $backup){
+  $backup=Get-AuditCheckedPath $root @('EFI','BOOT','BOOTX64.before-shared-audit.efi') $false
+  if((Get-FileHash -LiteralPath $backup).Hash -ine (Get-FileHash -LiteralPath $existing).Hash){throw 'Existing backup differs from USB boot file; preserve both and stop'}
+ }
 }
 if($PSCmdlet.ShouldProcess($root,'Create EFI/BOOT/BOOTX64.EFI on USB')){
  if($ReuseExisting){
   $oldHash=(Get-FileHash -LiteralPath $existing).Hash
+  if(!(Test-Path -LiteralPath $backup)){
   $i=$null;$o=$null
   try {$i=[IO.File]::Open($existing,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read);$o=[IO.File]::Open($backup,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None);$i.CopyTo($o);$o.Flush($true)} finally {if($o){$o.Dispose()};if($i){$i.Dispose()}}
+  }
   if((Get-FileHash -LiteralPath $backup).Hash -ine $oldHash -or (Get-FileHash -LiteralPath $existing).Hash -ine $oldHash){throw 'Backup or original changed; preserve files and stop'}
  }else{
   [void][IO.Directory]::CreateDirectory($efi)

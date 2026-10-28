@@ -22,6 +22,7 @@ static EFI_STATUS EFIAPI Load(BOOLEAN policy,EFI_HANDLE parent,EFI_DEVICE_PATH_P
  windowsImage.DeviceHandle=wrongChild?handles[1]:handles[0];*image=(EFI_HANDLE)4;return EFI_SUCCESS;
 }
 static EFI_STATUS EFIAPI Start(EFI_HANDLE image,UINTN *size,CHAR16 **data){(void)size;(void)data;if(image!=(EFI_HANDLE)4)return EFI_INVALID_PARAMETER;starts++;return EFI_ABORTED;}
+static EFI_STATUS EFIAPI Stall(UINTN us){return us==10000000?EFI_SUCCESS:EFI_INVALID_PARAMETER;}
 static EFI_STATUS EFIAPI Unload(EFI_HANDLE image){(void)image;unloads++;return EFI_SUCCESS;}
 int main(void){
  EFI_BOOT_SERVICES bs={0};bs.LocateHandleBuffer=Locate;bs.HandleProtocol=Protocol;bs.FreePool=Free;
@@ -38,7 +39,7 @@ int main(void){
  if(FindOwnWindowsEsp(&bs,handles[0])==EFI_SUCCESS)return 5;
  usbMode=FALSE;handleCount=0;if(FindOwnWindowsEsp(&bs,handles[0])==EFI_SUCCESS)return 6;
  EFI_SYSTEM_TABLE table={0};EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL con={0};table.BootServices=&bs;table.ConOut=&con;con.OutputString=Output;
- bs.AllocatePool=Allocate;bs.LoadImage=Load;bs.StartImage=Start;bs.UnloadImage=Unload;ownImage.DeviceHandle=handles[0];handleCount=1;
+ bs.Stall=Stall;bs.AllocatePool=Allocate;bs.LoadImage=Load;bs.StartImage=Start;bs.UnloadImage=Unload;ownImage.DeviceHandle=handles[0];handleCount=1;
  if(efi_main((EFI_HANDLE)3,&table)!=EFI_ABORTED || starts!=1 || loads!=1)return 7;
  wrongChild=TRUE;if(efi_main((EFI_HANDLE)3,&table)==EFI_SUCCESS || starts!=1 || unloads!=1)return 8;
  wrongChild=FALSE;loadFailure=TRUE;if(efi_main((EFI_HANDLE)3,&table)==EFI_SUCCESS || starts!=1)return 9;
