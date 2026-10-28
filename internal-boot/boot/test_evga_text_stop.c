@@ -31,6 +31,9 @@ static UINT8 PrivateContext[0xa0];
 static BOOLEAN BadNvidiaChildren,PrivateFailure,UnknownStored;
 #ifdef GU_EVGA_STOP_NVIDIA_CHILDREN
 static BOOLEAN NvidiaGone,FailNvidiaStop,BadNvidiaPost;
+#ifdef GU_EVGA_STOP_NVIDIA_PARENT
+static BOOLEAN ParentGone,FailParent,BadParentOwner,BadParentProtocol;
+#endif
 #endif
 #endif
 static UINTN InterfaceFailure,GopConsoleQueries;
@@ -97,6 +100,10 @@ static EFI_STATUS EFIAPI Handle(EFI_HANDLE h,EFI_GUID *guid,VOID **out){
 }
 static EFI_STATUS EFIAPI ProtocolList(EFI_HANDLE h,EFI_GUID ***out,UINTN *n){
   static EFI_GUID *list[3];
+#ifdef GU_EVGA_STOP_NVIDIA_PARENT
+  static EFI_GUID privateGuid={0xfe47349a,0x7f0d,0x4641,{0x82,0x2b,0x34,0xba,0xa2,0x8e,0xcd,0xd0}};
+  if(h==H(4) && ParentGone){list[0]=&Pci;list[1]=&privateGuid;*out=list;*n=BadParentProtocol?2:1;return EFI_SUCCESS;}
+#endif
 #ifdef GU_EVGA_RELEASE_TEXT
   static EFI_GUID extra={0xe1e4a857,0xc970,0x4075,{0xa4,0xda,0xe9,0xc4,0x1b,0x69,0xad,0xfc}};
   if(h==H(2)){list[0]=&Gop;list[1]=&Text;list[2]=&extra;*out=list;*n=RemovedVirtual&&!BadVirtual?1:3;return EFI_SUCCESS;}
@@ -134,7 +141,12 @@ static EFI_STATUS EFIAPI Opens(EFI_HANDLE source,EFI_GUID *guid,EFI_OPEN_PROTOCO
   }
 #endif
 #ifdef GU_EVGA_AUDIT_NVIDIA
-  if(source==H(4)&&guid==&Pci)agent=H(14);
+  if(source==H(4)&&guid==&Pci){
+#ifdef GU_EVGA_STOP_NVIDIA_PARENT
+    if(ParentGone&&!BadParentOwner){*n=0;return EFI_SUCCESS;}
+#endif
+    agent=H(14);
+  }
   if(source==H(4)&&guid==&Path){
 #ifdef GU_EVGA_STOP_NVIDIA_CHILDREN
     if(NvidiaGone){*n=0;return EFI_SUCCESS;}
@@ -152,6 +164,9 @@ static EFI_STATUS EFIAPI Opens(EFI_HANDLE source,EFI_GUID *guid,EFI_OPEN_PROTOCO
 static EFI_STATUS EFIAPI MockStop(EFI_DRIVER_BINDING_PROTOCOL *d,EFI_HANDLE controller,UINTN n,EFI_HANDLE *children){
 #ifdef GU_EVGA_STOP_NVIDIA_CHILDREN
   if(d==&Drivers[4]){
+#ifdef GU_EVGA_STOP_NVIDIA_PARENT
+    if(n==0){if(controller!=H(4)||children||!NvidiaGone)return EFI_INVALID_PARAMETER;Calls++;if(FailParent)return EFI_DEVICE_ERROR;ParentGone=TRUE;return EFI_SUCCESS;}
+#endif
     if(controller!=H(4)||n!=3||!children||children[0]!=H(1)||children[1]!=H(5)||children[2]!=H(6)||SiblingBits!=3)return EFI_INVALID_PARAMETER;
     Calls++;if(FailNvidiaStop)return EFI_DEVICE_ERROR;NvidiaGone=TRUE;return EFI_SUCCESS;
   }
@@ -187,6 +202,9 @@ static EFI_STATUS RecordMock(VOID *p,const char *name,EFI_STATUS s){
   (void)p;(void)name;(void)s;Records++;return FailRecord?EFI_DEVICE_ERROR:EFI_SUCCESS;
 }
 static VOID Init(VOID){
+#ifdef GU_EVGA_STOP_NVIDIA_PARENT
+  NvidiaParentStopped=ParentGone=FailParent=BadParentOwner=BadParentProtocol=FALSE;
+#endif
 #ifdef GU_EVGA_STOP_NVIDIA_CHILDREN
   NvidiaChildrenStopped=NvidiaGone=FailNvidiaStop=BadNvidiaPost=FALSE;NvidiaDriver=NULL;
 #endif
@@ -223,7 +241,23 @@ static VOID Init(VOID){
   PciIo=(EFI_PCI_IO_PROTOCOL){0};PciIo.Pci.Read=ReadPci;
   Root=(EFI_FILE_PROTOCOL){0};Root.Open=FileOpen;Marker=(EFI_FILE_PROTOCOL){0};Marker.Close=FileClose;Marker.Write=FileWrite;Marker.Flush=FileFlush;
 }
-#ifdef GU_EVGA_STOP_NVIDIA_CHILDREN
+#ifdef GU_EVGA_STOP_NVIDIA_PARENT
+int main(VOID){
+  BOOLEAN started=FALSE;EFI_STATUS s;
+  Init();s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s!=EFI_SUCCESS||Calls!=8||!ParentGone)return 1;
+  UINTN saved=Records;if(GuEvgaTextStopVerify(&Table)!=EFI_SUCCESS||saved!=Records)return 2;
+  Init();FailParent=TRUE;s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s==EFI_SUCCESS||Calls!=8||ParentGone)return 3;
+  Init();BadParentOwner=TRUE;s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s==EFI_SUCCESS||Calls!=8)return 4;
+  Init();BadParentProtocol=TRUE;s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s==EFI_SUCCESS||Calls!=8)return 5;
+  Init();FailNvidiaStop=TRUE;s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s==EFI_SUCCESS||Calls!=7||ParentGone)return 6;
+  Init();BadNvidiaPost=TRUE;s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s==EFI_SUCCESS||Calls!=7||ParentGone)return 7;
+  Init();MarkerExists=TRUE;s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s!=EFI_ALREADY_STARTED||Calls)return 8;
+  Init();BadHash=TRUE;s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s==EFI_SUCCESS||Calls)return 9;
+  Init();s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s!=EFI_SUCCESS)return 10;
+  BadInventory=TRUE;if(GuEvgaTextStopVerify(&Table)==EFI_SUCCESS)return 11;
+  return 0;
+}
+#elif defined(GU_EVGA_STOP_NVIDIA_CHILDREN)
 int main(VOID){
   BOOLEAN started=FALSE;EFI_STATUS s;
   Init();s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s!=EFI_SUCCESS||Calls!=7||!NvidiaGone)return 1;

@@ -19,6 +19,9 @@ static BOOLEAN NvidiaSaved;
 #ifdef GU_EVGA_STOP_NVIDIA_CHILDREN
 static EFI_DRIVER_BINDING_PROTOCOL *NvidiaDriver;
 static BOOLEAN NvidiaChildrenStopped;
+#ifdef GU_EVGA_STOP_NVIDIA_PARENT
+static BOOLEAN NvidiaParentStopped;
+#endif
 #endif
 #endif
 #ifdef GU_EVGA_RELEASE_EDID
@@ -42,7 +45,11 @@ static BOOLEAN GraphicsReleased;
 #ifdef GU_EVGA_RELEASE_EDID_SIBLINGS
 #ifdef GU_EVGA_AUDIT_NVIDIA
 #ifdef GU_EVGA_STOP_NVIDIA_CHILDREN
+#ifdef GU_EVGA_STOP_NVIDIA_PARENT
+#define ATTEMPT_PATH L"\\RTX3090-UNLOCK\\EVGA-NVIDIA-PARENT.ARMED"
+#else
 #define ATTEMPT_PATH L"\\RTX3090-UNLOCK\\EVGA-NVIDIA-CHILDREN.ARMED"
+#endif
 #else
 #define ATTEMPT_PATH L"\\RTX3090-UNLOCK\\EVGA-NVIDIA-AUDIT.ARMED"
 #endif
@@ -374,9 +381,34 @@ static EFI_STATUS NvidiaPost(EFI_SYSTEM_TABLE *t,GU_EVGA_RECORD record) {
   s=VirtualInterfaces(t,TRUE);if(s!=EFI_SUCCESS)return s;
   s=Edges(b,Plan.Virtual,&Gop,NULL,FALSE,&Plan.VirtualText,TRUE);if(s!=EFI_SUCCESS)return s;
   s=Edges(b,NvidiaParent,&Path,NULL,FALSE,&NvidiaAgent,TRUE);if(s!=EFI_SUCCESS)return s;
-  s=Edges(b,NvidiaParent,&Pci,NULL,FALSE,&NvidiaAgent,FALSE);if(s!=EFI_SUCCESS)return s;
+  s=Edges(b,NvidiaParent,&Pci,NULL,FALSE,&NvidiaAgent,
+#ifdef GU_EVGA_STOP_NVIDIA_PARENT
+    NvidiaParentStopped
+#else
+    FALSE
+#endif
+  );if(s!=EFI_SUCCESS)return s;
   s=Code(b,NvidiaAgent,0x2b700,0x280,0x23d82,0x698,0x60009,"d045cee2113e461c7c678ec21542b1d0f18356765c0fc6a0bf2dcf824088e011",&NvidiaDriver,record);if(s!=EFI_SUCCESS)return s;
   EFI_GUID privateGuid={0xfe47349a,0x7f0d,0x4641,{0x82,0x2b,0x34,0xba,0xa2,0x8e,0xcd,0xd0}};
+#ifdef GU_EVGA_STOP_NVIDIA_PARENT
+  if(NvidiaParentStopped) {
+    EFI_GUID **protocols=NULL;UINTN count=0;s=b->ProtocolsPerHandle(NvidiaParent,&protocols,&count);
+    if(s!=EFI_SUCCESS || !protocols || count>256)return EFI_UNSUPPORTED;
+    for(UINTN i=0;i<count;i++) {
+      if(!protocols[i]){s=EFI_COMPROMISED_DATA;break;}
+      BOOLEAN equal=TRUE;for(UINTN j=0;j<sizeof(EFI_GUID);j++)if(((UINT8 *)protocols[i])[j]!=((UINT8 *)&privateGuid)[j])equal=FALSE;
+      if(equal){s=EFI_ACCESS_DENIED;break;}
+    }
+    if(b->FreePool(protocols)!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
+    if(s!=EFI_SUCCESS)return s;
+    EFI_PCI_IO_PROTOCOL *pci=NULL;UINT32 config[16];
+    s=b->HandleProtocol(NvidiaParent,&Pci,(VOID **)&pci);if(s!=EFI_SUCCESS || !pci)return EFI_UNSUPPORTED;
+    s=pci->Pci.Read(pci,EfiPciIoWidthUint32,0,16,config);if(s!=EFI_SUCCESS)return s;
+    if(config[0]!=0x220410deU || config[11]!=0x33873842U || (config[2]>>24)!=3)return EFI_UNSUPPORTED;
+    s=Value(record,"evga-nvidia-post-parent-command",config[1]&0xffff);if(s!=EFI_SUCCESS)return s;
+    return Checked(record,"evga-nvidia-parent-post-graph",EFI_SUCCESS);
+  }
+#endif
   UINT8 *context=NULL;s=b->HandleProtocol(NvidiaParent,&privateGuid,(VOID **)&context);
   if(s!=EFI_SUCCESS || !context || (UINTN)context>~(UINTN)0-0x99)return EFI_UNSUPPORTED;
   if(*(EFI_HANDLE *)(context+0x88)!=NULL || context[0x98]!=0)return EFI_ACCESS_DENIED;
@@ -390,7 +422,15 @@ static EFI_STATUS NvidiaChildrenStop(EFI_SYSTEM_TABLE *t,GU_EVGA_RECORD record) 
   s=record(NULL,"evga-nvidia-children-stop-before",EFI_SUCCESS);if(s!=EFI_SUCCESS)return s;
   s=NvidiaDriver->Stop(NvidiaDriver,NvidiaParent,3,children);
   EFI_STATUS logged=record(NULL,"evga-nvidia-children-stop-return",s);if(logged!=EFI_SUCCESS)return logged;if(s!=EFI_SUCCESS)return s;
-  NvidiaChildrenStopped=TRUE;return NvidiaPost(t,record);
+  NvidiaChildrenStopped=TRUE;s=NvidiaPost(t,record);if(s!=EFI_SUCCESS)return s;
+#ifdef GU_EVGA_STOP_NVIDIA_PARENT
+  s=record(NULL,"evga-nvidia-parent-stop-before",EFI_SUCCESS);if(s!=EFI_SUCCESS)return s;
+  s=NvidiaDriver->Stop(NvidiaDriver,NvidiaParent,0,NULL);
+  logged=record(NULL,"evga-nvidia-parent-stop-return",s);if(logged!=EFI_SUCCESS)return logged;if(s!=EFI_SUCCESS)return s;
+  NvidiaParentStopped=TRUE;return NvidiaPost(t,record);
+#else
+  return EFI_SUCCESS;
+#endif
 }
 #endif
 EFI_STATUS GuEvgaTextStopVerify(EFI_SYSTEM_TABLE *t) {
@@ -435,7 +475,9 @@ EFI_STATUS GuEvgaTextStop(EFI_SYSTEM_TABLE *t,EFI_FILE_PROTOCOL *root,GU_EVGA_RE
   if(s!=EFI_NOT_FOUND)return s;
   s=root->Open(root,&marker,ATTEMPT_PATH,EFI_FILE_MODE_READ|EFI_FILE_MODE_WRITE|EFI_FILE_MODE_CREATE,0);
   if(s!=EFI_SUCCESS || !marker)return EFI_DEVICE_ERROR;
-#if defined(GU_EVGA_STOP_NVIDIA_CHILDREN)
+#if defined(GU_EVGA_STOP_NVIDIA_PARENT)
+  char tag[]="Consumer and NVIDIA child/parent Stops armed; no retry\r\n";
+#elif defined(GU_EVGA_STOP_NVIDIA_CHILDREN)
   char tag[]="Six consumer Stops plus one NVIDIA three-child Stop; no retry\r\n";
 #elif defined(GU_EVGA_AUDIT_NVIDIA)
   char tag[]="Six consumer Stops plus NVIDIA CPU audit armed; no retry\r\n";
