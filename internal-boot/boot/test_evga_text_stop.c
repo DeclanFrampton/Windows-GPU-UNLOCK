@@ -38,7 +38,14 @@ static BOOLEAN ParentGone,FailParent,BadParentOwner,BadParentProtocol;
 #endif
 static UINTN InterfaceFailure,GopConsoleQueries;
 static EFI_HANDLE H(UINTN n){return (EFI_HANDLE)n;}
-BOOLEAN GuHashMatches(const VOID *data,UINTN n,const char *hash){return data && n && hash && !BadHash;}
+#ifdef GU_EVGA_PROBE_STATE
+static BOOLEAN BadPromHash,BadState,FailProm;static UINTN StateReads,PromReads;
+#endif
+BOOLEAN GuHashMatches(const VOID *data,UINTN n,const char *hash){
+#ifdef GU_EVGA_PROBE_STATE
+ if(n==0x100000)return !BadPromHash;
+#endif
+ return data && n && hash && !BadHash;}
 static EFI_STATUS EFIAPI Free(VOID *p){return p?EFI_SUCCESS:EFI_INVALID_PARAMETER;}
 static EFI_STATUS EFIAPI Stall(UINTN n){(void)n;return EFI_SUCCESS;}
 static EFI_STATUS EFIAPI SayMock(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *p,CHAR16 *s){(void)p;(void)s;return EFI_SUCCESS;}
@@ -55,7 +62,13 @@ static EFI_STATUS EFIAPI AttributesMock(EFI_PCI_IO_PROTOCOL *p,EFI_PCI_IO_PROTOC
  return EFI_UNSUPPORTED;
 }
 static EFI_STATUS EFIAPI MemReadMock(EFI_PCI_IO_PROTOCOL *p,EFI_PCI_IO_PROTOCOL_WIDTH w,UINT8 bar,UINT64 off,UINTN n,VOID *v){
- (void)p;if(w!=EfiPciIoWidthUint32 || bar || off || n!=1 || DecodeAttributes!=EFI_PCI_IO_ATTRIBUTE_MEMORY)return EFI_INVALID_PARAMETER;
+ (void)p;if(w!=EfiPciIoWidthUint32 || bar || n!=1 || DecodeAttributes!=EFI_PCI_IO_ATTRIBUTE_MEMORY)return EFI_INVALID_PARAMETER;
+#ifdef GU_EVGA_PROBE_STATE
+ if(off>=0x300000 && off<=0x3ffffc && !(off&3)){PromReads++;if(FailProm)return EFI_DEVICE_ERROR;*(UINT32 *)v=0;return EFI_SUCCESS;}
+ if(off){static const UINT32 a[]={0x118128,0x118234,0x110100,0x1fa828,0x823804,0x82381c,0x823820,0x1183a4};for(UINTN i=0;i<8;i++)if(off==a[i]){StateReads++;*(UINT32 *)v=BadState?0xbadf0000U:0;return EFI_SUCCESS;}return EFI_INVALID_PARAMETER;}
+#else
+ if(off)return EFI_INVALID_PARAMETER;
+#endif
  ChipReads++;*(UINT32 *)v=BadChip?0xffffffffU:0xb72000a1U;return EFI_SUCCESS;
 }
 #endif
@@ -219,6 +232,9 @@ static EFI_STATUS RecordMock(VOID *p,const char *name,EFI_STATUS s){
   (void)p;(void)name;(void)s;Records++;return FailRecord?EFI_DEVICE_ERROR:EFI_SUCCESS;
 }
 static VOID Init(VOID){
+#ifdef GU_EVGA_PROBE_STATE
+ BadPromHash=BadState=FailProm=FALSE;StateReads=PromReads=0;
+#endif
 #ifdef GU_EVGA_PROBE_DECODE
  DecodeAttributes=ChipReads=AttributeWrites=0;BadChip=FailEnable=FailDisable=FALSE;
 #endif
@@ -264,7 +280,18 @@ static VOID Init(VOID){
 #endif
   Root=(EFI_FILE_PROTOCOL){0};Root.Open=FileOpen;Marker=(EFI_FILE_PROTOCOL){0};Marker.Close=FileClose;Marker.Write=FileWrite;Marker.Flush=FileFlush;
 }
-#ifdef GU_EVGA_PROBE_DECODE
+#ifdef GU_EVGA_PROBE_STATE
+int main(VOID){
+ BOOLEAN started=FALSE;EFI_STATUS s;
+ Init();s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s!=EFI_SUCCESS||ChipReads!=2||StateReads!=16||PromReads!=262144||AttributeWrites!=2||DecodeAttributes)return 1;
+ UINTN saved=Records;if(GuEvgaTextStopVerify(&Table)!=EFI_SUCCESS||Records!=saved||StateReads!=16||PromReads!=262144)return 2;
+ Init();BadState=TRUE;s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s==EFI_SUCCESS||StateReads!=1||PromReads||AttributeWrites!=1)return 3;
+ Init();FailProm=TRUE;s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s==EFI_SUCCESS||StateReads!=16||PromReads!=1||AttributeWrites!=1)return 4;
+ Init();BadPromHash=TRUE;s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s==EFI_SUCCESS||PromReads!=262144||AttributeWrites!=1)return 5;
+ Init();FailEnable=TRUE;s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s==EFI_SUCCESS||StateReads||PromReads)return 6;
+ return 0;
+}
+#elif defined(GU_EVGA_PROBE_DECODE)
 int main(VOID){
  BOOLEAN started=FALSE;EFI_STATUS s;
  Init();s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s!=EFI_SUCCESS||Calls!=8||ChipReads!=2||AttributeWrites!=2||DecodeAttributes)return 1;

@@ -46,7 +46,9 @@ static BOOLEAN GraphicsReleased;
 #ifdef GU_EVGA_AUDIT_NVIDIA
 #ifdef GU_EVGA_STOP_NVIDIA_CHILDREN
 #ifdef GU_EVGA_STOP_NVIDIA_PARENT
-#ifdef GU_EVGA_PROBE_DECODE
+#ifdef GU_EVGA_PROBE_STATE
+#define ATTEMPT_PATH L"\\RTX3090-UNLOCK\\EVGA-STATE-PROBE.ARMED"
+#elif defined(GU_EVGA_PROBE_DECODE)
 #define ATTEMPT_PATH L"\\RTX3090-UNLOCK\\EVGA-DECODE-PROBE.ARMED"
 #else
 #define ATTEMPT_PATH L"\\RTX3090-UNLOCK\\EVGA-NVIDIA-PARENT.ARMED"
@@ -425,6 +427,29 @@ static EFI_STATUS DecodeConfig(EFI_PCI_IO_PROTOCOL *pci,UINT16 expected,GU_EVGA_
   if(s==EFI_SUCCESS && (config[0]!=0x220410deU || config[11]!=0x33873842U || (config[2]>>24)!=3 || (config[1]&0xffff)!=expected))s=EFI_ACCESS_DENIED;
   return Checked(record,event,s);
 }
+#ifdef GU_EVGA_PROBE_STATE
+static UINT32 StateProm[0x100000/4];
+static EFI_STATUS StateProbe(EFI_PCI_IO_PROTOCOL *pci,GU_EVGA_RECORD record) {
+  static const UINT32 offsets[]={0x118128,0x118234,0x110100,0x1fa828,0x823804,0x82381c,0x823820,0x1183a4};
+  static const char *first[]={"evga-state-plm1","evga-state-boot1","evga-state-cpuctl1","evga-state-wpr1","evga-state-feature-plm1","evga-state-ss01","evga-state-ss11","evga-state-memory1"};
+  static const char *second[]={"evga-state-plm2","evga-state-boot2","evga-state-cpuctl2","evga-state-wpr2","evga-state-feature-plm2","evga-state-ss02","evga-state-ss12","evga-state-memory2"};
+  UINT32 baseline[8],value;EFI_STATUS s;
+  for(UINTN pass=0;pass<2;pass++)for(UINTN i=0;i<8;i++) {
+    s=Value(record,"evga-state-read-before",offsets[i]);if(s!=EFI_SUCCESS)return s;
+    s=pci->Mem.Read(pci,EfiPciIoWidthUint32,0,offsets[i],1,&value);if(s!=EFI_SUCCESS)return Checked(record,"evga-state-read",s);
+    s=Value(record,pass?second[i]:first[i],value);if(s!=EFI_SUCCESS)return s;
+    if(value==0xffffffffU || (value>>16)==0xbadfU)return EFI_UNSUPPORTED;
+    if(!pass)baseline[i]=value;else if(value!=baseline[i])return EFI_ACCESS_DENIED;
+  }
+  s=record(NULL,"evga-state-prom-before",EFI_SUCCESS);if(s!=EFI_SUCCESS)return s;
+  /* Fixed1MiB window, one forward DWORD pass; no GPU write or firmware execution. */
+  for(UINTN i=0;i<0x100000/4;i++) {
+    s=pci->Mem.Read(pci,EfiPciIoWidthUint32,0,0x300000+i*4,1,&StateProm[i]);if(s!=EFI_SUCCESS)return Checked(record,"evga-state-prom-read",s);
+  }
+  if(!GuHashMatches(StateProm,sizeof(StateProm),"f1c7c6b205d9a5c0626af4f82e28cc377aa16cde8c25c61c77b4b5160b26e71f"))return Checked(record,"evga-state-prom-hash",EFI_COMPROMISED_DATA);
+  return Checked(record,"evga-state-prom-hash",EFI_SUCCESS);
+}
+#endif
 static EFI_STATUS DecodeProbe(EFI_SYSTEM_TABLE *t,GU_EVGA_RECORD record) {
   EFI_PCI_IO_PROTOCOL *pci=NULL;UINT64 saved=0,now=0;UINT32 chip=0;EFI_STATUS s;
   s=t->BootServices->HandleProtocol(NvidiaParent,&Pci,(VOID **)&pci);if(s!=EFI_SUCCESS || !pci)return EFI_UNSUPPORTED;
@@ -442,6 +467,9 @@ static EFI_STATUS DecodeProbe(EFI_SYSTEM_TABLE *t,GU_EVGA_RECORD record) {
     s=Value(record,i?"evga-chip-second":"evga-chip-first",chip);if(s!=EFI_SUCCESS)return s;
     if(chip!=0xb72000a1U)return Checked(record,"evga-chip-identity",EFI_UNSUPPORTED);
   }
+#ifdef GU_EVGA_PROBE_STATE
+  s=StateProbe(pci,record);if(s!=EFI_SUCCESS)return s;
+#endif
   s=record(NULL,"evga-memory-disable-before",EFI_SUCCESS);if(s!=EFI_SUCCESS)return s;
   s=pci->Attributes(pci,EfiPciIoAttributeOperationDisable,EFI_PCI_IO_ATTRIBUTE_MEMORY,NULL);
   s=Checked(record,"evga-memory-disable-return",s);if(s!=EFI_SUCCESS)return s;
