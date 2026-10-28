@@ -1,0 +1,23 @@
+# Read-only firmware comparison for a refused ESP-ONCE01 cleanup.
+param([Parameter(Mandatory)][string]$StateDirectory)
+$ErrorActionPreference='Stop'
+. (Join-Path $PSScriptRoot 'shared-esp-firmware-lib.ps1')
+$backup=Join-Path ([IO.Path]::GetFullPath($StateDirectory)) 'firmware-backup.json'
+$s=Get-Content -LiteralPath $backup -Raw | ConvertFrom-Json
+if($s.Schema -ne 'shared-esp-audit-once-v1' -or $s.OptionName -notmatch '^Boot7E[0-9A-F]{2}$'){throw 'Unexpected backup schema or option'}
+if(-not ('SharedEspFirmware.Native' -as [type])){Add-Type -Path (Join-Path $PSScriptRoot 'shared-esp-firmware-native.cs')}
+function DisplayOrder($v){
+ if($null -eq $v){return $null};[byte[]]$data=[Convert]::FromBase64String($v.DataBase64)
+ if($data.Length%2){throw 'Malformed BootOrder'}
+ @((0..(($data.Length/2)-1)) | ForEach-Object {'Boot{0:X4}' -f [BitConverter]::ToUInt16($data,$_ * 2)})
+}
+$scope=[SharedEspFirmware.Native]::EnablePrivilege()
+try {
+ $native=[SharedEspFirmware.Native]::Read('BootOrder');if($null -eq $native){throw 'BootOrder is missing'}
+ $current=ConvertTo-FirmwareValue $native.Data $native.Attributes
+ $next=[SharedEspFirmware.Native]::Read('BootNext');$test=[SharedEspFirmware.Native]::Read($s.OptionName)
+ $testValue=if($test){ConvertTo-FirmwareValue $test.Data $test.Attributes}else{$null}
+ $entries=@(foreach($entry in $s.BootEntries){$v=[SharedEspFirmware.Native]::Read($entry.Name);$value=if($v){ConvertTo-FirmwareValue $v.Data $v.Attributes}else{$null};[pscustomobject]@{name=$entry.Name;matches_backup=(Test-FirmwareValueEqual $entry.Value $value)}})
+ $nextName=$null;if($next){if($next.Data.Length -eq 2){$nextName='Boot{0:X4}' -f [BitConverter]::ToUInt16($next.Data,0)}else{$nextName='malformed'}}
+ [ordered]@{read_only=$true;before_order=@(DisplayOrder $s.BootOrder);current_order=@(DisplayOrder $current);order_attributes_before=$s.BootOrder.Attributes;order_attributes_current=$current.Attributes;existing_entries=$entries;temporary_option=$s.OptionName;temporary_option_present=($null -ne $test);temporary_option_matches_backup=(Test-FirmwareValueEqual $s.Option $testValue);boot_next=$nextName} | ConvertTo-Json -Depth 6
+}finally{$scope.Dispose()}
