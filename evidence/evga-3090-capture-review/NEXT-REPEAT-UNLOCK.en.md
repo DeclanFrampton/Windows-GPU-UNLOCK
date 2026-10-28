@@ -6,6 +6,8 @@ EVGA19 records a successful transaction and Windows return, with increased measu
 
 First, fully shut down and boot Windows normally without the USB EFI. Run the same benchmark and preserve its results to measure the cold-boot state. Then prepare and stage the new EFI, fully shut down again, boot the UEFI USB, wait for live guards and press fresh Shift+G once. After direct Windows return, run the same benchmark again and send both result folders and the newest EVGA log. A cold-boot baseline and post-transaction result are observations, not proof of restart or sleep behavior.
 
+For each full shutdown, save work first, then run `shutdown /s /t 0` from Windows. This shuts down immediately and avoids a Fast Startup hybrid shutdown.
+
 The transaction uses GPU/PCI writes, DMA, firmware execution and FLR. Display/input can disappear, the machine can hang or fail to boot, and GPU, firmware or data damage may be permanent. Recovery is unproven; post-release guard failure holds without automatic rollback. If Windows does not start, manual power-off, USB removal and selection of normal Windows Boot Manager may be necessary; power-off is not guaranteed to recover the system. Proceed only if you accept these risks.
 
 From the repository root after updating the branch, run separately and stop on any error:
