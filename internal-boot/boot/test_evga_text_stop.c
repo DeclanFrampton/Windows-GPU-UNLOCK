@@ -56,7 +56,8 @@ static BOOLEAN ParentGone,FailParent,BadParentOwner,BadParentProtocol;
 #endif
 #endif
 #endif
-static UINTN InterfaceFailure,GopConsoleQueries;
+static UINTN InterfaceFailure;
+static volatile UINTN GopConsoleQueries;
 static EFI_HANDLE H(UINTN n){return (EFI_HANDLE)n;}
 #ifdef GU_EVGA_PROBE_STATE
 static BOOLEAN BadPromHash,BadState,FailProm;static UINTN StateReads,PromReads;
