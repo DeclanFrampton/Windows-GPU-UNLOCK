@@ -51,3 +51,7 @@ The launcher now displays `AUDIT LOADED FROM PINNED ESP` for ten seconds after t
 ## Contributor launcher observation
 
 On 2026-10-28, the contributor reported seeing `AUDIT LOADED FROM PINNED ESP. Starting in 10 seconds.` on hardware. This indicates that the launcher loaded the audit and verified its device before calling StartImage; it does not establish that the audit entry or its Windows handoff completed. The contributor subsequently reported that the original USB boot file was restored and its hash verified. Normal Limine boot after removal remains unconfirmed.
+
+## Internal unlock integration gap
+
+The tested EVGA unlock build defines `GU_USB_MEDIA`. Its handoff `Prepare` requires the loaded image device path to contain USB and refuses the Windows partition when it equals the image device. Moving that binary onto the shared ESP therefore fails admission; the audit launcher result does not change this. A shared-ESP unlock needs a deliberately scoped mode, independently reviewed log and asset placement, safe boot selection and verified Windows handoff. The successful USB unlock evidence does not validate those changes.
