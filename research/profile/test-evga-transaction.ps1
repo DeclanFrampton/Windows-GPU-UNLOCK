@@ -12,5 +12,5 @@ try {
  if($LASTEXITCODE -ne 0){throw 'Link failed'}
  & "./$out/adapter-test.exe"
  if($LASTEXITCODE -ne 0){throw "Adapter scenario failed: $LASTEXITCODE"}
- '19 synthetic adapter success, refusal, one-shot and containment scenarios passed; hardware, PROM hash and vendor transaction mocked.'
+ '21 synthetic adapter success, refusal, one-shot and containment scenarios passed; hardware, PROM hash and vendor transaction mocked.'
 } finally {Pop-Location}

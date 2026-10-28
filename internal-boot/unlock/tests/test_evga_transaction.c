@@ -66,10 +66,12 @@ int main(VOID){EFI_STATUS s;
  Init();FailSafe=TRUE;s=Run();if(s==EFI_SUCCESS || !Gu.retained || Releases)return 12;
  Init();FailLogAt=1;s=Run();if(s==EFI_SUCCESS || Claims || Unlocks)return 13;
  Init();FailLogAt=2;s=Run();if(s==EFI_SUCCESS || Unlocks)return 14;
- Init();FailLogAt=3;s=Run();if(s==EFI_SUCCESS || Unlocks!=1 || !Gu.retained)return 15;
+ Init();FailLogAt=5;s=Run();if(s==EFI_SUCCESS || Unlocks!=1 || !Gu.retained)return 15;
  Init();s=Run();if(s!=EFI_SUCCESS || Run()!=EFI_ALREADY_STARTED || Unlocks!=1)return 16;
  Init();FailHandleAt=3;s=Run();if(s==EFI_SUCCESS || Unlocks)return 17;
  Init();FailGraphAt=3;s=Run();if(s==EFI_SUCCESS || Unlocks)return 18;
  Init();FailHandleAt=6;s=Run();if(s==EFI_SUCCESS || Unlocks)return 19;
+ Init();FailLogAt=2;s=Run();if(s==EFI_SUCCESS || Unlocks)return 20;
+ Init();FailLogAt=3;s=Run();if(s==EFI_SUCCESS || Unlocks)return 21;
  return 0;
 }

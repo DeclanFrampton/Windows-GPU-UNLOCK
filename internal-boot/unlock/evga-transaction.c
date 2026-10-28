@@ -82,9 +82,14 @@ EFI_STATUS GuEvgaTransaction(EFI_SYSTEM_TABLE *t,EFI_HANDLE image,EFI_HANDLE par
  if(s!=EFI_SUCCESS || (attrs&(EFI_PCI_IO_ATTRIBUTE_IO|EFI_PCI_IO_ATTRIBUTE_MEMORY|EFI_PCI_IO_ATTRIBUTE_BUS_MASTER|EFI_PCI_IO_ATTRIBUTE_VGA_MEMORY|EFI_PCI_IO_ATTRIBUTE_VGA_IO))!=EFI_PCI_IO_ATTRIBUTE_MEMORY)return EFI_ACCESS_DENIED;
  s=CheckBar();if(s!=EFI_SUCCESS)return s;
  VOID *prom=GuAlloc(GU_EVGA_PROM_BYTES);if(!prom)return EFI_OUT_OF_RESOURCES;
- GU_EVGA_COLD cold=ReadCold();GuCopyFromIo(prom,(VOID *)(UINTN)(GU_EVGA_BAR_BASE+0x300000),GU_EVGA_PROM_BYTES);
+ GU_EVGA_COLD cold=ReadCold();
+ GuLog("EVGA admission cold: chip=%#x gfw=%#x/%#x/%#x wpr=%#x plm=%#x ss0=%#x ss1=%#x memory=%#x fault=%u\n",
+  cold.chip,cold.gfw_plm,cold.gfw_boot,cold.gfw_cpuctl,cold.wpr_hi,cold.feature_plm,cold.ss0,cold.ss1,cold.memory,Gu.fault);
+ if(!logReady() || Gu.fault){GuFree(prom);return EFI_ACCESS_DENIED;}
+ GuCopyFromIo(prom,(VOID *)(UINTN)(GU_EVGA_BAR_BASE+0x300000),GU_EVGA_PROM_BYTES);
  BOOLEAN admitted=!Gu.fault && GuEvgaAdmit(cfg,seg,bus,dev,fn,&cold,prom,GU_EVGA_PROM_BYTES,&caps);
- GuFree(prom);if(!admitted || Gu.fault)return EFI_ACCESS_DENIED;
+ GuFree(prom);GuLog("EVGA admission result: admitted=%u fault=%u\n",admitted,Gu.fault);
+ if(!logReady() || !admitted || Gu.fault)return EFI_ACCESS_DENIED;
  Gu.pm_cap=caps.pm;Gu.pcie_cap=caps.pcie;Gu.pcie_version=caps.pcie_version;Gu.msi_cap=caps.msi;Gu.msix_cap=caps.msix;
  Gu.prom_verified=TRUE;if(!GuLatchEntrySelectors(cold.ss0,cold.ss1))return EFI_ACCESS_DENIED;
  Gu.profile_verified=TRUE;Gu.display_ok=TRUE;
