@@ -8,7 +8,7 @@ if($s.Schema -ne 'shared-esp-audit-once-v1' -or $s.OptionName -notmatch '^Boot7E
 if(-not ('SharedEspFirmware.Native' -as [type])){Add-Type -Path (Join-Path $PSScriptRoot 'shared-esp-firmware-native.cs')}
 function DisplayOrder($v){
  if($null -eq $v){return $null};[byte[]]$data=[Convert]::FromBase64String($v.DataBase64)
- if($data.Length%2){throw 'Malformed BootOrder'}
+ if($data.Length -eq 0 -or $data.Length%2){throw 'Malformed BootOrder'}
  @((0..(($data.Length/2)-1)) | ForEach-Object {'Boot{0:X4}' -f [BitConverter]::ToUInt16($data,$_ * 2)})
 }
 $scope=[SharedEspFirmware.Native]::EnablePrivilege()
