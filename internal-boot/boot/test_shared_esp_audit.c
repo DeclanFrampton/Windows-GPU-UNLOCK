@@ -47,6 +47,8 @@ int main(void){
  loadFailure=FALSE;duplicate=TRUE;handleCount=2;if(efi_main((EFI_HANDLE)3,&table)==EFI_SUCCESS || loads!=3 || starts!=1)return 10;
  #ifdef GU_AUDIT_VISIBLE
  if(stallCount!=3)return 11;
+#else
+ if(stallCount!=0)return 11;
 #endif
  return 0;
 }
