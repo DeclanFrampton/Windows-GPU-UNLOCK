@@ -7,6 +7,31 @@ unlock. This workflow does not require the five firmware assets or MSVC. It need
 Windows PowerShell, Python 3.10+, LLVM `clang`/`lld-link`, and an existing FAT32 USB.
 The script checks the USB target; it does not format or partition it.
 
+## New to this? Start here
+
+1. Download the repository ZIP from GitHub's **Code → Download ZIP** menu and use
+   Windows **Extract All**. Do not run files from inside the ZIP. Git is not needed.
+2. Open the extracted folder and double-click **Start-Capture.cmd**. A text window
+   stays open so you can read the result. This is capture setup, not an unlock button.
+3. Follow the tool checks. If something is missing, the window gives the official
+   Python/LLVM download links. Install it yourself, then close and reopen setup.
+   Existing LLVM installations in the standard folder are found even with a stale PATH.
+4. Setup detects a supported Windows EFI partition automatically. Select your USB
+   from its label, model, size and drive letter. Unusable choices explain why.
+   Back up the USB first. Type **PREPARE** only after checking the displayed target;
+   pressing Enter cancels. No formatting, automatic restart or firmware setting
+   changes are performed.
+5. Read **Attended collection and return** below before booting. After each return
+   to Windows, run the same launcher and choose the same USB. It stops at capture
+   collection and cannot progress into unlock.
+
+If Windows blocks the downloaded script, stop and check that you downloaded the
+intended repository revision. Ask a maintainer for help; do not disable system
+security or execution policy. The launcher still requires installed Python and
+LLVM: it is guided setup, not a dependency installer. Unsupported/ambiguous boot
+layouts need maintainer help rather than guessed partition IDs. The current text
+prompts are in English; this page also has a Korean counterpart.
+
 ## Check host tools
 
 From the repository root in a normal terminal:
