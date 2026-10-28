@@ -5,6 +5,9 @@
 #include <Protocol/LoadedImage.h>
 #include <Protocol/SimpleFileSystem.h>
 #include <Guid/FileInfo.h>
+#ifdef GU_EVGA_UNLOCK
+#include <Guid/GlobalVariable.h>
+#endif
 #include "media.h"
 #include "flow.h"
 #ifdef GU_EVGA_STOP_ONLY
@@ -418,15 +421,29 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE Image,EFI_SYSTEM_TABLE *St) {
   EFI_STATUS s=St->BootServices->HandleProtocol(Image,&LoadedGuid,(VOID **)&loaded);
   if(s!=EFI_SUCCESS || !loaded)Stop();
   OwnDevice=loaded->DeviceHandle;
+#ifdef GU_EVGA_UNLOCK
+  EFI_GUID global=EFI_GLOBAL_VARIABLE;UINT8 secure=0xff;UINTN secureBytes=sizeof(secure);
+  if(!St->RuntimeServices || !St->RuntimeServices->GetVariable ||
+     St->RuntimeServices->GetVariable(L"SecureBoot",&global,NULL,&secureBytes,&secure)!=EFI_SUCCESS ||
+     secureBytes!=1 || secure!=0)return EFI_SECURITY_VIOLATION;
+#endif
 #ifdef GU_EVGA_STOP_ONLY
+#ifdef GU_EVGA_UNLOCK
+  Say(L"EVGA 3090 EXPERIMENTAL UNLOCK: ONE GPU TRANSACTION.\r\nAfter guards, fresh Shift+G starts release, GPU writes, DMA, FLR and firmware. Esc cancels.\r\nDisplay may stop; failure may require manual power off and USB removal. Recovery unproven.\r\n");
+#else
   Say(L"EVGA 3090 TEXT MEMBERSHIP TEST. NO UNLOCK.\r\nPress fresh Shift+G when ready (60 seconds), Esc cancels.\r\nScreen may stop updating. Manifest-selected EVGA sequence; Windows handoff on success.\r\nNo Windows after 3 minutes: power off, remove USB, use Windows Boot Manager. Recovery is unproven.\r\n");
+#endif
   s=Prepare(NULL);
   BOOLEAN evgaPrepared=s==EFI_SUCCESS;
   if(s==EFI_SUCCESS)s=Record(NULL,"evga-text-stop-capture-before",EFI_SUCCESS);
   if(s==EFI_SUCCESS)s=GuCaptureGraphOnVolume(Table,Log,Root);
   if(s==EFI_SUCCESS)Say(L"Capture saved. Checking live inventory, ownership and code pins...\r\nWait for Live guards passed before Shift+G.\r\n");
 #ifdef GU_EVGA_PROBE_RESOURCES
+#ifdef GU_EVGA_UNLOCK
+  if(s==EFI_SUCCESS)Say(L"Loading and retaining all five firmware assets. Wait for Live guards passed before Shift+G.\r\n");
+#else
   if(s==EFI_SUCCESS)Say(L"Verifying five assets in EFI memory. Wait for Live guards passed before Shift+G.\r\n");
+#endif
   if(s==EFI_SUCCESS)s=GuEvgaResourcesPrepare(Table,Root,Image,Record);
 #endif
   if(s==EFI_SUCCESS)s=GuEvgaTextStop(Table,Root,Record,&ResearchOutputDisabled);

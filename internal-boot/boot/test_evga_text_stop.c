@@ -10,6 +10,25 @@ static EFI_DRIVER_BINDING_PROTOCOL Drivers[5];
 static EFI_LOADED_IMAGE_PROTOCOL Images[5];
 static EFI_PCI_IO_PROTOCOL PciIo;
 static EFI_FILE_PROTOCOL Root,Marker;
+#ifdef GU_EVGA_UNLOCK
+GU_PLATFORM Gu;
+static BOOLEAN FailTransaction,FailExclusiveClose,FailAssetCleanup,FailUnlockSafe,FailUnlockGraph;
+static UINTN Transactions,ExclusiveCloses,AssetCleanups;
+static EFI_TPL EFIAPI Raise(EFI_TPL n){(void)n;return TPL_APPLICATION;}
+static VOID EFIAPI Restore(EFI_TPL n){(void)n;}
+static EFI_STATUS EFIAPI CloseOwner(EFI_HANDLE h,EFI_GUID *g,EFI_HANDLE image,EFI_HANDLE controller){
+ (void)g;if(h!=(EFI_HANDLE)4 || image!=(EFI_HANDLE)80 || controller)return EFI_INVALID_PARAMETER;
+ ExclusiveCloses++;return FailExclusiveClose?EFI_DEVICE_ERROR:EFI_SUCCESS;
+}
+EFI_HANDLE GuEvgaResourcesImage(VOID){return (EFI_HANDLE)80;}
+BOOLEAN GuEvgaResourcesLogReady(VOID){return TRUE;}
+BOOLEAN GuSafeToReturn(VOID){return !FailUnlockSafe;}
+EFI_STATUS GuEvgaResourcesRelease(EFI_SYSTEM_TABLE *t){(void)t;AssetCleanups++;return FailAssetCleanup?EFI_DEVICE_ERROR:EFI_SUCCESS;}
+EFI_STATUS GuEvgaTransaction(EFI_SYSTEM_TABLE *t,EFI_HANDLE image,EFI_HANDLE parent,EFI_PCI_IO_PROTOCOL *pci,GU_EVGA_GRAPH_CHECK graph,GU_EVGA_LOG_READY ready){
+ (void)t;(void)pci;Transactions++;if(FailTransaction)return EFI_DEVICE_ERROR;Gu.owned=TRUE;
+ return !FailUnlockGraph && ready() && graph(parent,image,TRUE)?EFI_SUCCESS:EFI_ACCESS_DENIED;
+}
+#endif
 static UINTN Keys,Calls,Records;
 static BOOLEAN Removed,MarkerExists,BadHash,BadPost,FailRecord,FailStop,BadInventory,ExtraOwner;
 static BOOLEAN Cancel,Timeout,ShortWrite,FlushFail;
@@ -193,7 +212,12 @@ static EFI_STATUS EFIAPI Opens(EFI_HANDLE source,EFI_GUID *guid,EFI_OPEN_PROTOCO
 #ifdef GU_EVGA_AUDIT_NVIDIA
   if(source==H(4)&&guid==&Pci){
 #ifdef GU_EVGA_STOP_NVIDIA_PARENT
-    if(ParentGone&&!BadParentOwner){*n=0;return EFI_SUCCESS;}
+    if(ParentGone&&!BadParentOwner){
+#ifdef GU_EVGA_UNLOCK
+      if(Gu.owned){e[0]=(EFI_OPEN_PROTOCOL_INFORMATION_ENTRY){H(80),NULL,EFI_OPEN_PROTOCOL_EXCLUSIVE,1};*n=1;return EFI_SUCCESS;}
+#endif
+      *n=0;return EFI_SUCCESS;
+    }
 #endif
     agent=H(14);
   }
@@ -252,6 +276,10 @@ static EFI_STATUS RecordMock(VOID *p,const char *name,EFI_STATUS s){
   (void)p;(void)name;(void)s;Records++;return FailRecord?EFI_DEVICE_ERROR:EFI_SUCCESS;
 }
 static VOID Init(VOID){
+#ifdef GU_EVGA_UNLOCK
+ Gu=(GU_PLATFORM){0};FailTransaction=FailExclusiveClose=FailAssetCleanup=FailUnlockSafe=FailUnlockGraph=FALSE;
+ Transactions=ExclusiveCloses=AssetCleanups=0;
+#endif
 #ifdef GU_EVGA_PROBE_PLATFORM
  BadPlatformConfig=BadBar=FALSE;
 #endif
@@ -287,6 +315,9 @@ static VOID Init(VOID){
   GopConsoleQueries=0;InterfaceFailure=0;Plan=(PLAN){0};Keys=Calls=Records=0;Removed=MarkerExists=BadHash=BadPost=FailRecord=FailStop=BadInventory=ExtraOwner=FALSE;
   Cancel=Timeout=ShortWrite=FlushFail=FALSE;
   Bs=(EFI_BOOT_SERVICES){0};Bs.FreePool=Free;Bs.Stall=Stall;Bs.LocateHandleBuffer=Locate;Bs.HandleProtocol=Handle;Bs.OpenProtocolInformation=Opens;Bs.ProtocolsPerHandle=ProtocolList;
+#ifdef GU_EVGA_UNLOCK
+ Bs.RaiseTPL=Raise;Bs.RestoreTPL=Restore;Bs.CloseProtocol=CloseOwner;
+#endif
   Input=(EFI_SIMPLE_TEXT_INPUT_PROTOCOL){0};Input.ReadKeyStroke=ReadKey;
   Output=(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL){0};Output.OutputString=SayMock;
   Table=(EFI_SYSTEM_TABLE){0};Table.BootServices=&Bs;Table.ConIn=&Input;Table.ConOut=&Output;Table.ConsoleOutHandle=H(3);Table.StandardErrorHandle=H(3);
@@ -306,11 +337,24 @@ static VOID Init(VOID){
 #endif
   Root=(EFI_FILE_PROTOCOL){0};Root.Open=FileOpen;Marker=(EFI_FILE_PROTOCOL){0};Marker.Close=FileClose;Marker.Write=FileWrite;Marker.Flush=FileFlush;
 }
-#ifdef GU_EVGA_PROBE_RESOURCES
+#if defined(GU_EVGA_PROBE_RESOURCES) && !defined(GU_EVGA_UNLOCK)
 static BOOLEAN ResourceRefusal;
 EFI_STATUS GuEvgaResourcesClaim(EFI_SYSTEM_TABLE *t,EFI_HANDLE h,EFI_PCI_IO_PROTOCOL *p,GU_EVGA_RECORD r){(void)t;(void)h;(void)p;(void)r;return ResourceRefusal?EFI_ACCESS_DENIED:EFI_SUCCESS;}
 #endif
-#ifdef GU_EVGA_PROBE_PLATFORM
+#ifdef GU_EVGA_UNLOCK
+int main(VOID){BOOLEAN started=FALSE;EFI_STATUS s;
+ Init();s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s!=EFI_SUCCESS)return 60+(int)(Transactions*10+ExclusiveCloses*2+AssetCleanups);if(!started)return 50;if(Calls!=8)return 51;if(Transactions!=1)return 52;if(ExclusiveCloses!=1)return 53;if(AssetCleanups!=1)return 54;if(Gu.owned)return 55;if(DecodeAttributes)return 56;
+ if(GuEvgaTextStopVerify(&Table)!=EFI_SUCCESS)return 2;
+ Init();FailTransaction=TRUE;s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s==EFI_SUCCESS || !started || Transactions!=1 || ExclusiveCloses || AssetCleanups || AttributeWrites!=1)return 3;
+ Init();FailUnlockSafe=TRUE;s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s==EFI_SUCCESS || ExclusiveCloses || AssetCleanups || AttributeWrites!=1)return 4;
+ Init();FailExclusiveClose=TRUE;s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s==EFI_SUCCESS || ExclusiveCloses!=1 || AssetCleanups || !Gu.owned)return 5;
+ Init();FailAssetCleanup=TRUE;s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s==EFI_SUCCESS || ExclusiveCloses!=1 || AssetCleanups!=1 || Gu.owned)return 6;
+ Init();FailUnlockGraph=TRUE;s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s==EFI_SUCCESS || ExclusiveCloses || AssetCleanups || AttributeWrites!=1)return 7;
+ Init();FailDisable=TRUE;s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s==EFI_SUCCESS || ExclusiveCloses || AssetCleanups)return 8;
+ Init();s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s!=EFI_SUCCESS)return 9;Gu.fault=TRUE;if(GuEvgaTextStopVerify(&Table)==EFI_SUCCESS)return 10;
+ return 0;
+}
+#elif defined(GU_EVGA_PROBE_PLATFORM)
 int main(VOID){
  BOOLEAN started=FALSE;EFI_STATUS s;
  Init();s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s!=EFI_SUCCESS||Calls!=8||StateReads!=16||PromReads!=262144||AttributeWrites!=2||DecodeAttributes)return 1;

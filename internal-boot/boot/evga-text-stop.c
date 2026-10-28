@@ -3,6 +3,15 @@
 #ifdef GU_EVGA_PROBE_RESOURCES
 #include "evga-resources.h"
 #endif
+#ifdef GU_EVGA_UNLOCK
+#if !defined(GU_EVGA_PROBE_RESOURCES) || !defined(GU_EVGA_PROBE_PLATFORM) || !defined(GU_EVGA_PROBE_STATE) || !defined(GU_EVGA_PROBE_DECODE) || !defined(GU_EVGA_STOP_NVIDIA_PARENT) || !defined(GU_EVGA_STOP_NVIDIA_CHILDREN) || !defined(GU_EVGA_AUDIT_NVIDIA) || !defined(GU_EVGA_RELEASE_EDID_SIBLINGS) || !defined(GU_EVGA_RELEASE_EDID) || !defined(GU_EVGA_RELEASE_GRAPHICS) || !defined(GU_EVGA_RELEASE_TEXT) || !defined(GU_EVGA_STOP_ONLY) || !defined(GU_PROFILE_EVGA_Z790_3090) || !defined(GU_EXPERIMENTAL_3090) || !defined(GU_ENTRY_LATCHED_SS1_FULL) || !defined(GU_EVGA_TRANSACTION_DEVELOPMENT)
+#error EVGA unlock requires the complete exact-profile release and admission sequence
+#endif
+#ifdef GU_EVGA_TEST_ONLY
+#error EVGA test reset must never be linked into an unlock image
+#endif
+#include "../unlock/evga-transaction.h"
+#endif
 #include <Protocol/GraphicsOutput.h>
 #include <Protocol/DevicePath.h>
 #include <Protocol/DriverBinding.h>
@@ -53,7 +62,9 @@ static BOOLEAN GraphicsReleased;
 #ifdef GU_EVGA_AUDIT_NVIDIA
 #ifdef GU_EVGA_STOP_NVIDIA_CHILDREN
 #ifdef GU_EVGA_STOP_NVIDIA_PARENT
-#ifdef GU_EVGA_PROBE_RESOURCES
+#ifdef GU_EVGA_UNLOCK
+#define ATTEMPT_PATH L"\\RTX3090-UNLOCK\\EVGA-UNLOCK.ARMED"
+#elif defined(GU_EVGA_PROBE_RESOURCES)
 #define ATTEMPT_PATH L"\\RTX3090-UNLOCK\\EVGA-RESOURCES-PROBE.ARMED"
 #elif defined(GU_EVGA_PROBE_PLATFORM)
 #define ATTEMPT_PATH L"\\RTX3090-UNLOCK\\EVGA-PLATFORM-PROBE.ARMED"
@@ -97,14 +108,26 @@ static EFI_STATUS Value(GU_EVGA_RECORD record,const char *label,UINT64 value) {
   for(int i=15;i>=0;i--)event[n++]="0123456789abcdef"[(value>>(i*4))&15];
   event[n]=0;return record(NULL,event,EFI_SUCCESS);
 }
+#ifdef GU_EVGA_UNLOCK
+static BOOLEAN EvgaAllowExclusive;
+#endif
 static EFI_STATUS Edges(EFI_BOOT_SERVICES *b,EFI_HANDLE source,EFI_GUID *protocol,
                        EFI_HANDLE child,BOOLEAN pair,EFI_HANDLE *owner,BOOLEAN absent) {
   EFI_OPEN_PROTOCOL_INFORMATION_ENTRY *e=NULL;UINTN n=0,drivers=0,children=0;EFI_HANDLE agent=NULL;
   EFI_STATUS s=b->OpenProtocolInformation(source,protocol,&e,&n);
   if(s!=EFI_SUCCESS || n>64 || (n && !e))return EFI_COMPROMISED_DATA;
+#ifdef GU_EVGA_UNLOCK
+  UINTN own=0;BOOLEAN expected=absent && EvgaAllowExclusive && source==NvidiaParent && protocol==&Pci;
+#endif
   for(UINTN i=0;i<n;i++) {
     if(e[i].Attributes==1 || e[i].Attributes==2 || e[i].Attributes==4)continue;
-    if(absent){s=EFI_ACCESS_DENIED;break;}
+    if(absent){
+#ifdef GU_EVGA_UNLOCK
+      if(expected && e[i].Attributes==EFI_OPEN_PROTOCOL_EXCLUSIVE && e[i].AgentHandle==GuEvgaResourcesImage() &&
+         !e[i].ControllerHandle && e[i].OpenCount==1 && !own){own++;continue;}
+#endif
+      s=EFI_ACCESS_DENIED;break;
+    }
     if(e[i].OpenCount!=1){s=EFI_ACCESS_DENIED;break;}
     if(e[i].Attributes==EFI_OPEN_PROTOCOL_BY_DRIVER && e[i].ControllerHandle==source) {
       drivers++;if(agent && agent!=e[i].AgentHandle){s=EFI_ACCESS_DENIED;break;}agent=e[i].AgentHandle;
@@ -113,6 +136,9 @@ static EFI_STATUS Edges(EFI_BOOT_SERVICES *b,EFI_HANDLE source,EFI_GUID *protoco
     } else {s=EFI_ACCESS_DENIED;break;}
   }
   if(s==EFI_SUCCESS && !absent && (drivers!=1 || children!=(pair?1U:0U) || !agent))s=EFI_ACCESS_DENIED;
+#ifdef GU_EVGA_UNLOCK
+  if(s==EFI_SUCCESS && expected && own!=1)s=EFI_ACCESS_DENIED;
+#endif
   if(e && b->FreePool(e)!=EFI_SUCCESS)s=EFI_DEVICE_ERROR;
   if(s==EFI_SUCCESS && !absent) {
     if(*owner && *owner!=agent)return EFI_ACCESS_DENIED;
@@ -431,6 +457,40 @@ static EFI_STATUS NvidiaPost(EFI_SYSTEM_TABLE *t,GU_EVGA_RECORD record) {
   if(*(EFI_HANDLE *)(context+0x88)!=NULL || context[0x98]!=0)return EFI_ACCESS_DENIED;
   return Checked(record,"evga-nvidia-children-post-graph",EFI_SUCCESS);
 }
+#ifdef GU_EVGA_UNLOCK
+static EFI_SYSTEM_TABLE *EvgaGraphTable;
+/* The graph callback makes no file or console calls and holds TPL_NOTIFY. */
+static BOOLEAN EvgaTransactionGraph(EFI_HANDLE parent,EFI_HANDLE image,BOOLEAN owned) {
+ EFI_BOOT_SERVICES *b=EvgaGraphTable?EvgaGraphTable->BootServices:NULL;
+ if(!b || !b->RaiseTPL || !b->RestoreTPL || parent!=NvidiaParent || image!=GuEvgaResourcesImage())return FALSE;
+ EFI_TPL old=b->RaiseTPL(TPL_NOTIFY);EvgaAllowExclusive=owned;
+ /* Graph() expects the pre-release physical GOP; only NvidiaPost() models
+    the one-virtual-GOP state after the NVIDIA children have been removed. */
+ EFI_STATUS s=NvidiaPost(EvgaGraphTable,NULL);
+ /* All parent protocols must be passive, except the exact own PCI claim. */
+ EFI_GUID **protocols=NULL;UINTN count=0,own=0;
+ if(s==EFI_SUCCESS)s=b->ProtocolsPerHandle(parent,&protocols,&count);
+ if(s==EFI_SUCCESS && (!protocols || !count || count>256))s=EFI_COMPROMISED_DATA;
+ for(UINTN i=0;s==EFI_SUCCESS && i<count;i++) {
+  EFI_OPEN_PROTOCOL_INFORMATION_ENTRY *entries=NULL;UINTN n=0;
+  if(!protocols[i]){s=EFI_COMPROMISED_DATA;break;}
+  s=b->OpenProtocolInformation(parent,protocols[i],&entries,&n);
+  if(s==EFI_SUCCESS && (n>64 || (n && !entries)))s=EFI_COMPROMISED_DATA;
+  for(UINTN j=0;s==EFI_SUCCESS && j<n;j++) {
+   EFI_OPEN_PROTOCOL_INFORMATION_ENTRY *e=&entries[j];
+   if(e->Attributes==1 || e->Attributes==2 || e->Attributes==4)continue;
+   BOOLEAN same=TRUE;for(UINTN k=0;k<sizeof(EFI_GUID);k++)if(((UINT8 *)protocols[i])[k]!=((UINT8 *)&Pci)[k])same=FALSE;
+   if(owned && same && e->Attributes==EFI_OPEN_PROTOCOL_EXCLUSIVE && e->AgentHandle==image &&
+      !e->ControllerHandle && e->OpenCount==1 && !own){own++;continue;}
+   s=EFI_ACCESS_DENIED;
+  }
+  if(entries && b->FreePool(entries)!=EFI_SUCCESS)s=EFI_DEVICE_ERROR;
+ }
+ if(protocols && b->FreePool(protocols)!=EFI_SUCCESS)s=EFI_DEVICE_ERROR;
+ if(s==EFI_SUCCESS && own!=(owned?1U:0U))s=EFI_ACCESS_DENIED;
+ EvgaAllowExclusive=FALSE;b->RestoreTPL(old);return s==EFI_SUCCESS;
+}
+#endif
 #ifdef GU_EVGA_PROBE_DECODE
 /* One bounded admission experiment, not an unlock path. Error holds; no blind restoration. */
 static EFI_STATUS DecodeConfig(EFI_PCI_IO_PROTOCOL *pci,UINT16 expected,GU_EVGA_RECORD record,const char *event) {
@@ -498,13 +558,20 @@ static EFI_STATUS DecodeProbe(EFI_SYSTEM_TABLE *t,GU_EVGA_RECORD record) {
   }
 #ifdef GU_EVGA_PROBE_PLATFORM
   s=PlatformProbe(pci,t,record);if(s!=EFI_SUCCESS)return s;
-#ifdef GU_EVGA_PROBE_RESOURCES
+#if defined(GU_EVGA_PROBE_RESOURCES) && !defined(GU_EVGA_UNLOCK)
   s=GuEvgaResourcesClaim(t,NvidiaParent,pci,record);if(s!=EFI_SUCCESS)return s;
   s=NvidiaPost(t,record);if(s!=EFI_SUCCESS)return s;
 #endif
 #endif
 #ifdef GU_EVGA_PROBE_STATE
   s=StateProbe(pci,record);if(s!=EFI_SUCCESS)return s;
+#endif
+#ifdef GU_EVGA_UNLOCK
+  EvgaGraphTable=t;s=record(NULL,"evga-unlock-transaction-before",EFI_SUCCESS);if(s!=EFI_SUCCESS)return s;
+  s=GuEvgaTransaction(t,GuEvgaResourcesImage(),NvidiaParent,pci,EvgaTransactionGraph,GuEvgaResourcesLogReady);
+  EFI_STATUS logged=record(NULL,"evga-unlock-transaction-return",s);if(s!=EFI_SUCCESS)return s;if(logged!=EFI_SUCCESS)return logged;
+  if(!Gu.owned || !GuSafeToReturn() || Gu.allocations || Gu.dma_count || !GuEvgaResourcesLogReady() ||
+     !EvgaTransactionGraph(NvidiaParent,GuEvgaResourcesImage(),TRUE))return EFI_ACCESS_DENIED;
 #endif
   s=record(NULL,"evga-memory-disable-before",EFI_SUCCESS);if(s!=EFI_SUCCESS)return s;
   s=pci->Attributes(pci,EfiPciIoAttributeOperationDisable,EFI_PCI_IO_ATTRIBUTE_MEMORY,NULL);
@@ -513,6 +580,16 @@ static EFI_STATUS DecodeProbe(EFI_SYSTEM_TABLE *t,GU_EVGA_RECORD record) {
     s=DecodeConfig(pci,0,record,"evga-decode-command-restored");if(s!=EFI_SUCCESS)return s;
     s=pci->Attributes(pci,EfiPciIoAttributeOperationGet,0,&now);if(s!=EFI_SUCCESS || now!=saved)return EFI_ACCESS_DENIED;
   }
+#ifdef GU_EVGA_UNLOCK
+  if(!Gu.owned || !GuSafeToReturn() || Gu.allocations || Gu.dma_count || !GuEvgaResourcesLogReady())return EFI_ACCESS_DENIED;
+  s=record(NULL,"evga-unlock-close-before",EFI_SUCCESS);if(s!=EFI_SUCCESS)return s;
+  s=t->BootServices->CloseProtocol(NvidiaParent,&Pci,GuEvgaResourcesImage(),NULL);
+  if(s==EFI_SUCCESS)Gu.owned=FALSE;
+  EFI_STATUS closedLog=record(NULL,"evga-unlock-close-return",s);if(s!=EFI_SUCCESS)return s;if(closedLog!=EFI_SUCCESS)return closedLog;
+  if(!EvgaTransactionGraph(NvidiaParent,GuEvgaResourcesImage(),FALSE))return EFI_ACCESS_DENIED;
+  s=GuEvgaResourcesRelease(t);if(s!=EFI_SUCCESS)return s;
+  s=record(NULL,"evga-unlock-assets-released",EFI_SUCCESS);if(s!=EFI_SUCCESS)return s;
+#endif
   return NvidiaPost(t,record);
 }
 #endif
@@ -542,6 +619,10 @@ static EFI_STATUS NvidiaChildrenStop(EFI_SYSTEM_TABLE *t,GU_EVGA_RECORD record) 
 #endif
 EFI_STATUS GuEvgaTextStopVerify(EFI_SYSTEM_TABLE *t) {
   if(!t || !t->BootServices || !Plan.Driver || !Plan.TextAgent)return EFI_INVALID_PARAMETER;
+#ifdef GU_EVGA_UNLOCK
+  if(Gu.owned || Gu.armed || Gu.retained || Gu.fault || Gu.allocations || Gu.dma_count ||
+     Gu.master_attributes_pending || !GuSafeToReturn() || !GuEvgaResourcesLogReady())return EFI_ACCESS_DENIED;
+#endif
 #ifdef GU_EVGA_STOP_NVIDIA_CHILDREN
   if(NvidiaChildrenStopped){
 #ifdef GU_EVGA_PROBE_DECODE
@@ -589,7 +670,9 @@ EFI_STATUS GuEvgaTextStop(EFI_SYSTEM_TABLE *t,EFI_FILE_PROTOCOL *root,GU_EVGA_RE
   if(s!=EFI_NOT_FOUND)return s;
   s=root->Open(root,&marker,ATTEMPT_PATH,EFI_FILE_MODE_READ|EFI_FILE_MODE_WRITE|EFI_FILE_MODE_CREATE,0);
   if(s!=EFI_SUCCESS || !marker)return EFI_DEVICE_ERROR;
-#if defined(GU_EVGA_STOP_NVIDIA_PARENT)
+#if defined(GU_EVGA_UNLOCK)
+  char tag[]="EVGA release and one GPU unlock transaction armed; no retry\r\n";
+#elif defined(GU_EVGA_STOP_NVIDIA_PARENT)
   char tag[]="Consumer and NVIDIA child/parent Stops armed; no retry\r\n";
 #elif defined(GU_EVGA_STOP_NVIDIA_CHILDREN)
   char tag[]="Six consumer Stops plus one NVIDIA three-child Stop; no retry\r\n";

@@ -49,8 +49,8 @@ static EFI_STATUS CheckBar(VOID) {
  if(s!=EFI_SUCCESS || !r){if(r)Gu.bs->FreePool(r);return s==EFI_SUCCESS?EFI_UNSUPPORTED:s;}
  BOOLEAN valid=r->Desc==ACPI_ADDRESS_SPACE_DESCRIPTOR && r->Len==sizeof(*r)-3 && r->ResType==0 &&
   r->AddrRangeMin==GU_EVGA_BAR_BASE && r->AddrLen==GU_EVGA_BAR_BYTES && !r->AddrTranslationOffset &&
-  (r->AddrRangeMax==0x84ffffffULL || r->AddrRangeMax==0xffffffULL) && r->AddrSpaceGranularity==32 &&
-  ((UINT8 *)(r+1))[0]==ACPI_END_TAG_DESCRIPTOR;
+  (r->AddrRangeMax==0x84ffffffULL || r->AddrRangeMax==0xffffffULL) &&
+  (r->AddrSpaceGranularity==32 || r->AddrSpaceGranularity==64);
  EFI_STATUS released=Gu.bs->FreePool(r);if(released!=EFI_SUCCESS)return released;
  return valid?EFI_SUCCESS:EFI_UNSUPPORTED;
 }

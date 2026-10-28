@@ -105,5 +105,22 @@ try {
  if($LASTEXITCODE -ne 0){throw "Asset reader scenario failed: $LASTEXITCODE"}
  '6 real SHA256 reader vector/refusal scenarios passed (mock EFI file/pool).'
  '13 shared asset/ownership resource scenarios passed (synthetic hash callback, no firmware executed).'
+ $unlockFlags=@('-target','x86_64-pc-windows-msvc','-std=c11','-ffreestanding','-fno-builtin','-fshort-wchar','-O1','-Wall','-Wextra','-Werror','-Wno-unused-parameter','-D__KERNEL__','-DGU_UEFI_PORT','-DGU_EVGA_UNLOCK','-DGU_EVGA_STOP_ONLY','-DGU_EVGA_RELEASE_TEXT','-DGU_EVGA_RELEASE_GRAPHICS','-DGU_EVGA_RELEASE_EDID','-DGU_EVGA_RELEASE_EDID_SIBLINGS','-DGU_EVGA_AUDIT_NVIDIA','-DGU_EVGA_STOP_NVIDIA_CHILDREN','-DGU_EVGA_STOP_NVIDIA_PARENT','-DGU_EVGA_PROBE_DECODE','-DGU_EVGA_PROBE_STATE','-DGU_EVGA_PROBE_PLATFORM','-DGU_EVGA_PROBE_RESOURCES','-DGU_PROFILE_EVGA_Z790_3090','-DGU_EVGA_TRANSACTION_DEVELOPMENT','-DGU_EXPERIMENTAL_3090','-DGU_ENTRY_LATCHED_SS1_FULL','-DGU_TARGET_PCI_ID=0x220410deU','-I','internal-boot/unlock','-I','internal-boot/unlock/compat','-I','deps/edk2/MdePkg/Include','-I','deps/edk2/MdePkg/Include/X64')
+ & $Clang @unlockFlags -c internal-boot/boot/test_evga_text_stop.c -o "$out/unlock-wrapper-test.obj"
+ if($LASTEXITCODE -ne 0){throw 'Unlock wrapper mock compile failed'}
+ & $LldLink /nologo /nodefaultlib /subsystem:console /entry:main /machine:x64 "/out:$out/unlock-wrapper-test.exe" "$out/unlock-wrapper-test.obj" "$out/shared-checks.host.obj" "$out/resource-runtime.host.obj"
+ if($LASTEXITCODE -ne 0){throw 'Unlock wrapper mock link failed'}
+ & "./$out/unlock-wrapper-test.exe"
+ if($LASTEXITCODE -ne 0){throw "Unlock wrapper mock scenario failed: $LASTEXITCODE"}
+ & $Clang @unlockFlags -Wno-unused-function -c internal-boot/boot/test_evga_retained_assets.c -o "$out/retained-assets-test.obj"
+ if($LASTEXITCODE -ne 0){throw 'Retained assets mock compile failed'}
+ & $Clang @unlockFlags -c internal-boot/unlock/format.c -o "$out/retained-format.obj"
+ if($LASTEXITCODE -ne 0){throw 'Retained logger compile failed'}
+ & $LldLink /nologo /nodefaultlib /subsystem:console /entry:main /machine:x64 "/out:$out/retained-assets-test.exe" "$out/retained-assets-test.obj" "$out/retained-format.obj" "$out/resource-runtime.host.obj"
+ if($LASTEXITCODE -ne 0){throw 'Retained assets mock link failed'}
+ & "./$out/retained-assets-test.exe"
+ if($LASTEXITCODE -ne 0){throw "Retained assets case failed: $LASTEXITCODE"}
+ '10 retained-asset success and cleanup checks passed; files/hash mocked.'
+ '10 combined unlock wrapper/cleanup cases passed; transaction mocked.'
  '25 membership host checkpoints, 7 combined-release checkpoints, 8 graphics-release checkpoints, 12 EDID checkpoints, 13 sibling checkpoints, 11 NVIDIA audit checkpoints, 11 NVIDIA child checkpoints, 11 NVIDIA parent checkpoints, 8 decode-probe checkpoints, 6 state-probe checkpoints, 5 platform-probe checkpoints and 9 capture regression cases passed (mock protocols, hashes and Stop; no captured firmware executed).'
 } finally {Pop-Location}

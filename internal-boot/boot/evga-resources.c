@@ -4,16 +4,50 @@
 #include "../unlock/asset-reader.h"
 #include "../unlock/ownership.h"
 #include "../unlock/runtime.h"
+#ifdef GU_EVGA_UNLOCK
+#include "../unlock/compat/compat.h"
+#include "../unlock/format.h"
+#include <stdarg.h>
+#else
 GU_PLATFORM Gu;
+#endif
 static EFI_HANDLE OwnImage;
 static GU_EVGA_RECORD Recorder;
 static EFI_STATUS LogStatus;
 VOID GuLog(const char *format,...) {
+#ifdef GU_EVGA_UNLOCK
+ char text[512];va_list args;va_start(args,format);UINTN n=GuFormatV(text,sizeof(text),format,args);va_end(args);
+ if(n>=sizeof(text) || !Recorder){LogStatus=EFI_DEVICE_ERROR;if(Gu.armed)Gu.fault=TRUE;return;}
+ for(UINTN offset=0;offset<n && LogStatus==EFI_SUCCESS;) {
+  char chunk[101];UINTN count=n-offset;if(count>100)count=100;
+  for(UINTN i=0;i<count;i++){char c=text[offset+i];chunk[i]=(c=='\n' || c=='\r')?' ':c;}chunk[count]=0;
+  LogStatus=Recorder(NULL,chunk,EFI_SUCCESS);offset+=count;
+ }
+ if(LogStatus!=EFI_SUCCESS && Gu.armed)Gu.fault=TRUE;
+#else
  (void)format;if(LogStatus==EFI_SUCCESS)LogStatus=Recorder(NULL,"evga-shared-ownership-log",EFI_SUCCESS);
+#endif
 }
+#ifdef GU_EVGA_UNLOCK
+EFI_HANDLE GuEvgaResourcesImage(VOID){return OwnImage;}
+BOOLEAN GuEvgaResourcesLogReady(VOID){return Recorder && LogStatus==EFI_SUCCESS;}
+EFI_STATUS GuEvgaResourcesRelease(EFI_SYSTEM_TABLE *t){
+ if(!t || !t->BootServices || Gu.retained || Gu.allocations || Gu.dma_count || Gu.master_attributes_pending ||
+    (Gu.started && (!Gu.quiesced || Gu.fault)))return EFI_ACCESS_DENIED;
+ for(UINTN i=0;i<5;i++)if(GuAssets[i].firmware.data){
+  EFI_STATUS s=t->BootServices->FreePool((VOID *)GuAssets[i].firmware.data);if(s!=EFI_SUCCESS){Gu.retained=TRUE;return s;}
+  memset(&GuAssets[i],0,sizeof(GuAssets[i]));
+ }
+ return EFI_SUCCESS;
+}
+#endif
 EFI_STATUS GuEvgaResourcesPrepare(EFI_SYSTEM_TABLE *t,EFI_FILE_PROTOCOL *root,EFI_HANDLE image,GU_EVGA_RECORD record) {
  if(!t || !t->BootServices || !root || !image || !record)return EFI_INVALID_PARAMETER;
- OwnImage=image;
+ OwnImage=image;Recorder=record;LogStatus=EFI_SUCCESS;
+#ifdef GU_EVGA_UNLOCK
+ memset(GuAssets,0,sizeof(GuAssets));
+ static const char *names[]={"gpu-unlock/610.43.03/booter_load_ga102.bin","gpu-unlock/610.43.03/v67-ga102-610.43.03.bin","gpu-unlock/610.43.03/gsp_ga10x.bin","gpu-unlock/610.43.03/gsp_boot_ga102.bin","gpu-unlock/610.43.03/gsp_boot_desc_ga102.bin"};
+#endif
  static const struct {CHAR16 *path;UINTN bytes;const char *hash;} specs[]={
  {L"\\RTX3090-UNLOCK\\ASSETS\\booter_load_ga102.bin",61256,"056cbc064a888f80717726c54d7f64fcd68044d123870c95a74f37f4975dcaa4"},
  {L"\\RTX3090-UNLOCK\\ASSETS\\v67-ga102-610.43.03.bin",64000,"2a0aa1f86d0b6afff5214d641d87d46dc98ef06ed908ff05d0ddbad5ffb7e197"},
@@ -23,11 +57,24 @@ EFI_STATUS GuEvgaResourcesPrepare(EFI_SYSTEM_TABLE *t,EFI_FILE_PROTOCOL *root,EF
  for(UINTN i=0;i<5;i++) {
   VOID *data=NULL;EFI_STATUS s=GuReadVerifiedAsset(t->BootServices,root,specs[i].path,specs[i].bytes,specs[i].hash,&data);
   EFI_STATUS logged=record(NULL,"evga-efi-asset-verified",s);
+#ifdef GU_EVGA_UNLOCK
+  if(data){GuAssets[i].name=names[i];GuAssets[i].firmware.data=data;GuAssets[i].firmware.size=specs[i].bytes;}
+  if(s!=EFI_SUCCESS || logged!=EFI_SUCCESS){
+   EFI_STATUS cleanup=GuEvgaResourcesRelease(t);if(cleanup!=EFI_SUCCESS)return cleanup;
+   return s!=EFI_SUCCESS?s:logged;
+  }
+#else
   EFI_STATUS freed=data?t->BootServices->FreePool(data):EFI_SUCCESS;
   if(s!=EFI_SUCCESS)return s;if(logged!=EFI_SUCCESS)return logged;if(freed!=EFI_SUCCESS)return freed;
+#endif
  }
- return record(NULL,"evga-efi-assets-complete",EFI_SUCCESS);
+ EFI_STATUS complete=record(NULL,"evga-efi-assets-complete",EFI_SUCCESS);
+#ifdef GU_EVGA_UNLOCK
+ if(complete!=EFI_SUCCESS){EFI_STATUS cleanup=GuEvgaResourcesRelease(t);if(cleanup!=EFI_SUCCESS)return cleanup;}
+#endif
+ return complete;
 }
+#ifndef GU_EVGA_UNLOCK
 EFI_STATUS GuEvgaResourcesClaim(EFI_SYSTEM_TABLE *t,EFI_HANDLE parent,EFI_PCI_IO_PROTOCOL *pci,GU_EVGA_RECORD record) {
  EFI_BOOT_SERVICES *b=t->BootServices;
  if(!OwnImage || !record || !b->RaiseTPL || !b->RestoreTPL || !b->OpenProtocol || !b->CloseProtocol)return EFI_UNSUPPORTED;
@@ -42,3 +89,5 @@ EFI_STATUS GuEvgaResourcesClaim(EFI_SYSTEM_TABLE *t,EFI_HANDLE parent,EFI_PCI_IO
  if(closed!=EFI_SUCCESS)return closed;if(closeLog!=EFI_SUCCESS)return closeLog;
  return Gu.owned?EFI_ACCESS_DENIED:EFI_SUCCESS;
 }
+
+#endif /* diagnostic-only ownership probe */

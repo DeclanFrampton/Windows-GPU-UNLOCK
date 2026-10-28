@@ -1,12 +1,13 @@
 # GPL-2.0-only. Preserve captures and the previous USB EFI; never format or reboot.
 [CmdletBinding(SupportsShouldProcess)]
-param([Parameter(Mandatory)][ValidatePattern('^[A-Za-z]$')][string]$Drive)
+param([Parameter(Mandatory)][ValidatePattern('^[A-Za-z]$')][string]$Drive,[switch]$AttemptUnlock)
 $ErrorActionPreference='Stop'
 $repo=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $build=Join-Path $repo 'internal-boot/boot/build/evga-text-stop'
 $source=Join-Path $build 'BOOTX64.EFI'
 $manifest=Get-Content -LiteralPath (Join-Path $build 'manifest.json') -Raw | ConvertFrom-Json
-if($manifest.Mode -notin @('evga3090-one-text-membership-stop','evga3090-two-text-stops','evga3090-three-consumer-stops','evga3090-four-consumer-stops','evga3090-six-consumer-stops','evga3090-nvidia-preflight','evga3090-nvidia-three-child-stop','evga3090-nvidia-parent-stop','evga3090-decode-probe','evga3090-state-probe','evga3090-platform-probe','evga3090-resources-probe') -or $manifest.CanUnlock -ne $false){throw 'Wrong build mode'}
+if($manifest.Mode -notin @('evga3090-one-text-membership-stop','evga3090-two-text-stops','evga3090-three-consumer-stops','evga3090-four-consumer-stops','evga3090-six-consumer-stops','evga3090-nvidia-preflight','evga3090-nvidia-three-child-stop','evga3090-nvidia-parent-stop','evga3090-decode-probe','evga3090-state-probe','evga3090-platform-probe','evga3090-resources-probe','evga3090-experimental-unlock')){throw 'Wrong build mode'}
+if(($manifest.Mode -eq 'evga3090-experimental-unlock') -ne [bool]$AttemptUnlock -or [bool]$manifest.CanUnlock -ne [bool]$AttemptUnlock){throw 'Explicit -AttemptUnlock must match the manifest unlock mode'}
 $hash=(Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash.ToLowerInvariant()
 if($hash -cne $manifest.EfiSha256){throw 'EFI differs from build manifest; rebuild'}
 $boot=Join-Path $repo 'internal-boot/boot'
@@ -26,52 +27,56 @@ if($disk.BusType -ne 'USB' -or $partition[0].IsSystem -or $partition[0].IsBoot){
 $root=$letter+':\'
 $captures=Join-Path $root 'RTX3090-UNLOCK'
 if(!(Test-Path -LiteralPath (Join-Path $captures 'DIAG00.TXT')) -or !(Test-Path -LiteralPath (Join-Path $captures 'DIAG01.TXT'))){throw 'Original capture pair must remain on the USB'}
-$attempt=if($manifest.Mode -eq 'evga3090-resources-probe'){'EVGA-RESOURCES-PROBE.ARMED'}elseif($manifest.Mode -eq 'evga3090-platform-probe'){'EVGA-PLATFORM-PROBE.ARMED'}elseif($manifest.Mode -in @('evga3090-state-probe','evga3090-platform-probe','evga3090-resources-probe')){'EVGA-STATE-PROBE.ARMED'}elseif($manifest.Mode -in @('evga3090-decode-probe','evga3090-state-probe','evga3090-platform-probe','evga3090-resources-probe')){'EVGA-DECODE-PROBE.ARMED'}elseif($manifest.Mode -in @('evga3090-nvidia-parent-stop','evga3090-decode-probe','evga3090-state-probe','evga3090-platform-probe','evga3090-resources-probe')){'EVGA-NVIDIA-PARENT.ARMED'}elseif($manifest.Mode -eq 'evga3090-nvidia-three-child-stop'){'EVGA-NVIDIA-CHILDREN.ARMED'}elseif($manifest.Mode -eq 'evga3090-nvidia-preflight'){'EVGA-NVIDIA-AUDIT.ARMED'}elseif($manifest.Mode -eq 'evga3090-six-consumer-stops'){'EVGA-EDID-SIBLINGS.ARMED'}elseif($manifest.Mode -eq 'evga3090-four-consumer-stops'){'EVGA-EDID-RELEASE.ARMED'}elseif($manifest.Mode -eq 'evga3090-three-consumer-stops'){'EVGA-GFX-RELEASE.ARMED'}elseif($manifest.Mode -eq 'evga3090-two-text-stops'){'EVGA-TEXT-RELEASE.ARMED'}else{'EVGA-TEXT-STOP.ARMED'}
+$attempt=if($manifest.Mode -eq 'evga3090-experimental-unlock'){'EVGA-UNLOCK.ARMED'}elseif($manifest.Mode -eq 'evga3090-resources-probe'){'EVGA-RESOURCES-PROBE.ARMED'}elseif($manifest.Mode -eq 'evga3090-platform-probe'){'EVGA-PLATFORM-PROBE.ARMED'}elseif($manifest.Mode -in @('evga3090-state-probe','evga3090-platform-probe','evga3090-resources-probe','evga3090-experimental-unlock')){'EVGA-STATE-PROBE.ARMED'}elseif($manifest.Mode -in @('evga3090-decode-probe','evga3090-state-probe','evga3090-platform-probe','evga3090-resources-probe','evga3090-experimental-unlock')){'EVGA-DECODE-PROBE.ARMED'}elseif($manifest.Mode -in @('evga3090-nvidia-parent-stop','evga3090-decode-probe','evga3090-state-probe','evga3090-platform-probe','evga3090-resources-probe','evga3090-experimental-unlock')){'EVGA-NVIDIA-PARENT.ARMED'}elseif($manifest.Mode -eq 'evga3090-nvidia-three-child-stop'){'EVGA-NVIDIA-CHILDREN.ARMED'}elseif($manifest.Mode -eq 'evga3090-nvidia-preflight'){'EVGA-NVIDIA-AUDIT.ARMED'}elseif($manifest.Mode -eq 'evga3090-six-consumer-stops'){'EVGA-EDID-SIBLINGS.ARMED'}elseif($manifest.Mode -eq 'evga3090-four-consumer-stops'){'EVGA-EDID-RELEASE.ARMED'}elseif($manifest.Mode -eq 'evga3090-three-consumer-stops'){'EVGA-GFX-RELEASE.ARMED'}elseif($manifest.Mode -eq 'evga3090-two-text-stops'){'EVGA-TEXT-RELEASE.ARMED'}else{'EVGA-TEXT-STOP.ARMED'}
 if(Test-Path -LiteralPath (Join-Path $captures $attempt)){throw 'An attempt is already armed; preserve evidence instead of repeating'}
-if($manifest.Mode -in @('evga3090-two-text-stops','evga3090-three-consumer-stops','evga3090-four-consumer-stops','evga3090-six-consumer-stops','evga3090-nvidia-preflight','evga3090-nvidia-three-child-stop','evga3090-nvidia-parent-stop','evga3090-decode-probe','evga3090-state-probe','evga3090-platform-probe','evga3090-resources-probe')) {
+if($manifest.Mode -in @('evga3090-two-text-stops','evga3090-three-consumer-stops','evga3090-four-consumer-stops','evga3090-six-consumer-stops','evga3090-nvidia-preflight','evga3090-nvidia-three-child-stop','evga3090-nvidia-parent-stop','evga3090-decode-probe','evga3090-state-probe','evga3090-platform-probe','evga3090-resources-probe','evga3090-experimental-unlock')) {
  $baseline=Join-Path $captures 'EVGA05.TXT'
  if(!(Test-Path -LiteralPath $baseline) -or (Get-FileHash -LiteralPath $baseline -Algorithm SHA256).Hash.ToLowerInvariant() -ne 'cbbfad6aadb858cdc6311f656c819e6707e52f274e8e0959df4348c51fbbec1a'){throw 'Expected reviewed EVGA05 baseline; preserve captures and send the error'}
 }
-if($manifest.Mode -in @('evga3090-three-consumer-stops','evga3090-four-consumer-stops','evga3090-six-consumer-stops','evga3090-nvidia-preflight','evga3090-nvidia-three-child-stop','evga3090-nvidia-parent-stop','evga3090-decode-probe','evga3090-state-probe','evga3090-platform-probe','evga3090-resources-probe')) {
+if($manifest.Mode -in @('evga3090-three-consumer-stops','evga3090-four-consumer-stops','evga3090-six-consumer-stops','evga3090-nvidia-preflight','evga3090-nvidia-three-child-stop','evga3090-nvidia-parent-stop','evga3090-decode-probe','evga3090-state-probe','evga3090-platform-probe','evga3090-resources-probe','evga3090-experimental-unlock')) {
  $baseline=Join-Path $captures 'EVGA06.TXT'
  if(!(Test-Path -LiteralPath $baseline) -or (Get-FileHash -LiteralPath $baseline -Algorithm SHA256).Hash.ToLowerInvariant() -ne 'cf7fb3897910da7f05d17cc08a70d8595de89398bea85f5e287e9e3c64c5d89f'){throw 'Expected reviewed EVGA06 baseline; preserve captures and send the error'}
 }
-if($manifest.Mode -in @('evga3090-four-consumer-stops','evga3090-six-consumer-stops','evga3090-nvidia-preflight','evga3090-nvidia-three-child-stop','evga3090-nvidia-parent-stop','evga3090-decode-probe','evga3090-state-probe','evga3090-platform-probe','evga3090-resources-probe')) {
+if($manifest.Mode -in @('evga3090-four-consumer-stops','evga3090-six-consumer-stops','evga3090-nvidia-preflight','evga3090-nvidia-three-child-stop','evga3090-nvidia-parent-stop','evga3090-decode-probe','evga3090-state-probe','evga3090-platform-probe','evga3090-resources-probe','evga3090-experimental-unlock')) {
  $baseline=Join-Path $captures 'EVGA07.TXT'
  if(!(Test-Path -LiteralPath $baseline) -or (Get-FileHash -LiteralPath $baseline -Algorithm SHA256).Hash.ToLowerInvariant() -ne '4fd72a6ad44025d31909900acde4db086ca56c7d678084df258c585936c42818'){throw 'Expected reviewed EVGA07 baseline; preserve captures and send the error'}
 }
-if($manifest.Mode -in @('evga3090-six-consumer-stops','evga3090-nvidia-preflight','evga3090-nvidia-three-child-stop','evga3090-nvidia-parent-stop','evga3090-decode-probe','evga3090-state-probe','evga3090-platform-probe','evga3090-resources-probe')) {
+if($manifest.Mode -in @('evga3090-six-consumer-stops','evga3090-nvidia-preflight','evga3090-nvidia-three-child-stop','evga3090-nvidia-parent-stop','evga3090-decode-probe','evga3090-state-probe','evga3090-platform-probe','evga3090-resources-probe','evga3090-experimental-unlock')) {
  $baseline=Join-Path $captures 'EVGA08.TXT'
  if(!(Test-Path -LiteralPath $baseline) -or (Get-FileHash -LiteralPath $baseline -Algorithm SHA256).Hash.ToLowerInvariant() -ne 'a7f683fc21550e1ebaa381119ab2feba908f37a0dbefbcc27a3f50f973d03747'){throw 'Expected reviewed EVGA08 baseline; preserve captures and send the error'}
 }
-if($manifest.Mode -in @('evga3090-nvidia-preflight','evga3090-nvidia-three-child-stop','evga3090-nvidia-parent-stop','evga3090-decode-probe','evga3090-state-probe','evga3090-platform-probe','evga3090-resources-probe')) {
+if($manifest.Mode -in @('evga3090-nvidia-preflight','evga3090-nvidia-three-child-stop','evga3090-nvidia-parent-stop','evga3090-decode-probe','evga3090-state-probe','evga3090-platform-probe','evga3090-resources-probe','evga3090-experimental-unlock')) {
  $baseline=Join-Path $captures 'EVGA09.TXT'
  if(!(Test-Path -LiteralPath $baseline) -or (Get-FileHash -LiteralPath $baseline -Algorithm SHA256).Hash.ToLowerInvariant() -ne '0385147bd6396028fb9669877b33494f42df76a31b7123ca0294515da8e2c6d1'){throw 'Expected reviewed EVGA09 baseline; preserve captures and send the error'}
 }
-if($manifest.Mode -in @('evga3090-nvidia-three-child-stop','evga3090-nvidia-parent-stop','evga3090-decode-probe','evga3090-state-probe','evga3090-platform-probe','evga3090-resources-probe')) {
+if($manifest.Mode -in @('evga3090-nvidia-three-child-stop','evga3090-nvidia-parent-stop','evga3090-decode-probe','evga3090-state-probe','evga3090-platform-probe','evga3090-resources-probe','evga3090-experimental-unlock')) {
  $baseline=Join-Path $captures 'EVGA10.TXT'
  if(!(Test-Path -LiteralPath $baseline) -or (Get-FileHash -LiteralPath $baseline -Algorithm SHA256).Hash.ToLowerInvariant() -ne '16083085694eb60ee6ca2bf2522b9297b35e989efcf3582c57beccbcc51c7c83'){throw 'Expected reviewed EVGA10 baseline; preserve captures and send the error'}
 }
-if($manifest.Mode -in @('evga3090-nvidia-parent-stop','evga3090-decode-probe','evga3090-state-probe','evga3090-platform-probe','evga3090-resources-probe')) {
+if($manifest.Mode -in @('evga3090-nvidia-parent-stop','evga3090-decode-probe','evga3090-state-probe','evga3090-platform-probe','evga3090-resources-probe','evga3090-experimental-unlock')) {
  $baseline=Join-Path $captures 'EVGA11.TXT'
  if(!(Test-Path -LiteralPath $baseline) -or (Get-FileHash -LiteralPath $baseline -Algorithm SHA256).Hash.ToLowerInvariant() -ne '927fa507875f37b43d067fe7aa2848b0c635d8abbd9a059803371bf44cdee240'){throw 'Expected reviewed EVGA11 baseline; preserve captures and send the error'}
 }
-if($manifest.Mode -in @('evga3090-decode-probe','evga3090-state-probe','evga3090-platform-probe','evga3090-resources-probe')) {
+if($manifest.Mode -in @('evga3090-decode-probe','evga3090-state-probe','evga3090-platform-probe','evga3090-resources-probe','evga3090-experimental-unlock')) {
  $baseline=Join-Path $captures 'EVGA12.TXT'
  if(!(Test-Path -LiteralPath $baseline) -or (Get-FileHash -LiteralPath $baseline -Algorithm SHA256).Hash.ToLowerInvariant() -ne 'cafbcb9a6fd0b20ba1eb68502e6cfc464c28bf1bee1e5cb72fa65b712fb46869'){throw 'Expected reviewed EVGA12 baseline; preserve evidence'}
 }
-if($manifest.Mode -in @('evga3090-state-probe','evga3090-platform-probe','evga3090-resources-probe')) {
+if($manifest.Mode -in @('evga3090-state-probe','evga3090-platform-probe','evga3090-resources-probe','evga3090-experimental-unlock')) {
  $baseline=Join-Path $captures 'EVGA13.TXT'
  if(!(Test-Path -LiteralPath $baseline) -or (Get-FileHash -LiteralPath $baseline -Algorithm SHA256).Hash.ToLowerInvariant() -ne '4c381605ffb0a25e07414388758d6bb2cb542b4ab4e04e34610d8fd4a9ec3864'){throw 'Expected reviewed EVGA13 baseline; preserve evidence'}
 }
-if($manifest.Mode -in @('evga3090-platform-probe','evga3090-resources-probe')) {
+if($manifest.Mode -in @('evga3090-platform-probe','evga3090-resources-probe','evga3090-experimental-unlock')) {
  $baseline=Join-Path $captures 'EVGA14.TXT'
  if(!(Test-Path -LiteralPath $baseline) -or (Get-FileHash -LiteralPath $baseline -Algorithm SHA256).Hash.ToLowerInvariant() -ne '2c6b400998dae1d7d77d943b0d2a5cf7c410507d633a58000d269aebedede24c'){throw 'Expected reviewed EVGA14 baseline; preserve evidence'}
 }
 $assetCopies=@()
-if($manifest.Mode -eq 'evga3090-resources-probe') {
+if($manifest.Mode -in @('evga3090-resources-probe','evga3090-experimental-unlock')) {
  $baseline=Join-Path $captures 'EVGA15.TXT'
  if(!(Test-Path -LiteralPath $baseline) -or (Get-FileHash -LiteralPath $baseline -Algorithm SHA256).Hash.ToLowerInvariant() -ne 'de5721c91a1a84f81f7d9a06279c654d5660ddc198f861bb53b418b2f37ea372'){throw 'Expected reviewed EVGA15; preserve evidence'}
+ if($manifest.Mode -eq 'evga3090-experimental-unlock') {
+  $latest=Join-Path $captures 'EVGA16.TXT'
+  if(!(Test-Path -LiteralPath $latest) -or (Get-FileHash -LiteralPath $latest -Algorithm SHA256).Hash.ToLowerInvariant() -ne '2537c7c9b15911c69a91770467e1e161ffd7d9f362485faf9ac6645fcfd9e01e'){throw 'Expected reviewed EVGA16; preserve evidence'}
+ }
  $assetSource=Join-Path $repo 'research/profile/build/evga-assets/output'
  foreach($asset in (Get-Content -Raw -LiteralPath (Join-Path $repo 'internal-boot/unlock/assets.json') | ConvertFrom-Json)) {
   $src=Join-Path $assetSource $asset.Name;$dst=Join-Path $captures ('ASSETS/'+$asset.Name)
@@ -98,7 +103,8 @@ if(Test-Path -LiteralPath $backup){
  }
  if(!$found){throw 'All backup slots are occupied; preserve them and review USB state'}
 }
-if($PSCmdlet.ShouldProcess($destination,'Back up existing capture EFI and stage the manifest-selected EVGA text Stop experiment')) {
+$description=if($AttemptUnlock){'Back up existing EFI and stage the experimental GPU unlock attempt (writes, DMA, FLR)'}else{'Back up existing EFI and stage the selected EVGA diagnostic'}
+if($PSCmdlet.ShouldProcess($destination,$description)) {
  foreach($copy in $assetCopies){
   New-Item -ItemType Directory -Path (Split-Path -Parent $copy.Destination) -Force | Out-Null
   Copy-Item -LiteralPath $copy.Source -Destination $copy.Destination
