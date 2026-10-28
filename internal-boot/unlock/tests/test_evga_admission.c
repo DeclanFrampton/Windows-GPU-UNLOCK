@@ -17,7 +17,8 @@ int main(VOID){
  original=Config[0xc8/4];Config[0xc8/4]^=1;if(GuEvgaAdmit(Config,0,1,0,0,&c,&Prom,GU_EVGA_PROM_BYTES,&caps))return 8;Config[0xc8/4]=original;
  c.chip^=1;if(GuEvgaAdmit(Config,0,1,0,0,&c,&Prom,GU_EVGA_PROM_BYTES,&caps))return 9;c.chip^=1;
  c.feature_plm^=1;if(GuEvgaAdmit(Config,0,1,0,0,&c,&Prom,GU_EVGA_PROM_BYTES,&caps))return 10;c.feature_plm^=1;
- c.ss0^=1;if(GuEvgaAdmit(Config,0,1,0,0,&c,&Prom,GU_EVGA_PROM_BYTES,&caps))return 11;c.ss0^=1;
+ c.ss0=0x30053015U;if(!GuEvgaAdmit(Config,0,1,0,0,&c,&Prom,GU_EVGA_PROM_BYTES,&caps))return 11;
+ c.ss0=0x30053016U;if(GuEvgaAdmit(Config,0,1,0,0,&c,&Prom,GU_EVGA_PROM_BYTES,&caps))return 26;c.ss0=0x30053014U;
  c.ss1^=1;if(GuEvgaAdmit(Config,0,1,0,0,&c,&Prom,GU_EVGA_PROM_BYTES,&caps))return 12;c.ss1^=1;
  c.memory^=1;if(GuEvgaAdmit(Config,0,1,0,0,&c,&Prom,GU_EVGA_PROM_BYTES,&caps))return 13;c.memory^=1;
  BadHash=TRUE;if(GuEvgaAdmit(Config,0,1,0,0,&c,&Prom,GU_EVGA_PROM_BYTES,&caps))return 14;

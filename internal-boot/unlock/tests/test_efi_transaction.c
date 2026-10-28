@@ -490,7 +490,7 @@ int main(int argc,char **argv) {
 #ifdef GU_ENTRY_LATCHED
 #ifdef GU_PROFILE_EVGA_Z790_3090
   for(unsigned permutation=0;permutation<1;permutation++) {
-    (void)permutation;test_entry_ss0=0x30053014U;test_entry_ss1=7;
+    (void)permutation;test_entry_ss0=0x30053015U;test_entry_ss1=7;
 #else
   for(unsigned permutation=0;permutation<4;permutation++) {
     test_entry_ss0=permutation&1?0x03000062U:0x03100062U;test_entry_ss1=6+(permutation>>1);

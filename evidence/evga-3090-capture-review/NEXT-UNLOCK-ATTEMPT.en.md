@@ -30,3 +30,9 @@ powershell -NoProfile -File ./benchmark/run-benchmark.ps1 -Card 3090
 Send the newest EVGA log and the resulting timestamped benchmark ZIP. Compare against the captured locked-state medians: FP32 26.379272, FP16 64.527754, BF16 64.558792, TF32 32.982266 TFLOPS. A successful firmware return is not itself proof of a performance gain; the comparison and runtime correctness are required.
 
 Local verification: 28 real vendor-core/compatibility/port scenarios using the captured EVGA PROM/config and verified assets, with PCI/MMIO/DMA/firmware execution simulated; 19 adapter scenarios; 25 admission cases; retained-asset and combined wrapper failure/cleanup mocks; USB staging fixture and PE checks. Real hardware transaction and recovery remain unverified. Locally built EFI 85,504 bytes SHA256 77ff9d20f3fb0552933b31a776785f0dd7b80ff75c44dd01aaa84ca814d6986e. A contributor compiler may produce a different hash; staging checks that build's source and manifest pins.
+# Second attempt after EVGA17
+
+EVGA17 returned ACCESS_DENIED after exclusive PCI acquisition. The earlier stable selector was 0x30053015, while admission required 0x30053014; the later transaction read was not logged, so the exact refusal remains unconfirmed. This build accepts only those two observed selector values and still requires the entry value to remain unchanged. Their hardware equivalence and successful recovery are unproven. It records the transaction-local cold state and admission outcome.
+
+Staging requires the original EVGA-UNLOCK.ARMED and the exact reviewed EVGA17.TXT. Preserve both. The new one-shot marker is EVGA-UNLOCK2.ARMED; do not delete it or repeat. The risk and boot instructions below still apply. The first attempt did not prove an unlock.
+
