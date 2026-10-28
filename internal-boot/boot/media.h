@@ -3,7 +3,9 @@
 #include <Uefi.h>
 #include <Protocol/DevicePath.h>
 
-#ifdef GU_SHARED_ESP_AUDIT
+#ifdef GU_SHARED_ESP_ASSETS
+#include "build/shared-esp-assets/platform-config.h"
+#elif defined(GU_SHARED_ESP_AUDIT)
 #include "build/shared-esp-audit/platform-config.h"
 #elif defined(GU_EVGA_STOP_ONLY)
 #include "build/evga-text-stop/platform-config.h"
