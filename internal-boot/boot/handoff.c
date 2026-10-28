@@ -15,8 +15,11 @@
 #ifdef GU_EVGA_PROBE_RESOURCES
 #include "evga-resources.h"
 #endif
-#if !defined(GU_DIAGNOSTIC_ONLY) || !defined(GU_USB_MEDIA) || defined(GU_DIAGNOSTIC_PROBE) || defined(GU_FULL_UNLOCK) || defined(GU_CONSOLE_PREPARE)
+#if !defined(GU_DIAGNOSTIC_ONLY) || (!defined(GU_USB_MEDIA) && !defined(GU_EVGA_SHARED_ESP_ADMISSION)) || defined(GU_DIAGNOSTIC_PROBE) || defined(GU_FULL_UNLOCK) || defined(GU_CONSOLE_PREPARE)
 #error EVGA text Stop must be a separate USB image with no GPU probe or unlock
+#endif
+#if defined(GU_EVGA_SHARED_ESP_ADMISSION) && (defined(GU_USB_MEDIA) || defined(GU_EVGA_UNLOCK))
+#error Shared ESP admission is an isolated non-unlock build only
 #endif
 #endif
 #ifdef GU_HEADLESS_RESEARCH
@@ -237,7 +240,12 @@ static EFI_STATUS LoadUnlock(VOID) {
 #endif
 static EFI_STATUS Prepare(VOID *Context) {
   (void)Context;EFI_HANDLE own=NULL,windows=NULL;
-#if defined(GU_USB_PROBE) || defined(GU_USB_MEDIA)
+#if defined(GU_EVGA_SHARED_ESP_ADMISSION)
+  EFI_DEVICE_PATH_PROTOCOL *ownPath=NULL;BOOLEAN usb=FALSE,partition=FALSE;
+  EFI_STATUS s=FindPartition(&GuWindowsPartition,&own);
+  if(s!=EFI_SUCCESS || own!=OwnDevice || PathFor(own,&ownPath)!=EFI_SUCCESS ||
+     !GuInspectPath(ownPath,&GuWindowsPartition,NULL,&usb,&partition) || usb || !partition)return EFI_COMPROMISED_DATA;
+#elif defined(GU_USB_PROBE) || defined(GU_USB_MEDIA)
   /* Probe or unlock from an MBR USB stick: no partition GUID to pin, so the log/child
      volume is the device this image was loaded from, and it must be USB. */
   EFI_DEVICE_PATH_PROTOCOL *ownPath=NULL;BOOLEAN usb=FALSE;
@@ -249,7 +257,11 @@ static EFI_STATUS Prepare(VOID *Context) {
   if(s!=EFI_SUCCESS || own!=OwnDevice)return EFI_COMPROMISED_DATA;
 #endif
   s=FindPartition(&GuWindowsPartition,&windows);
+#ifdef GU_EVGA_SHARED_ESP_ADMISSION
+  if(s!=EFI_SUCCESS || windows!=own)return EFI_COMPROMISED_DATA;
+#else
   if(s!=EFI_SUCCESS || windows==own)return EFI_COMPROMISED_DATA;
+#endif
   s=OpenLog();if(s!=EFI_SUCCESS)return s;
   s=Record(NULL,"internal-handoff-v1",EFI_SUCCESS);if(s!=EFI_SUCCESS)return s;
 #ifndef GU_DIAGNOSTIC_ONLY
