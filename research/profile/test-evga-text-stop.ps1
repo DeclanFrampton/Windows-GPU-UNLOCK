@@ -69,5 +69,13 @@ try {
  if($LASTEXITCODE -ne 0){throw 'State probe host link failed'}
  & "./$out/state-probe-test.exe"
  if($LASTEXITCODE -ne 0){throw "State probe scenario failed: $LASTEXITCODE"}
- '25 membership host checkpoints, 7 combined-release checkpoints, 8 graphics-release checkpoints, 12 EDID checkpoints, 13 sibling checkpoints, 11 NVIDIA audit checkpoints, 11 NVIDIA child checkpoints, 11 NVIDIA parent checkpoints, 8 decode-probe checkpoints, 6 state-probe checkpoints and 9 capture regression cases passed (mock protocols, hashes and Stop; no captured firmware executed).'
+ & $Clang -target x86_64-pc-windows-msvc -std=c11 -ffreestanding -fno-builtin -O1 -Wall -Wextra -Werror -I deps/edk2/MdePkg/Include -I deps/edk2/MdePkg/Include/X64 -c internal-boot/unlock/checks.c -o "$out/shared-checks.host.obj"
+ if($LASTEXITCODE -ne 0){throw 'Shared config checks compile failed'}
+ & $Clang -target x86_64-pc-windows-msvc -std=c11 -ffreestanding -fno-builtin -fno-stack-protector -O1 -Wall -Wextra -Werror -DGU_EVGA_RELEASE_TEXT -DGU_EVGA_RELEASE_GRAPHICS -DGU_EVGA_RELEASE_EDID -DGU_EVGA_RELEASE_EDID_SIBLINGS -DGU_EVGA_AUDIT_NVIDIA -DGU_EVGA_STOP_NVIDIA_CHILDREN -DGU_EVGA_STOP_NVIDIA_PARENT -DGU_EVGA_PROBE_DECODE -DGU_EVGA_PROBE_STATE -DGU_EVGA_PROBE_PLATFORM -I deps/edk2/MdePkg/Include -I deps/edk2/MdePkg/Include/X64 -c internal-boot/boot/test_evga_text_stop.c -o "$out/platform-probe.host.obj"
+ if($LASTEXITCODE -ne 0){throw 'Platform probe host compile failed'}
+ & $LldLink /nologo /nodefaultlib /subsystem:console /entry:main /machine:x64 "/out:$out/platform-probe-test.exe" "$out/platform-probe.host.obj" "$out/efi_runtime.host.obj" "$out/shared-checks.host.obj"
+ if($LASTEXITCODE -ne 0){throw 'Platform probe host link failed'}
+ & "./$out/platform-probe-test.exe"
+ if($LASTEXITCODE -ne 0){throw "Platform probe scenario failed: $LASTEXITCODE"}
+ '25 membership host checkpoints, 7 combined-release checkpoints, 8 graphics-release checkpoints, 12 EDID checkpoints, 13 sibling checkpoints, 11 NVIDIA audit checkpoints, 11 NVIDIA child checkpoints, 11 NVIDIA parent checkpoints, 8 decode-probe checkpoints, 6 state-probe checkpoints, 5 platform-probe checkpoints and 9 capture regression cases passed (mock protocols, hashes and Stop; no captured firmware executed).'
 } finally {Pop-Location}

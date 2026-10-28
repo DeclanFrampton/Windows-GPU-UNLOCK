@@ -6,6 +6,10 @@
 #include <Protocol/LoadedImage.h>
 #include <Protocol/PciIo.h>
 #include "../unlock/sha256.h"
+#ifdef GU_EVGA_PROBE_PLATFORM
+#include "../unlock/checks.h"
+#include <IndustryStandard/Acpi.h>
+#endif
 
 static EFI_GUID Gop=EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID,Text=EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL_GUID;
 static EFI_GUID Path=EFI_DEVICE_PATH_PROTOCOL_GUID,Binding=EFI_DRIVER_BINDING_PROTOCOL_GUID;
@@ -46,7 +50,9 @@ static BOOLEAN GraphicsReleased;
 #ifdef GU_EVGA_AUDIT_NVIDIA
 #ifdef GU_EVGA_STOP_NVIDIA_CHILDREN
 #ifdef GU_EVGA_STOP_NVIDIA_PARENT
-#ifdef GU_EVGA_PROBE_STATE
+#ifdef GU_EVGA_PROBE_PLATFORM
+#define ATTEMPT_PATH L"\\RTX3090-UNLOCK\\EVGA-PLATFORM-PROBE.ARMED"
+#elif defined(GU_EVGA_PROBE_STATE)
 #define ATTEMPT_PATH L"\\RTX3090-UNLOCK\\EVGA-STATE-PROBE.ARMED"
 #elif defined(GU_EVGA_PROBE_DECODE)
 #define ATTEMPT_PATH L"\\RTX3090-UNLOCK\\EVGA-DECODE-PROBE.ARMED"
@@ -450,6 +456,24 @@ static EFI_STATUS StateProbe(EFI_PCI_IO_PROTOCOL *pci,GU_EVGA_RECORD record) {
   return Checked(record,"evga-state-prom-hash",EFI_SUCCESS);
 }
 #endif
+#ifdef GU_EVGA_PROBE_PLATFORM
+static EFI_STATUS PlatformProbe(EFI_PCI_IO_PROTOCOL *pci,EFI_SYSTEM_TABLE *t,GU_EVGA_RECORD record) {
+  UINT32 config[64];UINTN segment,bus,device,function;GU_CAPS caps;EFI_STATUS s;
+  if(!pci->GetLocation || !pci->GetBarAttributes)return EFI_UNSUPPORTED;
+  s=pci->GetLocation(pci,&segment,&bus,&device,&function);if(s!=EFI_SUCCESS)return s;
+  s=pci->Pci.Read(pci,EfiPciIoWidthUint32,0,64,config);if(s!=EFI_SUCCESS)return s;
+  if(!GuCheckConfigIdentity(config,segment,bus,device,function,1,0x220410deU,0x33873842U,&caps))return Checked(record,"evga-runtime-config",EFI_UNSUPPORTED);
+  s=Checked(record,"evga-runtime-config",EFI_SUCCESS);if(s!=EFI_SUCCESS)return s;
+  for(UINTN i=0;i<64;i++){s=Value(record,"evga-runtime-config-offset",i*4);if(s!=EFI_SUCCESS)return s;s=Value(record,"evga-runtime-config-dword",config[i]);if(s!=EFI_SUCCESS)return s;}
+  if(config[2]!=0x030000a1U || config[0x10/4]!=0x84000000U || config[0xc8/4]!=0x00050011U || (config[(caps.pcie+8)/4]&0x00200000U))return Checked(record,"evga-runtime-config-extra",EFI_UNSUPPORTED);
+  EFI_ACPI_ADDRESS_SPACE_DESCRIPTOR *r=NULL;s=pci->GetBarAttributes(pci,0,NULL,(VOID **)&r);
+  if(s!=EFI_SUCCESS || !r){if(r)t->BootServices->FreePool(r);return EFI_UNSUPPORTED;}
+  BOOLEAN valid=r->Desc==ACPI_ADDRESS_SPACE_DESCRIPTOR && r->Len==sizeof(*r)-3 && r->ResType==0 && r->AddrRangeMin==0x84000000ULL && r->AddrLen==0x1000000ULL && !r->AddrTranslationOffset && (r->AddrRangeMax==0x84ffffffULL || r->AddrRangeMax==0xffffffULL) && (r->AddrSpaceGranularity==32 || r->AddrSpaceGranularity==64);
+  s=Value(record,"evga-runtime-bar-min",r->AddrRangeMin);if(s==EFI_SUCCESS)s=Value(record,"evga-runtime-bar-max",r->AddrRangeMax);if(s==EFI_SUCCESS)s=Value(record,"evga-runtime-bar-length",r->AddrLen);
+  EFI_STATUS freed=t->BootServices->FreePool(r);if(s!=EFI_SUCCESS)return s;if(freed!=EFI_SUCCESS)return freed;
+  return Checked(record,"evga-runtime-bar",valid?EFI_SUCCESS:EFI_UNSUPPORTED);
+}
+#endif
 static EFI_STATUS DecodeProbe(EFI_SYSTEM_TABLE *t,GU_EVGA_RECORD record) {
   EFI_PCI_IO_PROTOCOL *pci=NULL;UINT64 saved=0,now=0;UINT32 chip=0;EFI_STATUS s;
   s=t->BootServices->HandleProtocol(NvidiaParent,&Pci,(VOID **)&pci);if(s!=EFI_SUCCESS || !pci)return EFI_UNSUPPORTED;
@@ -467,6 +491,9 @@ static EFI_STATUS DecodeProbe(EFI_SYSTEM_TABLE *t,GU_EVGA_RECORD record) {
     s=Value(record,i?"evga-chip-second":"evga-chip-first",chip);if(s!=EFI_SUCCESS)return s;
     if(chip!=0xb72000a1U)return Checked(record,"evga-chip-identity",EFI_UNSUPPORTED);
   }
+#ifdef GU_EVGA_PROBE_PLATFORM
+  s=PlatformProbe(pci,t,record);if(s!=EFI_SUCCESS)return s;
+#endif
 #ifdef GU_EVGA_PROBE_STATE
   s=StateProbe(pci,record);if(s!=EFI_SUCCESS)return s;
 #endif

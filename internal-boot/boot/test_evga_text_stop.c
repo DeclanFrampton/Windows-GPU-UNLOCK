@@ -72,13 +72,33 @@ static EFI_STATUS EFIAPI MemReadMock(EFI_PCI_IO_PROTOCOL *p,EFI_PCI_IO_PROTOCOL_
  ChipReads++;*(UINT32 *)v=BadChip?0xffffffffU:0xb72000a1U;return EFI_SUCCESS;
 }
 #endif
+#ifdef GU_EVGA_PROBE_PLATFORM
+static BOOLEAN BadPlatformConfig,BadBar;
+static EFI_STATUS EFIAPI LocationMock(EFI_PCI_IO_PROTOCOL *p,UINTN *a,UINTN *b,UINTN *c,UINTN *d){(void)p;*a=*c=*d=0;*b=1;return EFI_SUCCESS;}
+static EFI_STATUS EFIAPI BarMock(EFI_PCI_IO_PROTOCOL *p,UINT8 bar,UINT64 *supports,VOID **out){
+ (void)p;(void)supports;if(bar)return EFI_INVALID_PARAMETER;static EFI_ACPI_ADDRESS_SPACE_DESCRIPTOR r;
+ r=(EFI_ACPI_ADDRESS_SPACE_DESCRIPTOR){0};r.Desc=ACPI_ADDRESS_SPACE_DESCRIPTOR;r.Len=sizeof(r)-3;r.AddrSpaceGranularity=32;r.AddrRangeMin=BadBar?0x85000000:0x84000000;r.AddrRangeMax=0x84ffffff;r.AddrLen=0x1000000;*out=&r;return EFI_SUCCESS;
+}
+#endif
 static EFI_STATUS EFIAPI ReadPci(EFI_PCI_IO_PROTOCOL *p,EFI_PCI_IO_PROTOCOL_WIDTH w,UINT32 off,UINTN n,VOID *v){
-  (void)p;(void)w;if(off || n!=16)return EFI_INVALID_PARAMETER;
+  (void)p;(void)w;
+#ifdef GU_EVGA_PROBE_PLATFORM
+ if(off || (n!=16 && n!=64))return EFI_INVALID_PARAMETER;
+#else
+ if(off || n!=16)return EFI_INVALID_PARAMETER;
+#endif
   UINT32 *cfg=v;for(UINTN i=0;i<n;i++)cfg[i]=0;
   #ifdef GU_EVGA_PROBE_DECODE
   cfg[1]=DecodeAttributes?2:0;
 #endif
-  cfg[0]=BadInventory?0x123410deU:0x220410deU;cfg[2]=0x03000000U;cfg[11]=0x33873842U;return EFI_SUCCESS;
+  #ifdef GU_EVGA_PROBE_PLATFORM
+ if(n==64){cfg[1]|=0x00100000;cfg[0x34/4]=0x40;cfg[0x40/4]=0x00034801;cfg[0x48/4]=0x00020010;cfg[0x4c/4]=0x10000000;cfg[0x10/4]=0x84000000;cfg[0xc8/4]=0x00050011;if(BadPlatformConfig)cfg[0x40/4]=0;}
+#endif
+ cfg[0]=BadInventory?0x123410deU:0x220410deU;cfg[2]=0x03000000U;
+#ifdef GU_EVGA_PROBE_PLATFORM
+ cfg[2]=0x030000a1U;
+#endif
+ cfg[11]=0x33873842U;return EFI_SUCCESS;
 }
 static EFI_STATUS EFIAPI Locate(EFI_LOCATE_SEARCH_TYPE type,EFI_GUID *guid,VOID *key,UINTN *n,EFI_HANDLE **out){
   (void)type;(void)key;static EFI_HANDLE g[2],p[1];g[0]=H(1);g[1]=H(2);p[0]=H(4);
@@ -232,6 +252,9 @@ static EFI_STATUS RecordMock(VOID *p,const char *name,EFI_STATUS s){
   (void)p;(void)name;(void)s;Records++;return FailRecord?EFI_DEVICE_ERROR:EFI_SUCCESS;
 }
 static VOID Init(VOID){
+#ifdef GU_EVGA_PROBE_PLATFORM
+ BadPlatformConfig=BadBar=FALSE;
+#endif
 #ifdef GU_EVGA_PROBE_STATE
  BadPromHash=BadState=FailProm=FALSE;StateReads=PromReads=0;
 #endif
@@ -275,12 +298,25 @@ static VOID Init(VOID){
     Images[i]=(EFI_LOADED_IMAGE_PROTOCOL){0};Images[i].ImageBase=(VOID *)((UINTN)MockStop-stops[i]);Images[i].ImageSize=bytes[i];
   }
   PciIo=(EFI_PCI_IO_PROTOCOL){0};PciIo.Pci.Read=ReadPci;
+#ifdef GU_EVGA_PROBE_PLATFORM
+ PciIo.GetLocation=LocationMock;PciIo.GetBarAttributes=BarMock;
+#endif
 #ifdef GU_EVGA_PROBE_DECODE
  PciIo.Attributes=AttributesMock;PciIo.Mem.Read=MemReadMock;
 #endif
   Root=(EFI_FILE_PROTOCOL){0};Root.Open=FileOpen;Marker=(EFI_FILE_PROTOCOL){0};Marker.Close=FileClose;Marker.Write=FileWrite;Marker.Flush=FileFlush;
 }
-#ifdef GU_EVGA_PROBE_STATE
+#ifdef GU_EVGA_PROBE_PLATFORM
+int main(VOID){
+ BOOLEAN started=FALSE;EFI_STATUS s;
+ Init();s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s!=EFI_SUCCESS||Calls!=8||StateReads!=16||PromReads!=262144||AttributeWrites!=2||DecodeAttributes)return 1;
+ UINTN saved=Records;if(GuEvgaTextStopVerify(&Table)!=EFI_SUCCESS||Records!=saved)return 2;
+ Init();BadPlatformConfig=TRUE;s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s==EFI_SUCCESS||StateReads||PromReads||AttributeWrites!=1)return 3;
+ Init();BadBar=TRUE;s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s==EFI_SUCCESS||StateReads||PromReads||AttributeWrites!=1)return 4;
+ Init();FailEnable=TRUE;s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s==EFI_SUCCESS||StateReads||PromReads)return 5;
+ return 0;
+}
+#elif defined(GU_EVGA_PROBE_STATE)
 int main(VOID){
  BOOLEAN started=FALSE;EFI_STATUS s;
  Init();s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s!=EFI_SUCCESS||ChipReads!=2||StateReads!=16||PromReads!=262144||AttributeWrites!=2||DecodeAttributes)return 1;
