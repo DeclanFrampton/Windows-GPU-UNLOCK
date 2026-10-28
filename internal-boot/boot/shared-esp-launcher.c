@@ -19,7 +19,7 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE image,EFI_SYSTEM_TABLE *table) {
  }
  if(handles)bs->FreePool(handles);
  if(matches!=1)return EFI_SECURITY_VIOLATION;
- const CHAR16 name[]=L"\\EFI\\EVGA-SHARED-AUDIT.EFI";EFI_DEVICE_PATH_PROTOCOL *path=NULL;
+ const CHAR16 name[]=L"\\EFI\\EVGA-SHARED-AUDIT-VISIBLE.EFI";EFI_DEVICE_PATH_PROTOCOL *path=NULL;
  s=EspFilePath(bs,esp,name,sizeof(name),&path);if(s!=EFI_SUCCESS)return s;
  EFI_HANDLE child=NULL;s=bs->LoadImage(FALSE,image,path,NULL,0,&child);bs->FreePool(path);
  if(s!=EFI_SUCCESS || !child)return s==EFI_SUCCESS?EFI_LOAD_ERROR:s;

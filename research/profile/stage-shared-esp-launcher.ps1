@@ -6,7 +6,7 @@ $ErrorActionPreference='Stop'
 $repo=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $build=Join-Path $repo 'internal-boot/boot/build/shared-esp-audit'
 $m=Get-Content -LiteralPath (Join-Path $build 'launcher-manifest.json') -Raw | ConvertFrom-Json
-if($m.Mode -ne 'shared-esp-usb-launcher' -or $WindowsEspGuid -eq [guid]::Empty -or [guid]$m.WindowsEspGuid -ne $WindowsEspGuid){throw 'Wrong launcher manifest or ESP GUID'}
+if($m.Mode -ne 'shared-esp-usb-launcher' -or $m.AuditFileName -ne 'EVGA-SHARED-AUDIT-VISIBLE.EFI' -or $m.AuditEfiSha256 -notmatch '^[0-9a-fA-F]{64}$' -or $WindowsEspGuid -eq [guid]::Empty -or [guid]$m.WindowsEspGuid -ne $WindowsEspGuid){throw 'Wrong launcher manifest or ESP GUID'}
 foreach($pin in @(@('shared-esp-launcher.c',$m.LauncherSourceSha256),@('shared-esp-audit.c',$m.AuditSourceSha256),@('media.h',$m.MediaSha256))){
  if((Get-FileHash -LiteralPath (Join-Path $repo ('internal-boot/boot/'+$pin[0]))).Hash -ine $pin[1]){throw 'Source changed since launcher build'}
 }
@@ -16,8 +16,8 @@ $system=@(Get-Partition | Where-Object {$_.IsSystem -and $_.Guid -and [guid]$_.G
 if($system.Count -ne 1){throw 'Expected one pinned system ESP'}
 $esp=@($system[0] | Get-Volume)
 if($esp.Count -ne 1 -or $esp[0].FileSystem -ne 'FAT32' -or !$esp[0].Path){throw 'Expected FAT32 system ESP'}
-$audit=Get-AuditCheckedPath $esp[0].Path @('EFI','EVGA-SHARED-AUDIT.EFI') $false
-if((Get-FileHash -LiteralPath $audit).Hash -ine 'cfd24d9a1bdcf9fba0c1a7cd0bd314bf494d91c00bb39e3e30d2da87bcd4bbe5'){throw 'Staged audit hash differs from contributor build; stop'}
+$audit=Get-AuditCheckedPath $esp[0].Path @('EFI','EVGA-SHARED-AUDIT-VISIBLE.EFI') $false
+if((Get-FileHash -LiteralPath $audit).Hash -ine $m.AuditEfiSha256){throw 'Staged audit hash differs from contributor build; stop'}
 $letter=$Drive.ToUpperInvariant();$volume=Get-Volume -DriveLetter $letter;$part=@(Get-Partition -DriveLetter $letter)
 if($part.Count -ne 1 -or $volume.FileSystem -ne 'FAT32' -or $part[0].IsSystem -or $part[0].IsBoot){throw 'Expected FAT32 non-system USB partition'}
 $disk=Get-Disk -Number $part[0].DiskNumber
@@ -47,6 +47,6 @@ if($PSCmdlet.ShouldProcess($root,'Create EFI/BOOT/BOOTX64.EFI on USB')){
  }
  $target=[IO.Path]::Combine($boot,'BOOTX64.EFI');$i=$null;$o=$null
  try {$i=[IO.File]::Open($source,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read);$mode=if($ReuseExisting){[IO.FileMode]::Truncate}else{[IO.FileMode]::CreateNew};$o=[IO.File]::Open($target,$mode,[IO.FileAccess]::Write,[IO.FileShare]::None);$i.CopyTo($o);$o.Flush($true)} finally {if($o){$o.Dispose()};if($i){$i.Dispose()}}
- if((Get-FileHash -LiteralPath $target).Hash -ine $m.EfiSha256 -or (Get-FileHash -LiteralPath $audit).Hash -ine 'cfd24d9a1bdcf9fba0c1a7cd0bd314bf494d91c00bb39e3e30d2da87bcd4bbe5'){throw 'Post-copy verification failed; preserve files and report'}
+ if((Get-FileHash -LiteralPath $target).Hash -ine $m.EfiSha256 -or (Get-FileHash -LiteralPath $audit).Hash -ine $m.AuditEfiSha256){throw 'Post-copy verification failed; preserve files and report'}
  "USB launcher staged at $target; staged audit hash verified. Backup: $backup. No firmware entries changed."
 }

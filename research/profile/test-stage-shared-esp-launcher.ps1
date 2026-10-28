@@ -3,7 +3,7 @@ Import-Module Microsoft.PowerShell.Utility
 $repo=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $fixture=Join-Path $env:TEMP ('esp-launcher-test-'+[guid]::NewGuid())
 $usb=Join-Path $fixture 'usb';$global:fixtureEsp=Join-Path $fixture 'esp';[void](New-Item -ItemType Directory -Path (Join-Path $global:fixtureEsp 'EFI'),$usb -Force)
-Set-Content -LiteralPath (Join-Path $global:fixtureEsp 'EFI/EVGA-SHARED-AUDIT.EFI') -Value 'fixture'
+Set-Content -LiteralPath (Join-Path $global:fixtureEsp 'EFI/EVGA-SHARED-AUDIT-VISIBLE.EFI') -Value 'fixture'
 if(Test-Path X:\){throw 'X: already exists; no test started'}
 & subst X: $usb
 if($LASTEXITCODE -ne 0){throw 'Cannot create test drive'}
@@ -11,7 +11,13 @@ try {
  function Get-Partition {param([string]$DriveLetter) if($DriveLetter){[pscustomobject]@{DiskNumber=12;IsSystem=$false;IsBoot=$false}}else{[pscustomobject]@{IsSystem=$true;Guid='c36c3e86-02aa-4f76-af1b-96e327f9d1c1'}}}
  function Get-Volume {param([Parameter(ValueFromPipeline=$true)]$InputObject,[string]$DriveLetter) process {if($DriveLetter){[pscustomobject]@{FileSystem='FAT32'}}else{[pscustomobject]@{FileSystem='FAT32';Path=$global:fixtureEsp}}}}
  function Get-Disk {param($Number) [pscustomobject]@{BusType='USB'}}
- function Get-FileHash {param([string]$LiteralPath) if($LiteralPath -eq (Join-Path $global:fixtureEsp 'EFI/EVGA-SHARED-AUDIT.EFI')){[pscustomobject]@{Hash='cfd24d9a1bdcf9fba0c1a7cd0bd314bf494d91c00bb39e3e30d2da87bcd4bbe5'}}else{Microsoft.PowerShell.Utility\Get-FileHash -LiteralPath $LiteralPath}}
+ $global:wrongAuditHash=$false
+ function Get-FileHash {param([string]$LiteralPath) if($LiteralPath -eq (Join-Path $global:fixtureEsp 'EFI/EVGA-SHARED-AUDIT-VISIBLE.EFI')){[pscustomobject]@{Hash=if($global:wrongAuditHash){'0'*64}else{(Get-Content (Join-Path $repo 'internal-boot/boot/build/shared-esp-audit/launcher-manifest.json') -Raw | ConvertFrom-Json).AuditEfiSha256}}}else{Microsoft.PowerShell.Utility\Get-FileHash -LiteralPath $LiteralPath}}
+ $global:wrongAuditHash=$true
+ $refused=$false
+ try {& (Join-Path $PSScriptRoot 'stage-shared-esp-launcher.ps1') -Drive X -WindowsEspGuid c36c3e86-02aa-4f76-af1b-96e327f9d1c1 -Confirm:$false}catch{$refused=$true}
+ if(!$refused -or (Test-Path X:\EFI)){throw 'Wrong audit hash was not refused before USB mutation'}
+ $global:wrongAuditHash=$false
  & (Join-Path $PSScriptRoot 'stage-shared-esp-launcher.ps1') -Drive X -WindowsEspGuid c36c3e86-02aa-4f76-af1b-96e327f9d1c1 -WhatIf
  if(Test-Path X:\EFI){throw 'WhatIf created files'}
  & (Join-Path $PSScriptRoot 'stage-shared-esp-launcher.ps1') -Drive X -WindowsEspGuid c36c3e86-02aa-4f76-af1b-96e327f9d1c1 -Confirm:$false

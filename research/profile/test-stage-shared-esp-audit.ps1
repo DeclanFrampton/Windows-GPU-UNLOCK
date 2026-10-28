@@ -14,11 +14,14 @@ function Get-FileHash {
  if($LiteralPath -like '*limine_x64.efi'){return [pscustomobject]@{Hash='a11eea5e0235427a14f12035a1960c2659e0f0fd963092025719305ef542a462'}}
  Microsoft.PowerShell.Utility\Get-FileHash -LiteralPath $LiteralPath -Algorithm $Algorithm
 }
-$stage=Join-Path $PSScriptRoot 'stage-shared-esp-audit.ps1';$target=Join-Path $testRoot 'EFI/EVGA-SHARED-AUDIT.EFI'
+Set-Content -LiteralPath (Join-Path $testRoot 'EFI/EVGA-SHARED-AUDIT.EFI') -Value 'prior audit preserved'
+$prior=(Get-FileHash -LiteralPath (Join-Path $testRoot 'EFI/EVGA-SHARED-AUDIT.EFI')).Hash
+$stage=Join-Path $PSScriptRoot 'stage-shared-esp-audit.ps1';$target=Join-Path $testRoot 'EFI/EVGA-SHARED-AUDIT-VISIBLE.EFI'
 & $stage -WindowsEspGuid 'c36c3e86-02aa-4f76-af1b-96e327f9d1c1' -WhatIf
 if(Test-Path -LiteralPath $target){throw 'WhatIf created target'}
 & $stage -WindowsEspGuid 'c36c3e86-02aa-4f76-af1b-96e327f9d1c1'
 if(!(Test-Path -LiteralPath $target)){throw 'Audit target missing'}
 $refused=$false;try {& $stage -WindowsEspGuid 'c36c3e86-02aa-4f76-af1b-96e327f9d1c1'}catch{$refused=$true}
 if(!$refused){throw 'Existing target not refused'}
+if((Get-FileHash -LiteralPath (Join-Path $testRoot 'EFI/EVGA-SHARED-AUDIT.EFI')).Hash -ne $prior){throw 'Prior audit changed'}
 'Full audit staging script passed WhatIf, fixture copy and no-overwrite refusal; inventory and boot-file hashes mocked.'

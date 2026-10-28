@@ -10,7 +10,8 @@ function Get-AuditCheckedPath([string]$Root,[string[]]$Components,[bool]$Directo
  if($actualDirectory -ne $Directory){throw 'Unexpected EFI path type'}
  return $path
 }
-function Copy-SharedEspAudit([string]$Root,[string]$Source,[string]$ExpectedEfiHash,[string]$WindowsHash,[string]$LimineHash){
+function Copy-SharedEspAudit([string]$Root,[string]$Source,[string]$ExpectedEfiHash,[string]$WindowsHash,[string]$LimineHash,[string]$AuditFileName="EVGA-SHARED-AUDIT.EFI"){
+ if($AuditFileName -notin @("EVGA-SHARED-AUDIT.EFI","EVGA-SHARED-AUDIT-VISIBLE.EFI")){throw "Unexpected audit filename"}
  $rootAttrs=[IO.File]::GetAttributes($Root)
  if(($rootAttrs -band [IO.FileAttributes]::ReparsePoint) -eq [IO.FileAttributes]::ReparsePoint -or ($rootAttrs -band [IO.FileAttributes]::Directory) -ne [IO.FileAttributes]::Directory){throw 'Invalid system volume root'}
  $efi=Get-AuditCheckedPath $Root @('EFI') $true
@@ -18,7 +19,7 @@ function Copy-SharedEspAudit([string]$Root,[string]$Source,[string]$ExpectedEfiH
  $limine=Get-AuditCheckedPath $Root @('EFI','limine','limine_x64.efi') $false
  if((Get-FileHash -LiteralPath $windows -Algorithm SHA256).Hash -ine $WindowsHash -or (Get-FileHash -LiteralPath $limine -Algorithm SHA256).Hash -ine $LimineHash){throw 'Existing Windows or Limine EFI changed; no copy attempted'}
  if((Get-FileHash -LiteralPath $Source -Algorithm SHA256).Hash -ine $ExpectedEfiHash){throw 'Audit build hash changed; no copy attempted'}
- $target=[IO.Path]::Combine($efi,'EVGA-SHARED-AUDIT.EFI')
+ $target=[IO.Path]::Combine($efi,$AuditFileName)
  $inputStream=$null;$outputStream=$null
  try {
   $inputStream=[IO.File]::Open($Source,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read)
