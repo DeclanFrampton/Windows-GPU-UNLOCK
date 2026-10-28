@@ -15,7 +15,7 @@
   "prom_hash_matches_original": true,
   "complete_captures": 2,
   "ready_windows": true,
-  "windows_return": "not explicitly reported",
+  "windows_return": "operator confirmed normal Windows loading after Shift+G at 01:16",
   "fixed_selector_profile_matches": false,
   "entry_latched_selector_range_checks_match": true,
   "unlock_proven": false
