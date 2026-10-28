@@ -142,6 +142,17 @@ static EFI_STATUS OpenLog(VOID) {
   EFI_STATUS s=Table->BootServices->HandleProtocol(OwnDevice,&FsGuid,(VOID **)&fs);
   if(s!=EFI_SUCCESS || !fs)return EFI_UNSUPPORTED;
   s=fs->OpenVolume(fs,&Root);if(s!=EFI_SUCCESS || !Root)return EFI_DEVICE_ERROR;
+#ifdef GU_SHARED_ESP_INTEGRATION
+  {
+    CHAR16 name[]=L"\\RTX3090-UNLOCK\\INTG01.TXT";
+    EFI_FILE_PROTOCOL *existing=NULL;
+    s=Root->Open(Root,&existing,name,EFI_FILE_MODE_READ,0);
+    if(s==EFI_SUCCESS){if(existing)existing->Close(existing);return EFI_ALREADY_STARTED;}
+    if(s!=EFI_NOT_FOUND)return s;
+    s=Root->Open(Root,&Log,name,EFI_FILE_MODE_READ|EFI_FILE_MODE_WRITE|EFI_FILE_MODE_CREATE,0);
+    return s==EFI_SUCCESS && Log?EFI_SUCCESS:EFI_DEVICE_ERROR;
+  }
+#else
 #ifdef GU_AUTOMATIC_BOOT
   for(UINTN i=0;i<1000000;i++) {
 #ifdef GU_HEADLESS_RESEARCH
@@ -181,6 +192,7 @@ static EFI_STATUS OpenLog(VOID) {
     return s==EFI_SUCCESS && Log?EFI_SUCCESS:EFI_DEVICE_ERROR;
   }
   return EFI_VOLUME_FULL;
+#endif
 }
 static EFI_STATUS Record(VOID *Context,const char *Event,EFI_STATUS Status) {
   (void)Context;char text[160];UINTN n=0;
