@@ -13,5 +13,11 @@ try {
  if($LASTEXITCODE -ne 0){throw 'Mock link failed'}
  & "./$out/test.exe"
  if($LASTEXITCODE -ne 0){throw "Mock case failed: $LASTEXITCODE"}
- 'Shared ESP admission and Windows handoff mocks passed ten cases; no hardware accessed.'
+ & $Clang -target x86_64-pc-windows-msvc -std=c11 -ffreestanding -fno-builtin -fno-stack-protector -fshort-wchar -O1 -Wall -Wextra -Werror -DGU_SHARED_ESP_AUDIT -DGU_AUDIT_VISIBLE -I ../../deps/edk2/MdePkg/Include -I ../../deps/edk2/MdePkg/Include/X64 -c test_shared_esp_audit.c -o "$out/visible-test.obj"
+ if($LASTEXITCODE -ne 0){throw 'Visible mock compile failed'}
+ & $LldLink /nologo /nodefaultlib /subsystem:console /entry:main /machine:x64 "/out:$out/visible-test.exe" "$out/visible-test.obj" "$out/runtime-test.obj"
+ if($LASTEXITCODE -ne 0){throw 'Visible mock link failed'}
+ & "./$out/visible-test.exe"
+ if($LASTEXITCODE -ne 0){throw "Visible mock failed: $LASTEXITCODE"}
+ 'Shared ESP admission and visible audit mocks passed; no hardware accessed.'
 } finally {Pop-Location}

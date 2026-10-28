@@ -49,6 +49,11 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE image,EFI_SYSTEM_TABLE *table){
  EFI_STATUS s=bs->HandleProtocol(image,&LoadedGuid,(VOID **)&loaded);
  if(s!=EFI_SUCCESS || !loaded || !loaded->DeviceHandle)return EFI_SECURITY_VIOLATION;
  EFI_HANDLE own=loaded->DeviceHandle;s=FindOwnWindowsEsp(bs,own);if(s!=EFI_SUCCESS)return s;
+#ifdef GU_AUDIT_VISIBLE
+ table->ConOut->OutputString(table->ConOut,L"AUDIT ENTERED ON PINNED ESP. Loading Windows in 10 seconds.\r\n");
+ if(!bs->Stall)return EFI_UNSUPPORTED;
+ s=bs->Stall(10000000);if(s!=EFI_SUCCESS)return s;
+#endif
  const CHAR16 name[]=L"\\EFI\\Microsoft\\Boot\\bootmgfw.efi";
  EFI_DEVICE_PATH_PROTOCOL *path=NULL;s=EspFilePath(bs,own,name,sizeof(name),&path);if(s!=EFI_SUCCESS)return s;
  EFI_HANDLE windows=NULL;s=bs->LoadImage(FALSE,image,path,NULL,0,&windows);bs->FreePool(path);
