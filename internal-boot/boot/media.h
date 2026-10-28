@@ -3,7 +3,9 @@
 #include <Uefi.h>
 #include <Protocol/DevicePath.h>
 
-#ifdef GU_SHARED_ESP_QUAL
+#if defined(GU_SHARED_ESP_UNLOCK) || defined(GU_SHARED_ESP_UNLOCK_CONFIG)
+#include "build/shared-esp-unlock/platform-config.h"
+#elif defined(GU_SHARED_ESP_QUAL)
 #include "build/shared-esp-qualification/platform-config.h"
 #elif defined(GU_SHARED_ESP_INTEGRATION)
 #include "build/shared-esp-integration/platform-config.h"

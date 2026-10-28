@@ -18,8 +18,13 @@
 #if !defined(GU_DIAGNOSTIC_ONLY) || (!defined(GU_USB_MEDIA) && !defined(GU_EVGA_SHARED_ESP_ADMISSION)) || defined(GU_DIAGNOSTIC_PROBE) || defined(GU_FULL_UNLOCK) || defined(GU_CONSOLE_PREPARE)
 #error EVGA text Stop must be a separate USB image with no GPU probe or unlock
 #endif
-#if defined(GU_EVGA_SHARED_ESP_ADMISSION) && (defined(GU_USB_MEDIA) || defined(GU_EVGA_UNLOCK))
-#error Shared ESP admission is an isolated non-unlock build only
+#if defined(GU_EVGA_SHARED_ESP_ADMISSION) && (defined(GU_USB_MEDIA) || (defined(GU_EVGA_UNLOCK) && !defined(GU_SHARED_ESP_UNLOCK)))
+#error Shared ESP unlock requires its explicit isolated mode; USB remains forbidden
+#endif
+#endif
+#ifdef GU_SHARED_ESP_UNLOCK
+#if !defined(GU_EVGA_UNLOCK) || !defined(GU_EVGA_SHARED_ESP_ADMISSION) || !defined(GU_EVGA_STOP_ONLY) || defined(GU_USB_MEDIA) || defined(GU_SHARED_ESP_QUAL)
+#error Shared ESP unlock is the exact standalone transaction build only
 #endif
 #endif
 #ifdef GU_HEADLESS_RESEARCH
@@ -142,9 +147,11 @@ static EFI_STATUS OpenLog(VOID) {
   EFI_STATUS s=Table->BootServices->HandleProtocol(OwnDevice,&FsGuid,(VOID **)&fs);
   if(s!=EFI_SUCCESS || !fs)return EFI_UNSUPPORTED;
   s=fs->OpenVolume(fs,&Root);if(s!=EFI_SUCCESS || !Root)return EFI_DEVICE_ERROR;
-#if defined(GU_SHARED_ESP_INTEGRATION) || defined(GU_SHARED_ESP_QUAL)
+#if defined(GU_SHARED_ESP_INTEGRATION) || defined(GU_SHARED_ESP_QUAL) || defined(GU_SHARED_ESP_UNLOCK)
   {
-#ifdef GU_SHARED_ESP_QUAL
+#ifdef GU_SHARED_ESP_UNLOCK
+    CHAR16 name[]=L"\\RTX3090-UNLOCK\\SULK01.TXT";
+#elif defined(GU_SHARED_ESP_QUAL)
     CHAR16 name[]=L"\\RTX3090-UNLOCK\\QUAL01.TXT";
 #else
     CHAR16 name[]=L"\\RTX3090-UNLOCK\\INTG01.TXT";
