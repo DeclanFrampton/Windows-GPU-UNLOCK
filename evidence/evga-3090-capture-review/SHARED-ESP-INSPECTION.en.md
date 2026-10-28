@@ -4,6 +4,8 @@
 
 Movian prefers a separate entry on his existing Windows/CachyOS ESP. The current EVGA EFI accepts USB media and directly starts the pinned Windows Boot Manager after the transaction. It therefore bypasses Linux selection for that invocation; that does not by itself delete or change the existing dual-boot configuration. Existing internal code rejects using the same partition for the unlock image and Windows. A shared-ESP EVGA profile is not implemented or tested.
 
+Movian clarified that unlock is required for Windows only; normal CachyOS boot should remain available. A Windows-only unlock entry can therefore hand directly to Windows, provided existing Linux boot files and ordinary boot selection are preserved. No Linux unlock or post-unlock OS menu is requested.
+
 The next inspection queries the existing system volume's filesystem and capacity/free bytes, and enumerates firmware boot entries via `bcdedit /enum firmware`. It does not mount the ESP, list or write its files, modify firmware entries, change boot order, or reboot. It may need an administrator PowerShell to read firmware entries; if refused, send the error. Stop on any error.
 
 After updating the branch, run from the repository root:
