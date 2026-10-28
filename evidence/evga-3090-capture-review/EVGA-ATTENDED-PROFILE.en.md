@@ -6,7 +6,9 @@ This experimental exact-machine profile extends the EVGA19 and EVGA20 research b
 
 Each attempt creates a new permanent `EVGA-UNLOCK<slot>.ARMED` marker and records its slot in the capture. Slot 5 requires the exact reviewed EVGA20 capture and marker 4. For slots 6–99, staging additionally requires the previous marker and the latest EVGA log to record the previous slot, two complete captures, successful transaction return, asset cleanup and ready-Windows. A missing, interrupted or failed previous attempt must be investigated; do not delete markers, modify captures or skip slot numbers to bypass the checks. Staging checks recorded events, not actual Windows startup or proof that hardware is safe.
 
-An experimental preparation wrapper can select the next contiguous slot and invoke the same build and staging scripts with one command. It does not reboot or authorize the EFI transaction. Slot selection and `-WhatIf` have only been tested with synthetic markers and mocked storage; the complete wrapper has not yet been tested on a USB or live hardware. `-WhatIf` shows the selected slot without building or staging. Do not use a wrapper refusal as a reason to remove evidence.
+An experimental preparation wrapper can select the next contiguous slot and invoke the same build and staging scripts with one command. It does not reboot or authorize the EFI transaction. Slot selection and `-WhatIf` were tested locally with synthetic markers and mocked storage; the complete wrapper has not yet been tested on a USB or live hardware. `-WhatIf` shows the selected slot without building or staging. Do not use a wrapper refusal as a reason to remove evidence.
+
+Movian subsequently reported the dry run on his USB selected slot 7 and displayed the expected WhatIf operation. This confirms the reported dry-run selection; it does not verify an actual build, staging or boot.
 
 ```powershell
 ./research/profile/prepare-evga-attended.ps1 -Drive D -WindowsEspGuid "c36c3e86-02aa-4f76-af1b-96e327f9d1c1" -Clang "C:/Program Files/LLVM/bin/clang.exe" -LldLink "C:/Program Files/LLVM/bin/lld-link.exe" -WhatIf
