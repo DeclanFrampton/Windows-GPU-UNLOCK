@@ -57,5 +57,11 @@ try {
  if($LASTEXITCODE -ne 0){throw 'NVIDIA parent host link failed'}
  & "./$out/nvidia-parent-test.exe"
  if($LASTEXITCODE -ne 0){throw "NVIDIA parent scenario failed: $LASTEXITCODE"}
- '25 membership host checkpoints, 7 combined-release checkpoints, 8 graphics-release checkpoints, 12 EDID checkpoints, 13 sibling checkpoints, 11 NVIDIA audit checkpoints, 11 NVIDIA child checkpoints, 11 NVIDIA parent checkpoints and 9 capture regression cases passed (mock protocols, hashes and Stop; no captured firmware executed).'
+ & $Clang -target x86_64-pc-windows-msvc -std=c11 -ffreestanding -fno-builtin -fno-stack-protector -O1 -Wall -Wextra -Werror -DGU_EVGA_RELEASE_TEXT -DGU_EVGA_RELEASE_GRAPHICS -DGU_EVGA_RELEASE_EDID -DGU_EVGA_RELEASE_EDID_SIBLINGS -DGU_EVGA_AUDIT_NVIDIA -DGU_EVGA_STOP_NVIDIA_CHILDREN -DGU_EVGA_STOP_NVIDIA_PARENT -DGU_EVGA_PROBE_DECODE -I deps/edk2/MdePkg/Include -I deps/edk2/MdePkg/Include/X64 -c internal-boot/boot/test_evga_text_stop.c -o "$out/decode-probe.host.obj"
+ if($LASTEXITCODE -ne 0){throw 'Decode probe host compile failed'}
+ & $LldLink /nologo /nodefaultlib /subsystem:console /entry:main /machine:x64 "/out:$out/decode-probe-test.exe" "$out/decode-probe.host.obj" "$out/efi_runtime.host.obj"
+ if($LASTEXITCODE -ne 0){throw 'Decode probe host link failed'}
+ & "./$out/decode-probe-test.exe"
+ if($LASTEXITCODE -ne 0){throw "Decode probe scenario failed: $LASTEXITCODE"}
+ '25 membership host checkpoints, 7 combined-release checkpoints, 8 graphics-release checkpoints, 12 EDID checkpoints, 13 sibling checkpoints, 11 NVIDIA audit checkpoints, 11 NVIDIA child checkpoints, 11 NVIDIA parent checkpoints, 8 decode-probe checkpoints and 9 capture regression cases passed (mock protocols, hashes and Stop; no captured firmware executed).'
 } finally {Pop-Location}

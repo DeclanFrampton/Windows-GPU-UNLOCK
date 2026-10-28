@@ -45,9 +45,26 @@ static EFI_STATUS EFIAPI SayMock(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *p,CHAR16 *s){(
 static EFI_STATUS EFIAPI ReadKey(EFI_SIMPLE_TEXT_INPUT_PROTOCOL *p,EFI_INPUT_KEY *k){
   (void)p;if(Keys++==0 || Timeout)return EFI_NOT_READY;k->UnicodeChar=Cancel?0:'G';k->ScanCode=Cancel?SCAN_ESC:0;return EFI_SUCCESS;
 }
+#ifdef GU_EVGA_PROBE_DECODE
+static UINT64 DecodeAttributes;static UINTN ChipReads,AttributeWrites;static BOOLEAN BadChip,FailEnable,FailDisable;
+static EFI_STATUS EFIAPI AttributesMock(EFI_PCI_IO_PROTOCOL *p,EFI_PCI_IO_PROTOCOL_ATTRIBUTE_OPERATION op,UINT64 a,UINT64 *out){
+ (void)p;if(op==EfiPciIoAttributeOperationGet){*out=DecodeAttributes;return EFI_SUCCESS;}
+ AttributeWrites++;if(a!=EFI_PCI_IO_ATTRIBUTE_MEMORY)return EFI_INVALID_PARAMETER;
+ if(op==EfiPciIoAttributeOperationEnable){if(FailEnable)return EFI_DEVICE_ERROR;DecodeAttributes=a;return EFI_SUCCESS;}
+ if(op==EfiPciIoAttributeOperationDisable){if(FailDisable)return EFI_DEVICE_ERROR;DecodeAttributes=0;return EFI_SUCCESS;}
+ return EFI_UNSUPPORTED;
+}
+static EFI_STATUS EFIAPI MemReadMock(EFI_PCI_IO_PROTOCOL *p,EFI_PCI_IO_PROTOCOL_WIDTH w,UINT8 bar,UINT64 off,UINTN n,VOID *v){
+ (void)p;if(w!=EfiPciIoWidthUint32 || bar || off || n!=1 || DecodeAttributes!=EFI_PCI_IO_ATTRIBUTE_MEMORY)return EFI_INVALID_PARAMETER;
+ ChipReads++;*(UINT32 *)v=BadChip?0xffffffffU:0xb72000a1U;return EFI_SUCCESS;
+}
+#endif
 static EFI_STATUS EFIAPI ReadPci(EFI_PCI_IO_PROTOCOL *p,EFI_PCI_IO_PROTOCOL_WIDTH w,UINT32 off,UINTN n,VOID *v){
   (void)p;(void)w;if(off || n!=16)return EFI_INVALID_PARAMETER;
   UINT32 *cfg=v;for(UINTN i=0;i<n;i++)cfg[i]=0;
+  #ifdef GU_EVGA_PROBE_DECODE
+  cfg[1]=DecodeAttributes?2:0;
+#endif
   cfg[0]=BadInventory?0x123410deU:0x220410deU;cfg[2]=0x03000000U;cfg[11]=0x33873842U;return EFI_SUCCESS;
 }
 static EFI_STATUS EFIAPI Locate(EFI_LOCATE_SEARCH_TYPE type,EFI_GUID *guid,VOID *key,UINTN *n,EFI_HANDLE **out){
@@ -202,6 +219,9 @@ static EFI_STATUS RecordMock(VOID *p,const char *name,EFI_STATUS s){
   (void)p;(void)name;(void)s;Records++;return FailRecord?EFI_DEVICE_ERROR:EFI_SUCCESS;
 }
 static VOID Init(VOID){
+#ifdef GU_EVGA_PROBE_DECODE
+ DecodeAttributes=ChipReads=AttributeWrites=0;BadChip=FailEnable=FailDisable=FALSE;
+#endif
 #ifdef GU_EVGA_STOP_NVIDIA_PARENT
   NvidiaParentStopped=ParentGone=FailParent=BadParentOwner=BadParentProtocol=FALSE;
 #endif
@@ -239,9 +259,24 @@ static VOID Init(VOID){
     Images[i]=(EFI_LOADED_IMAGE_PROTOCOL){0};Images[i].ImageBase=(VOID *)((UINTN)MockStop-stops[i]);Images[i].ImageSize=bytes[i];
   }
   PciIo=(EFI_PCI_IO_PROTOCOL){0};PciIo.Pci.Read=ReadPci;
+#ifdef GU_EVGA_PROBE_DECODE
+ PciIo.Attributes=AttributesMock;PciIo.Mem.Read=MemReadMock;
+#endif
   Root=(EFI_FILE_PROTOCOL){0};Root.Open=FileOpen;Marker=(EFI_FILE_PROTOCOL){0};Marker.Close=FileClose;Marker.Write=FileWrite;Marker.Flush=FileFlush;
 }
-#ifdef GU_EVGA_STOP_NVIDIA_PARENT
+#ifdef GU_EVGA_PROBE_DECODE
+int main(VOID){
+ BOOLEAN started=FALSE;EFI_STATUS s;
+ Init();s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s!=EFI_SUCCESS||Calls!=8||ChipReads!=2||AttributeWrites!=2||DecodeAttributes)return 1;
+ UINTN saved=Records;if(GuEvgaTextStopVerify(&Table)!=EFI_SUCCESS||Records!=saved||ChipReads!=2||AttributeWrites!=2)return 2;
+ Init();FailEnable=TRUE;s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s==EFI_SUCCESS||ChipReads||AttributeWrites!=1)return 3;
+ Init();BadChip=TRUE;s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s==EFI_SUCCESS||ChipReads!=1||AttributeWrites!=1)return 4;
+ Init();FailDisable=TRUE;s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s==EFI_SUCCESS||ChipReads!=2||AttributeWrites!=2)return 5;
+ Init();s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s!=EFI_SUCCESS)return 6;DecodeAttributes=EFI_PCI_IO_ATTRIBUTE_MEMORY;if(GuEvgaTextStopVerify(&Table)==EFI_SUCCESS)return 7;
+ Init();FailParent=TRUE;s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s==EFI_SUCCESS||AttributeWrites||ChipReads)return 8;
+ return 0;
+}
+#elif defined(GU_EVGA_STOP_NVIDIA_PARENT)
 int main(VOID){
   BOOLEAN started=FALSE;EFI_STATUS s;
   Init();s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s!=EFI_SUCCESS||Calls!=8||!ParentGone)return 1;

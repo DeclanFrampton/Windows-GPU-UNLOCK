@@ -46,7 +46,11 @@ static BOOLEAN GraphicsReleased;
 #ifdef GU_EVGA_AUDIT_NVIDIA
 #ifdef GU_EVGA_STOP_NVIDIA_CHILDREN
 #ifdef GU_EVGA_STOP_NVIDIA_PARENT
+#ifdef GU_EVGA_PROBE_DECODE
+#define ATTEMPT_PATH L"\\RTX3090-UNLOCK\\EVGA-DECODE-PROBE.ARMED"
+#else
 #define ATTEMPT_PATH L"\\RTX3090-UNLOCK\\EVGA-NVIDIA-PARENT.ARMED"
+#endif
 #else
 #define ATTEMPT_PATH L"\\RTX3090-UNLOCK\\EVGA-NVIDIA-CHILDREN.ARMED"
 #endif
@@ -414,6 +418,40 @@ static EFI_STATUS NvidiaPost(EFI_SYSTEM_TABLE *t,GU_EVGA_RECORD record) {
   if(*(EFI_HANDLE *)(context+0x88)!=NULL || context[0x98]!=0)return EFI_ACCESS_DENIED;
   return Checked(record,"evga-nvidia-children-post-graph",EFI_SUCCESS);
 }
+#ifdef GU_EVGA_PROBE_DECODE
+/* One bounded admission experiment, not an unlock path. Error holds; no blind restoration. */
+static EFI_STATUS DecodeConfig(EFI_PCI_IO_PROTOCOL *pci,UINT16 expected,GU_EVGA_RECORD record,const char *event) {
+  UINT32 config[16];EFI_STATUS s=pci->Pci.Read(pci,EfiPciIoWidthUint32,0,16,config);
+  if(s==EFI_SUCCESS && (config[0]!=0x220410deU || config[11]!=0x33873842U || (config[2]>>24)!=3 || (config[1]&0xffff)!=expected))s=EFI_ACCESS_DENIED;
+  return Checked(record,event,s);
+}
+static EFI_STATUS DecodeProbe(EFI_SYSTEM_TABLE *t,GU_EVGA_RECORD record) {
+  EFI_PCI_IO_PROTOCOL *pci=NULL;UINT64 saved=0,now=0;UINT32 chip=0;EFI_STATUS s;
+  s=t->BootServices->HandleProtocol(NvidiaParent,&Pci,(VOID **)&pci);if(s!=EFI_SUCCESS || !pci)return EFI_UNSUPPORTED;
+  if(!pci->Attributes || !pci->Mem.Read)return EFI_UNSUPPORTED;
+  s=DecodeConfig(pci,0,record,"evga-decode-command-before");if(s!=EFI_SUCCESS)return s;
+  s=pci->Attributes(pci,EfiPciIoAttributeOperationGet,0,&saved);if(s!=EFI_SUCCESS)return s;
+  if(saved & (EFI_PCI_IO_ATTRIBUTE_IO|EFI_PCI_IO_ATTRIBUTE_MEMORY|EFI_PCI_IO_ATTRIBUTE_BUS_MASTER|EFI_PCI_IO_ATTRIBUTE_VGA_MEMORY|EFI_PCI_IO_ATTRIBUTE_VGA_IO))return EFI_ACCESS_DENIED;
+  s=record(NULL,"evga-memory-enable-before",EFI_SUCCESS);if(s!=EFI_SUCCESS)return s;
+  s=pci->Attributes(pci,EfiPciIoAttributeOperationEnable,EFI_PCI_IO_ATTRIBUTE_MEMORY,NULL);
+  s=Checked(record,"evga-memory-enable-return",s);if(s!=EFI_SUCCESS)return s;
+  s=DecodeConfig(pci,2,record,"evga-decode-command-enabled");if(s!=EFI_SUCCESS)return s;
+  for(UINTN i=0;i<2;i++) {
+    s=record(NULL,i?"evga-chip-second-before":"evga-chip-first-before",EFI_SUCCESS);if(s!=EFI_SUCCESS)return s;
+    s=pci->Mem.Read(pci,EfiPciIoWidthUint32,0,0,1,&chip);if(s!=EFI_SUCCESS)return Checked(record,"evga-chip-read",s);
+    s=Value(record,i?"evga-chip-second":"evga-chip-first",chip);if(s!=EFI_SUCCESS)return s;
+    if(chip!=0xb72000a1U)return Checked(record,"evga-chip-identity",EFI_UNSUPPORTED);
+  }
+  s=record(NULL,"evga-memory-disable-before",EFI_SUCCESS);if(s!=EFI_SUCCESS)return s;
+  s=pci->Attributes(pci,EfiPciIoAttributeOperationDisable,EFI_PCI_IO_ATTRIBUTE_MEMORY,NULL);
+  s=Checked(record,"evga-memory-disable-return",s);if(s!=EFI_SUCCESS)return s;
+  for(UINTN i=0;i<2;i++) {
+    s=DecodeConfig(pci,0,record,"evga-decode-command-restored");if(s!=EFI_SUCCESS)return s;
+    s=pci->Attributes(pci,EfiPciIoAttributeOperationGet,0,&now);if(s!=EFI_SUCCESS || now!=saved)return EFI_ACCESS_DENIED;
+  }
+  return NvidiaPost(t,record);
+}
+#endif
 static EFI_STATUS NvidiaChildrenStop(EFI_SYSTEM_TABLE *t,GU_EVGA_RECORD record) {
   EFI_STATUS s=NvidiaAudit(t,record);if(s!=EFI_SUCCESS)return s;
   EFI_HANDLE children[3];UINTN n=1;children[0]=Plan.Physical;
@@ -427,7 +465,12 @@ static EFI_STATUS NvidiaChildrenStop(EFI_SYSTEM_TABLE *t,GU_EVGA_RECORD record) 
   s=record(NULL,"evga-nvidia-parent-stop-before",EFI_SUCCESS);if(s!=EFI_SUCCESS)return s;
   s=NvidiaDriver->Stop(NvidiaDriver,NvidiaParent,0,NULL);
   logged=record(NULL,"evga-nvidia-parent-stop-return",s);if(logged!=EFI_SUCCESS)return logged;if(s!=EFI_SUCCESS)return s;
-  NvidiaParentStopped=TRUE;return NvidiaPost(t,record);
+  NvidiaParentStopped=TRUE;s=NvidiaPost(t,record);if(s!=EFI_SUCCESS)return s;
+#ifdef GU_EVGA_PROBE_DECODE
+  return DecodeProbe(t,record);
+#else
+  return s;
+#endif
 #else
   return EFI_SUCCESS;
 #endif
@@ -436,7 +479,14 @@ static EFI_STATUS NvidiaChildrenStop(EFI_SYSTEM_TABLE *t,GU_EVGA_RECORD record) 
 EFI_STATUS GuEvgaTextStopVerify(EFI_SYSTEM_TABLE *t) {
   if(!t || !t->BootServices || !Plan.Driver || !Plan.TextAgent)return EFI_INVALID_PARAMETER;
 #ifdef GU_EVGA_STOP_NVIDIA_CHILDREN
-  if(NvidiaChildrenStopped)return NvidiaPost(t,NULL);
+  if(NvidiaChildrenStopped){
+#ifdef GU_EVGA_PROBE_DECODE
+    EFI_PCI_IO_PROTOCOL *pci=NULL;EFI_STATUS s=t->BootServices->HandleProtocol(NvidiaParent,&Pci,(VOID **)&pci);
+    if(s!=EFI_SUCCESS || !pci)return EFI_UNSUPPORTED;
+    s=DecodeConfig(pci,0,NULL,"unused");if(s!=EFI_SUCCESS)return s;
+#endif
+    return NvidiaPost(t,NULL);
+  }
 #endif
   EFI_STATUS s=Graph(t,TRUE,NULL); /* Files are closed: no logging on the final check. */
 #ifdef GU_EVGA_AUDIT_NVIDIA
