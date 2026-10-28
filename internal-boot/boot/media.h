@@ -3,7 +3,9 @@
 #include <Uefi.h>
 #include <Protocol/DevicePath.h>
 
-#ifdef GU_EVGA_STOP_ONLY
+#ifdef GU_SHARED_ESP_AUDIT
+#include "build/shared-esp-audit/platform-config.h"
+#elif defined(GU_EVGA_STOP_ONLY)
 #include "build/evga-text-stop/platform-config.h"
 #else
 #include "platform-config.h" /* Generated locally by Configure.ps1. */
