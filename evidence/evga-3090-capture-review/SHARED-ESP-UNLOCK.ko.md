@@ -19,3 +19,17 @@ Windows에서 영어 문서의 `read-shared-esp-unlock.ps1`로 새 로컬 폴더
 성공 판단에는 올바른 slot, transaction-return 성공, containment/정리, 자산 해제, decode 복원, capture 완료 2개, ready-Windows 성공과 정상 Windows 부팅 보고가 모두 필요합니다. STARTED, USB 예약, 키 마커, 단일 callback 또는 Windows만으로는 언락 증거가 아닙니다. 로그 검토 성공 이후에만 기존 수동 benchmark 절차를 사용하세요. 반복 가능성/자동 부팅/복구/성능 향상은 이 테스트만으로 증명하지 않습니다.
 
 로컬 PE, gate 6개, Prepare/logger/Windows 8개, 런처 10개, 교차 볼륨 승인/해시/WhatIf/예약/snapshot/재시도 거부/수집/USB 복원 fixture를 통과했습니다. 기존 transaction adapter 및 release/보존 자산 정리 mock도 통과했습니다. 실제 하드웨어/펌웨어 transaction은 실행하지 않았습니다. slot 7 예시 해시는 영어 문서에 있으며 실제 slot/toolchain에 따라 달라질 수 있습니다.
+
+## 한 명령으로 준비
+
+관리자 PowerShell에서 `prepare-shared-esp-unlock.ps1`은 슬롯 확인, 빌드, 호스트 테스트 세 가지를 순서대로 실행합니다. `-Stage`를 지정할 때만 기존 보호 스테이징 스크립트 두 개를 실행합니다. 슬롯과 원래 USB 부팅 해시를 출력하므로 USB 외부에 기록하세요. 재부팅이나 실제 트랜잭션은 수행하지 않습니다. `-Stage`가 없으면 빌드와 테스트만 합니다. 기존 위험, 백업, 중단 및 재시도 금지 지침도 동일하게 적용됩니다.
+
+```powershell
+./research/profile/prepare-shared-esp-unlock.ps1 -WindowsEspGuid 'c36c3e86-02aa-4f76-af1b-96e327f9d1c1' -Drive D -Clang 'C:/Program Files/LLVM/bin/clang.exe' -LldLink 'C:/Program Files/LLVM/bin/lld-link.exe' -Stage
+```
+
+부팅 후 `finish-shared-esp-unlock.ps1`에 기록한 슬롯, 원래 해시와 ESP 외부의 새 출력 폴더를 전달하면 증거를 수집하고 USB를 복원합니다. 증거 수집이 실패하면 복원 전에 중단하므로 파일을 보존하고 오류를 보고하세요.
+
+```powershell
+./research/profile/finish-shared-esp-unlock.ps1 -WindowsEspGuid 'c36c3e86-02aa-4f76-af1b-96e327f9d1c1' -Drive D -AttemptSlot <slot> -OriginalSha256 '<hash>' -OutputDirectory 'G:/Movian/SULK01-results'
+```

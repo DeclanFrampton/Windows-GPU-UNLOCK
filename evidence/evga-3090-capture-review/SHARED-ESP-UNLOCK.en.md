@@ -8,6 +8,23 @@ QUAL01's raw marker/log were independently inspected: consumer/NVIDIA Stops, own
 
 The original USB history determines the next global attempt number; do not guess it or hard-code the example build slot. Stage verifies the prior USB capture pins and latest successful slot/transaction/cleanup, snapshots its markers/latest log into ESP `RTX3090-UNLOCK/USB-HISTORY-SULK01`, then creates **a reservation** named `EVGA-UNLOCK<N>.ARMED` on the original USB before creating a bootable ESP candidate. This USB reservation is not evidence execution occurred. It deliberately prevents the older USB workflow from advancing without review of the new shared attempt. On the ESP, the numbered runtime marker is created separately only after fresh Shift+G. A fixed SULK01 entry gate is consumed before Prepare, including cancellation/refusal. Neither gate nor reservation is reset automatically.
 
+
+## One-command preparation
+
+Instead of entering the preparation commands individually, run the helper below from administrator PowerShell. It discovers the slot, builds and runs all three host tests, and only with `-Stage` runs both existing guarded staging scripts. It prints the original USB boot hash and slot before staging; record both outside the USB for the post-run collector. It never reboots or performs the transaction. Without `-Stage` it only builds and tests. The same risks, backup, consent, failure and no-retry instructions below apply; if staging fails, preserve partial files and markers.
+
+```powershell
+./research/profile/prepare-shared-esp-unlock.ps1 -WindowsEspGuid 'c36c3e86-02aa-4f76-af1b-96e327f9d1c1' -Drive D -Clang 'C:/Program Files/LLVM/bin/clang.exe' -LldLink 'C:/Program Files/LLVM/bin/lld-link.exe' -Stage
+```
+
+After the attended boot, the collector/restore helper combines both commands. Supply the recorded slot and original hash, and use a new output folder outside the ESP:
+
+```powershell
+./research/profile/finish-shared-esp-unlock.ps1 -WindowsEspGuid 'c36c3e86-02aa-4f76-af1b-96e327f9d1c1' -Drive D -AttemptSlot <slot> -OriginalSha256 '<hash>' -OutputDirectory 'G:/Movian/SULK01-results'
+```
+
+If evidence collection fails, the helper stops before USB restoration; preserve the files and report the error. The original individual commands below remain available.
+
 From the updated repository root in administrator PowerShell, replace `D` with the verified **original capture USB** letter. Preserve its captures/markers and the existing ESP assets. Use working compiler arguments if needed.
 
 ```powershell
