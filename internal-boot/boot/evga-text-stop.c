@@ -107,6 +107,13 @@ static CHAR16 AttemptPath[]=L"\\RTX3090-UNLOCK\\EVGA-UNLOCK00.ARMED";
 #else
 #define ATTEMPT_PATH L"\\RTX3090-UNLOCK\\EVGA-TEXT-STOP.ARMED"
 #endif
+#ifdef GU_SHARED_ESP_QUAL
+#ifdef GU_EVGA_UNLOCK
+#error QUAL01 must never contain an unlock transaction
+#endif
+#undef ATTEMPT_PATH
+#define ATTEMPT_PATH L"\\RTX3090-UNLOCK\\QUAL01-GPU.ARMED"
+#endif
 static EFI_STATUS Checked(GU_EVGA_RECORD record,const char *event,EFI_STATUS status) {
   if(record){EFI_STATUS io=record(NULL,event,status);if(io!=EFI_SUCCESS)return io;}
   return status;

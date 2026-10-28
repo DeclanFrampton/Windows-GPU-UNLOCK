@@ -11,7 +11,7 @@ function Get-AuditCheckedPath([string]$Root,[string[]]$Components,[bool]$Directo
  return $path
 }
 function Copy-SharedEspAudit([string]$Root,[string]$Source,[string]$ExpectedEfiHash,[string]$WindowsHash,[string]$LimineHash,[string]$AuditFileName="EVGA-SHARED-AUDIT.EFI"){
- if($AuditFileName -notin @("EVGA-SHARED-AUDIT.EFI","EVGA-SHARED-AUDIT-VISIBLE.EFI","EVGA-SHARED-ASSETS.EFI","EVGA-SHARED-RETAIN.EFI","EVGA-SHARED-INTEGRATION.EFI")){throw "Unexpected audit filename"}
+ if($AuditFileName -notin @("EVGA-SHARED-AUDIT.EFI","EVGA-SHARED-AUDIT-VISIBLE.EFI","EVGA-SHARED-ASSETS.EFI","EVGA-SHARED-RETAIN.EFI","EVGA-SHARED-INTEGRATION.EFI","EVGA-SHARED-QUALIFICATION.EFI")){throw "Unexpected audit filename"}
  $rootAttrs=[IO.File]::GetAttributes($Root)
  if(($rootAttrs -band [IO.FileAttributes]::ReparsePoint) -eq [IO.FileAttributes]::ReparsePoint -or ($rootAttrs -band [IO.FileAttributes]::Directory) -ne [IO.FileAttributes]::Directory){throw 'Invalid system volume root'}
  $efi=Get-AuditCheckedPath $Root @('EFI') $true

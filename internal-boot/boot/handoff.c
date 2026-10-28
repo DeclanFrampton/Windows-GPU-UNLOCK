@@ -142,9 +142,13 @@ static EFI_STATUS OpenLog(VOID) {
   EFI_STATUS s=Table->BootServices->HandleProtocol(OwnDevice,&FsGuid,(VOID **)&fs);
   if(s!=EFI_SUCCESS || !fs)return EFI_UNSUPPORTED;
   s=fs->OpenVolume(fs,&Root);if(s!=EFI_SUCCESS || !Root)return EFI_DEVICE_ERROR;
-#ifdef GU_SHARED_ESP_INTEGRATION
+#if defined(GU_SHARED_ESP_INTEGRATION) || defined(GU_SHARED_ESP_QUAL)
   {
+#ifdef GU_SHARED_ESP_QUAL
+    CHAR16 name[]=L"\\RTX3090-UNLOCK\\QUAL01.TXT";
+#else
     CHAR16 name[]=L"\\RTX3090-UNLOCK\\INTG01.TXT";
+#endif
     EFI_FILE_PROTOCOL *existing=NULL;
     s=Root->Open(Root,&existing,name,EFI_FILE_MODE_READ,0);
     if(s==EFI_SUCCESS){if(existing)existing->Close(existing);return EFI_ALREADY_STARTED;}
