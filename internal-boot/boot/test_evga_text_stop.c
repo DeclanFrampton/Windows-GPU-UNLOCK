@@ -306,6 +306,10 @@ static VOID Init(VOID){
 #endif
   Root=(EFI_FILE_PROTOCOL){0};Root.Open=FileOpen;Marker=(EFI_FILE_PROTOCOL){0};Marker.Close=FileClose;Marker.Write=FileWrite;Marker.Flush=FileFlush;
 }
+#ifdef GU_EVGA_PROBE_RESOURCES
+static BOOLEAN ResourceRefusal;
+EFI_STATUS GuEvgaResourcesClaim(EFI_SYSTEM_TABLE *t,EFI_HANDLE h,EFI_PCI_IO_PROTOCOL *p,GU_EVGA_RECORD r){(void)t;(void)h;(void)p;(void)r;return ResourceRefusal?EFI_ACCESS_DENIED:EFI_SUCCESS;}
+#endif
 #ifdef GU_EVGA_PROBE_PLATFORM
 int main(VOID){
  BOOLEAN started=FALSE;EFI_STATUS s;
@@ -314,6 +318,9 @@ int main(VOID){
  Init();BadPlatformConfig=TRUE;s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s==EFI_SUCCESS||StateReads||PromReads||AttributeWrites!=1)return 3;
  Init();BadBar=TRUE;s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s==EFI_SUCCESS||StateReads||PromReads||AttributeWrites!=1)return 4;
  Init();FailEnable=TRUE;s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s==EFI_SUCCESS||StateReads||PromReads)return 5;
+#ifdef GU_EVGA_PROBE_RESOURCES
+ Init();ResourceRefusal=TRUE;s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s==EFI_SUCCESS||StateReads||PromReads||AttributeWrites!=1)return 6;
+#endif
  return 0;
 }
 #elif defined(GU_EVGA_PROBE_STATE)

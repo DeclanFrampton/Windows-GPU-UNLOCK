@@ -1,5 +1,8 @@
 /* GPL-2.0-only. Pinned EVGA consumer Stop sequence. No unlock. */
 #include "evga-text-stop.h"
+#ifdef GU_EVGA_PROBE_RESOURCES
+#include "evga-resources.h"
+#endif
 #include <Protocol/GraphicsOutput.h>
 #include <Protocol/DevicePath.h>
 #include <Protocol/DriverBinding.h>
@@ -50,7 +53,9 @@ static BOOLEAN GraphicsReleased;
 #ifdef GU_EVGA_AUDIT_NVIDIA
 #ifdef GU_EVGA_STOP_NVIDIA_CHILDREN
 #ifdef GU_EVGA_STOP_NVIDIA_PARENT
-#ifdef GU_EVGA_PROBE_PLATFORM
+#ifdef GU_EVGA_PROBE_RESOURCES
+#define ATTEMPT_PATH L"\\RTX3090-UNLOCK\\EVGA-RESOURCES-PROBE.ARMED"
+#elif defined(GU_EVGA_PROBE_PLATFORM)
 #define ATTEMPT_PATH L"\\RTX3090-UNLOCK\\EVGA-PLATFORM-PROBE.ARMED"
 #elif defined(GU_EVGA_PROBE_STATE)
 #define ATTEMPT_PATH L"\\RTX3090-UNLOCK\\EVGA-STATE-PROBE.ARMED"
@@ -493,6 +498,10 @@ static EFI_STATUS DecodeProbe(EFI_SYSTEM_TABLE *t,GU_EVGA_RECORD record) {
   }
 #ifdef GU_EVGA_PROBE_PLATFORM
   s=PlatformProbe(pci,t,record);if(s!=EFI_SUCCESS)return s;
+#ifdef GU_EVGA_PROBE_RESOURCES
+  s=GuEvgaResourcesClaim(t,NvidiaParent,pci,record);if(s!=EFI_SUCCESS)return s;
+  s=NvidiaPost(t,record);if(s!=EFI_SUCCESS)return s;
+#endif
 #endif
 #ifdef GU_EVGA_PROBE_STATE
   s=StateProbe(pci,record);if(s!=EFI_SUCCESS)return s;

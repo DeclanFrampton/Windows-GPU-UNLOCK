@@ -9,6 +9,9 @@
 #include "flow.h"
 #ifdef GU_EVGA_STOP_ONLY
 #include "evga-text-stop.h"
+#ifdef GU_EVGA_PROBE_RESOURCES
+#include "evga-resources.h"
+#endif
 #if !defined(GU_DIAGNOSTIC_ONLY) || !defined(GU_USB_MEDIA) || defined(GU_DIAGNOSTIC_PROBE) || defined(GU_FULL_UNLOCK) || defined(GU_CONSOLE_PREPARE)
 #error EVGA text Stop must be a separate USB image with no GPU probe or unlock
 #endif
@@ -416,12 +419,16 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE Image,EFI_SYSTEM_TABLE *St) {
   if(s!=EFI_SUCCESS || !loaded)Stop();
   OwnDevice=loaded->DeviceHandle;
 #ifdef GU_EVGA_STOP_ONLY
-  Say(L"EVGA 3090 TEXT MEMBERSHIP TEST. NO UNLOCK.\r\nPress fresh Shift+G when ready (60 seconds), Esc cancels.\r\nScreen may stop updating. One IMG13 child Stop only; automatic Windows handoff on success.\r\nNo Windows after 3 minutes: power off, remove USB, use Windows Boot Manager. Recovery is unproven.\r\n");
+  Say(L"EVGA 3090 TEXT MEMBERSHIP TEST. NO UNLOCK.\r\nPress fresh Shift+G when ready (60 seconds), Esc cancels.\r\nScreen may stop updating. Manifest-selected EVGA sequence; Windows handoff on success.\r\nNo Windows after 3 minutes: power off, remove USB, use Windows Boot Manager. Recovery is unproven.\r\n");
   s=Prepare(NULL);
   BOOLEAN evgaPrepared=s==EFI_SUCCESS;
   if(s==EFI_SUCCESS)s=Record(NULL,"evga-text-stop-capture-before",EFI_SUCCESS);
   if(s==EFI_SUCCESS)s=GuCaptureGraphOnVolume(Table,Log,Root);
   if(s==EFI_SUCCESS)Say(L"Capture saved. Checking live inventory, ownership and code pins...\r\nWait for Live guards passed before Shift+G.\r\n");
+#ifdef GU_EVGA_PROBE_RESOURCES
+  if(s==EFI_SUCCESS)Say(L"Verifying five assets in EFI memory. Wait for Live guards passed before Shift+G.\r\n");
+  if(s==EFI_SUCCESS)s=GuEvgaResourcesPrepare(Table,Root,Image,Record);
+#endif
   if(s==EFI_SUCCESS)s=GuEvgaTextStop(Table,Root,Record,&ResearchOutputDisabled);
   if(s==EFI_SUCCESS)s=Record(NULL,"evga-text-stop-capture-after",EFI_SUCCESS);
   if(s==EFI_SUCCESS)s=GuCaptureGraphOnVolume(Table,Log,Root);
