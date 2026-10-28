@@ -35,7 +35,23 @@ if($AttemptUnlock){
  if(!(Test-Path -LiteralPath (Join-Path $captures 'EVGA-UNLOCK2.ARMED')) -or !(Test-Path -LiteralPath $second) -or (Get-FileHash -LiteralPath $second -Algorithm SHA256).Hash.ToLowerInvariant() -ne '7f2c070f80d680d49997ee990b99aefbe1040707db2a40f59bd5a16aa43244a4'){throw 'Expected second unlock marker and reviewed EVGA18; preserve evidence'}
  $third=Join-Path $captures 'EVGA19.TXT'
  if(!(Test-Path -LiteralPath (Join-Path $captures 'EVGA-UNLOCK3.ARMED')) -or !(Test-Path -LiteralPath $third) -or (Get-FileHash -LiteralPath $third -Algorithm SHA256).Hash.ToLowerInvariant() -ne 'dfd6a0e0e58b8bc794e87a6c1b0e774ac674d5b483985ba36439b53fbc597537'){throw 'Expected third unlock marker and reviewed EVGA19; preserve evidence'}
- $attempt='EVGA-UNLOCK4.ARMED'
+ $slot=[int]$manifest.AttemptSlot
+ if($slot -lt 4 -or $slot -gt 99){throw 'Attempt slot is invalid'}
+ if($slot -ge 5){
+  $fourth=Join-Path $captures 'EVGA20.TXT'
+  if(!(Test-Path -LiteralPath (Join-Path $captures 'EVGA-UNLOCK4.ARMED')) -or !(Test-Path -LiteralPath $fourth) -or (Get-FileHash -LiteralPath $fourth -Algorithm SHA256).Hash.ToLowerInvariant() -ne '0d793ac0913e13f1aa786026743aa33ddcb6b5fe79fe0975a1269b5c378b9053'){throw 'Expected fourth unlock marker and reviewed EVGA20; preserve evidence'}
+ }
+ if($slot -ge 6){
+  $previous=$slot-1
+  if(!(Test-Path -LiteralPath (Join-Path $captures "EVGA-UNLOCK$previous.ARMED"))){throw 'Previous attempt marker missing; preserve evidence'}
+  $logs=@(Get-ChildItem -LiteralPath $captures -File -Filter 'EVGA*.TXT' | Where-Object {$_.Name -match '^EVGA\d\d\.TXT$'} | Sort-Object Name)
+  if(!$logs.Count){throw 'Previous attempt log missing; preserve evidence'}
+  $last=Get-Content -LiteralPath $logs[-1].FullName -Raw
+  $slotEvent=('evga-unlock-slot-{0:D2} status=0x0000000000000000' -f $previous)
+  if(!$last.Contains($slotEvent) -or !$last.Contains('evga-unlock-transaction-return status=0x0000000000000000') -or !$last.Contains('evga-unlock-assets-released status=0x0000000000000000') -or !$last.Contains('evga-text-stop-ready-windows status=0x0000000000000000') -or ([regex]::Matches($last,'capture-complete=1').Count -lt 2)){throw 'Previous attempt did not record complete successful cleanup; preserve evidence'}
+ }
+ for($later=$slot+1;$later -le 99;$later++){if(Test-Path -LiteralPath (Join-Path $captures "EVGA-UNLOCK$later.ARMED")){throw 'Later attempt marker exists; preserve evidence'}}
+ $attempt="EVGA-UNLOCK$slot.ARMED"
 }
 if(Test-Path -LiteralPath (Join-Path $captures $attempt)){throw 'An attempt is already armed; preserve evidence instead of repeating'}
 if($manifest.Mode -in @('evga3090-two-text-stops','evga3090-three-consumer-stops','evga3090-four-consumer-stops','evga3090-six-consumer-stops','evga3090-nvidia-preflight','evga3090-nvidia-three-child-stop','evga3090-nvidia-parent-stop','evga3090-decode-probe','evga3090-state-probe','evga3090-platform-probe','evga3090-resources-probe','evga3090-experimental-unlock')) {

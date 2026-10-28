@@ -63,7 +63,18 @@ static BOOLEAN GraphicsReleased;
 #ifdef GU_EVGA_STOP_NVIDIA_CHILDREN
 #ifdef GU_EVGA_STOP_NVIDIA_PARENT
 #ifdef GU_EVGA_UNLOCK
-#define ATTEMPT_PATH L"\\RTX3090-UNLOCK\\EVGA-UNLOCK4.ARMED"
+#ifndef GU_EVGA_ATTEMPT_SLOT
+#define GU_EVGA_ATTEMPT_SLOT 4
+#endif
+#if GU_EVGA_ATTEMPT_SLOT < 4 || GU_EVGA_ATTEMPT_SLOT > 99
+#error Invalid EVGA attempt slot
+#endif
+#if GU_EVGA_ATTEMPT_SLOT < 10
+static CHAR16 AttemptPath[]=L"\\RTX3090-UNLOCK\\EVGA-UNLOCK0.ARMED";
+#else
+static CHAR16 AttemptPath[]=L"\\RTX3090-UNLOCK\\EVGA-UNLOCK00.ARMED";
+#endif
+#define ATTEMPT_PATH AttemptPath
 #elif defined(GU_EVGA_PROBE_RESOURCES)
 #define ATTEMPT_PATH L"\\RTX3090-UNLOCK\\EVGA-RESOURCES-PROBE.ARMED"
 #elif defined(GU_EVGA_PROBE_PLATFORM)
@@ -664,6 +675,13 @@ EFI_STATUS GuEvgaTextStop(EFI_SYSTEM_TABLE *t,EFI_FILE_PROTOCOL *root,GU_EVGA_RE
     s=t->BootServices->Stall(100000);if(s!=EFI_SUCCESS)return s;
   }
   /* Durable one-shot marker, never overwritten or automatically removed. */
+#ifdef GU_EVGA_UNLOCK
+  UINTN attemptPathLength=0;while(AttemptPath[attemptPathLength])attemptPathLength++;
+  AttemptPath[attemptPathLength-7]=(CHAR16)('0'+GU_EVGA_ATTEMPT_SLOT%10);
+#if GU_EVGA_ATTEMPT_SLOT >= 10
+  AttemptPath[attemptPathLength-8]=(CHAR16)('0'+GU_EVGA_ATTEMPT_SLOT/10);
+#endif
+#endif
   EFI_FILE_PROTOCOL *marker=NULL;
   s=root->Open(root,&marker,ATTEMPT_PATH,EFI_FILE_MODE_READ,0);
   if(s==EFI_SUCCESS){if(marker)marker->Close(marker);return EFI_ALREADY_STARTED;}
@@ -693,6 +711,12 @@ EFI_STATUS GuEvgaTextStop(EFI_SYSTEM_TABLE *t,EFI_FILE_PROTOCOL *root,GU_EVGA_RE
   s=marker->Write(marker,&n,tag);if(s==EFI_SUCCESS && n!=sizeof(tag)-1)s=EFI_DEVICE_ERROR;
   if(s==EFI_SUCCESS)s=marker->Flush(marker);
   EFI_STATUS closed=marker->Close(marker);if(s==EFI_SUCCESS)s=closed;if(s!=EFI_SUCCESS)return s;
+#ifdef GU_EVGA_UNLOCK
+  char slotEvent[]="evga-unlock-slot-00";
+  slotEvent[17]=(char)('0'+GU_EVGA_ATTEMPT_SLOT/10);
+  slotEvent[18]=(char)('0'+GU_EVGA_ATTEMPT_SLOT%10);
+  s=record(NULL,slotEvent,EFI_SUCCESS);if(s!=EFI_SUCCESS)return s;
+#endif
   s=record(NULL,"evga-text-stop-before",EFI_SUCCESS);if(s!=EFI_SUCCESS)return s;
   s=Graph(t,FALSE,record);if(s!=EFI_SUCCESS)return s;
   /* Suppress all console calls from this point. No subsequent retry or rollback. */

@@ -112,6 +112,14 @@ try {
  if($LASTEXITCODE -ne 0){throw 'Unlock wrapper mock link failed'}
  & "./$out/unlock-wrapper-test.exe"
  if($LASTEXITCODE -ne 0){throw "Unlock wrapper mock scenario failed: $LASTEXITCODE"}
+ foreach($slot in @(5,10)){
+  & $Clang @unlockFlags "-DGU_EVGA_ATTEMPT_SLOT=$slot" -c internal-boot/boot/test_evga_text_stop.c -o "$out/unlock-slot-test.obj"
+  if($LASTEXITCODE -ne 0){throw "Unlock slot $slot mock compile failed"}
+  & $LldLink /nologo /nodefaultlib /subsystem:console /entry:main /machine:x64 "/out:$out/unlock-slot-test.exe" "$out/unlock-slot-test.obj" "$out/shared-checks.host.obj" "$out/resource-runtime.host.obj"
+  if($LASTEXITCODE -ne 0){throw "Unlock slot $slot mock link failed"}
+  & "./$out/unlock-slot-test.exe"
+  if($LASTEXITCODE -ne 0){throw "Unlock slot $slot mock scenario failed: $LASTEXITCODE"}
+ }
  & $Clang @unlockFlags -Wno-unused-function -c internal-boot/boot/test_evga_retained_assets.c -o "$out/retained-assets-test.obj"
  if($LASTEXITCODE -ne 0){throw 'Retained assets mock compile failed'}
  & $Clang @unlockFlags -c internal-boot/unlock/format.c -o "$out/retained-format.obj"

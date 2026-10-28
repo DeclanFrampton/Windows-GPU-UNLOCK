@@ -14,6 +14,7 @@ static EFI_FILE_PROTOCOL Root,Marker;
 GU_PLATFORM Gu;
 static BOOLEAN FailTransaction,FailExclusiveClose,FailAssetCleanup,FailUnlockSafe,FailUnlockGraph;
 static UINTN Transactions,ExclusiveCloses,AssetCleanups;
+static BOOLEAN SlotRecorded;
 static EFI_TPL EFIAPI Raise(EFI_TPL n){(void)n;return TPL_APPLICATION;}
 static VOID EFIAPI Restore(EFI_TPL n){(void)n;}
 static EFI_STATUS EFIAPI CloseOwner(EFI_HANDLE h,EFI_GUID *g,EFI_HANDLE image,EFI_HANDLE controller){
@@ -269,16 +270,25 @@ static EFI_STATUS EFIAPI FileFlush(EFI_FILE_PROTOCOL *p){(void)p;return FlushFai
 static EFI_STATUS EFIAPI FileWrite(EFI_FILE_PROTOCOL *p,UINTN *n,VOID *buffer){(void)p;(void)buffer;if(ShortWrite)(*n)--;return EFI_SUCCESS;}
 static EFI_STATUS EFIAPI FileOpen(EFI_FILE_PROTOCOL *p,EFI_FILE_PROTOCOL **out,CHAR16 *name,UINT64 mode,UINT64 attrs){
   (void)p;(void)name;(void)attrs;*out=NULL;
+#if defined(GU_EVGA_UNLOCK) && GU_EVGA_ATTEMPT_SLOT == 5
+  {const CHAR16 *expected=L"\\RTX3090-UNLOCK\\EVGA-UNLOCK5.ARMED";UINTN i=0;while(expected[i] && name[i]==expected[i])i++;if(name[i]!=expected[i])return EFI_INVALID_PARAMETER;}
+#elif defined(GU_EVGA_UNLOCK) && GU_EVGA_ATTEMPT_SLOT == 10
+  {const CHAR16 *expected=L"\\RTX3090-UNLOCK\\EVGA-UNLOCK10.ARMED";UINTN i=0;while(expected[i] && name[i]==expected[i])i++;if(name[i]!=expected[i])return EFI_INVALID_PARAMETER;}
+#endif
   if(mode==EFI_FILE_MODE_READ && !MarkerExists)return EFI_NOT_FOUND;
   MarkerExists=TRUE;*out=&Marker;return EFI_SUCCESS;
 }
 static EFI_STATUS RecordMock(VOID *p,const char *name,EFI_STATUS s){
+#ifdef GU_EVGA_UNLOCK
+  const char *prefix="evga-unlock-slot-";UINTN i=0;while(prefix[i] && name[i]==prefix[i])i++;
+  if(!prefix[i] && name[i]==(char)('0'+GU_EVGA_ATTEMPT_SLOT/10) && name[i+1]==(char)('0'+GU_EVGA_ATTEMPT_SLOT%10) && !name[i+2])SlotRecorded=TRUE;
+#endif
   (void)p;(void)name;(void)s;Records++;return FailRecord?EFI_DEVICE_ERROR:EFI_SUCCESS;
 }
 static VOID Init(VOID){
 #ifdef GU_EVGA_UNLOCK
  Gu=(GU_PLATFORM){0};FailTransaction=FailExclusiveClose=FailAssetCleanup=FailUnlockSafe=FailUnlockGraph=FALSE;
- Transactions=ExclusiveCloses=AssetCleanups=0;
+ Transactions=ExclusiveCloses=AssetCleanups=0;SlotRecorded=FALSE;
 #endif
 #ifdef GU_EVGA_PROBE_PLATFORM
  BadPlatformConfig=BadBar=FALSE;
@@ -343,7 +353,7 @@ EFI_STATUS GuEvgaResourcesClaim(EFI_SYSTEM_TABLE *t,EFI_HANDLE h,EFI_PCI_IO_PROT
 #endif
 #ifdef GU_EVGA_UNLOCK
 int main(VOID){BOOLEAN started=FALSE;EFI_STATUS s;
- Init();s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s!=EFI_SUCCESS)return 60+(int)(Transactions*10+ExclusiveCloses*2+AssetCleanups);if(!started)return 50;if(Calls!=8)return 51;if(Transactions!=1)return 52;if(ExclusiveCloses!=1)return 53;if(AssetCleanups!=1)return 54;if(Gu.owned)return 55;if(DecodeAttributes)return 56;
+ Init();s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s!=EFI_SUCCESS)return 60+(int)(Transactions*10+ExclusiveCloses*2+AssetCleanups);if(!started)return 50;if(Calls!=8)return 51;if(Transactions!=1)return 52;if(ExclusiveCloses!=1)return 53;if(AssetCleanups!=1)return 54;if(Gu.owned)return 55;if(DecodeAttributes)return 56;if(!SlotRecorded)return 57;
  if(GuEvgaTextStopVerify(&Table)!=EFI_SUCCESS)return 2;
  Init();FailTransaction=TRUE;s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s==EFI_SUCCESS || !started || Transactions!=1 || ExclusiveCloses || AssetCleanups || AttributeWrites!=1)return 3;
  Init();FailUnlockSafe=TRUE;s=GuEvgaTextStop(&Table,&Root,RecordMock,&started);if(s==EFI_SUCCESS || ExclusiveCloses || AssetCleanups || AttributeWrites!=1)return 4;
