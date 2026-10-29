@@ -39,12 +39,12 @@ static void Basic(UINT32 C[64]) {
 
 static int Valid(const UINT32 C[64]) {
   GU_CAPS Caps;
-  return GuCheckConfig(C, 0, GU_TARGET_BUS, 0, 0, &Caps);
+  return GuCheckConfig(C, GU_TARGET_SEGMENT, GU_TARGET_BUS, 0, 0, &Caps);
 }
 
 static void Reject(const UINT32 C[64], const char *Name) {
   GU_CAPS Caps = {0xffff, 0xffff, 0xffff, 0xffff, 0xff};
-  Check(!GuCheckConfig(C, 0, GU_TARGET_BUS, 0, 0, &Caps), Name);
+  Check(!GuCheckConfig(C, GU_TARGET_SEGMENT, GU_TARGET_BUS, 0, 0, &Caps), Name);
   Check(Caps.pm == 0 && Caps.pcie == 0 && Caps.msi == 0 && Caps.msix == 0 &&
         Caps.pcie_version == 0, "rejection clears capability output");
 }
@@ -81,7 +81,7 @@ static void TestLegacyCapture(const UINT32 Captured[64]) {
   GU_CAPS Caps;
   memcpy(C, Captured, sizeof(C));
   memcpy(Before, C, sizeof(C));
-  Check(GuCheckConfig(C, 0, GU_TARGET_BUS, 0, 0, &Caps), "legacy RUN00 capability layout accepted");
+  Check(GuCheckConfig(C, GU_TARGET_SEGMENT, GU_TARGET_BUS, 0, 0, &Caps), "legacy RUN00 capability layout accepted");
   Check(Caps.pm == 0x60 && Caps.msi == 0x68 && Caps.pcie == 0x78 &&
         Caps.msix == 0 && Caps.pcie_version == 2,
         "capture returns linked caps only; c8 is unlinked");
@@ -90,7 +90,7 @@ static void TestLegacyCapture(const UINT32 Captured[64]) {
   memcpy(C,Before,sizeof(C));C[0]=0x164e1002;C[11]=0x88771043;
   Reject(C,"AMD display cannot be target");memcpy(C,Before,sizeof(C));
   Byte(C, 0xb5, 0xc8);
-  Check(GuCheckConfig(C, 0, GU_TARGET_BUS, 0, 0, &Caps) && Caps.msix == 0xc8,
+  Check(GuCheckConfig(C, GU_TARGET_SEGMENT, GU_TARGET_BUS, 0, 0, &Caps) && Caps.msix == 0xc8,
         "synthetically linked captured MSI-X is disabled and accepted");
   Word(C, 0xca, 0x8005);
   Reject(C, "linked enabled MSI-X rejected");
@@ -113,7 +113,7 @@ static int Linked(const UINT32 C[64], unsigned Offset, unsigned Id) {
 static void TestCapture(const UINT32 Captured[64]) {
   UINT32 C[64],Before[64];GU_CAPS Caps;
   memcpy(C,Captured,sizeof(C));memcpy(Before,C,sizeof(C));
-  int Accepted=GuCheckConfig(C,0,GU_TARGET_BUS,0,0,&Caps);
+  int Accepted=GuCheckConfig(C,GU_TARGET_SEGMENT,GU_TARGET_BUS,0,0,&Caps);
   Check(Accepted,"captured config satisfies this exact profile");
   Check(memcmp(C,Before,sizeof(C))==0,"actual capture validation preserves all config bytes");
   if(!Accepted)return;
@@ -126,10 +126,10 @@ static void TestCapture(const UINT32 Captured[64]) {
   memcpy(C,Before,sizeof(C));C[11]^=1;Reject(C,"different captured subsystem rejected");
   memcpy(C,Before,sizeof(C));C[1]&=~2U;Reject(C,"captured MEM-off state rejected");
   memcpy(C,Before,sizeof(C));C[1]|=4U;Reject(C,"captured BME-on state rejected");
-  Check(!GuCheckConfig(Before,1,GU_TARGET_BUS,0,0,&Caps),"captured config on another segment rejected");
-  Check(!GuCheckConfig(Before,0,GU_TARGET_BUS+1U,0,0,&Caps),"captured config on another bus rejected");
-  Check(!GuCheckConfig(Before,0,GU_TARGET_BUS,1,0,&Caps),"captured config on another device rejected");
-  Check(!GuCheckConfig(Before,0,GU_TARGET_BUS,0,1,&Caps),"captured config on another function rejected");
+  Check(!GuCheckConfig(Before,GU_TARGET_SEGMENT^1U,GU_TARGET_BUS,0,0,&Caps),"captured config on another segment rejected");
+  Check(!GuCheckConfig(Before,GU_TARGET_SEGMENT,GU_TARGET_BUS+1U,0,0,&Caps),"captured config on another bus rejected");
+  Check(!GuCheckConfig(Before,GU_TARGET_SEGMENT,GU_TARGET_BUS,1,0,&Caps),"captured config on another device rejected");
+  Check(!GuCheckConfig(Before,GU_TARGET_SEGMENT,GU_TARGET_BUS,0,1,&Caps),"captured config on another function rejected");
 }
 
 static void LegacyCapture(UINT32 C[64]) {
@@ -173,12 +173,13 @@ static void TestIdentity(void) {
     Reject(C, Mutations[I].Name);
   }
   Basic(C);
-  Check(!GuCheckConfig(C, 1, GU_TARGET_BUS, 0, 0, &Caps), "wrong segment rejected");
-  Check(!GuCheckConfig(C, 0, GU_TARGET_BUS + 1, 0, 0, &Caps), "wrong bus rejected");
-  Check(!GuCheckConfig(C, 0, GU_TARGET_BUS, 1, 0, &Caps), "wrong device location rejected");
-  Check(!GuCheckConfig(C, 0, GU_TARGET_BUS, 0, 1, &Caps), "wrong function location rejected");
-  Check(!GuCheckConfig(NULL, 0, GU_TARGET_BUS, 0, 0, &Caps), "null config rejected");
-  Check(!GuCheckConfig(C, 0, GU_TARGET_BUS, 0, 0, NULL), "null output rejected");
+  Check(!GuCheckConfig(C, GU_TARGET_SEGMENT^1U, GU_TARGET_BUS, 0, 0, &Caps), "wrong segment rejected");
+  Check(!GuCheckConfig(C, GU_TARGET_SEGMENT+0x10000U, GU_TARGET_BUS, 0, 0, &Caps), "out-of-range segment is not truncated into the target");
+  Check(!GuCheckConfig(C, GU_TARGET_SEGMENT, GU_TARGET_BUS + 1, 0, 0, &Caps), "wrong bus rejected");
+  Check(!GuCheckConfig(C, GU_TARGET_SEGMENT, GU_TARGET_BUS, 1, 0, &Caps), "wrong device location rejected");
+  Check(!GuCheckConfig(C, GU_TARGET_SEGMENT, GU_TARGET_BUS, 0, 1, &Caps), "wrong function location rejected");
+  Check(!GuCheckConfig(NULL, GU_TARGET_SEGMENT, GU_TARGET_BUS, 0, 0, &Caps), "null config rejected");
+  Check(!GuCheckConfig(C, GU_TARGET_SEGMENT, GU_TARGET_BUS, 0, 0, NULL), "null output rejected");
 }
 
 static void TestPowerAndPcie(void) {
@@ -245,13 +246,13 @@ static void TestCapabilities(void) {
   for (I = 0; I < sizeof(MsiControl) / sizeof(MsiControl[0]); ++I) {
     Basic(C); Byte(C, 0x49, 0x90);
     C[0x90 / 4] = (MsiControl[I] << 16) | 5;
-    Check(GuCheckConfig(C, 0, GU_TARGET_BUS, 0, 0, &Caps) && Caps.msi == 0x90,
+    Check(GuCheckConfig(C, GU_TARGET_SEGMENT, GU_TARGET_BUS, 0, 0, &Caps) && Caps.msi == 0x90,
           "disabled 32/64-bit MSI with/without masks accepted");
     Word(C, 0x92, MsiControl[I] | 1);
     Reject(C, "enabled MSI rejected for each layout");
   }
   Basic(C); Byte(C, 0x49, 0x90); C[0x90 / 4] = 0x40000011;
-  Check(GuCheckConfig(C, 0, GU_TARGET_BUS, 0, 0, &Caps) && Caps.msix == 0x90,
+  Check(GuCheckConfig(C, GU_TARGET_SEGMENT, GU_TARGET_BUS, 0, 0, &Caps) && Caps.msix == 0x90,
         "disabled and function-masked MSI-X accepted");
   Basic(C); Byte(C, 0x49, 0x90); C[0x90 / 4] = 0x00040009;
   Check(Valid(C), "bounded vendor capability accepted");
@@ -415,6 +416,34 @@ static void TestPaths(void) {
   (void)LegacyTestPaths; /* Preserved historical vectors, not this board's contract. */
 }
 
+#ifdef GU_PROFILE_LOCAL
+static int ExactAmd(const UINT8 *p,UINTN bytes) {
+  static const UINT8 Amd[]={2,1,12,0,0xd0,0x41,3,0x0a,0,0,0,0,
+    1,1,6,0,1,8,1,1,6,0,0,0,2,3,8,0,0,3,1,0x80,0x7f,0xff,4,0};
+  return bytes>=sizeof(Amd) && !memcmp(p,Amd,sizeof(Amd));
+}
+static void TestLocalPaths(void) {
+  static const UINT8 Target[]={GU_RTX_PATH_BYTES};
+  static const UINT8 Amd[]={2,1,12,0,0xd0,0x41,3,0x0a,0,0,0,0,
+    1,1,6,0,1,8,1,1,6,0,0,0,2,3,8,0,0,3,1,0x80,0x7f,0xff,4,0};
+  UINT8 changed[sizeof(Target)+16];
+  int expected=ExactAmd(Target,sizeof(Target))?1:2;
+  Check(Path(Amd,sizeof(Amd))==1,"LOCAL preserves exact historical AMD classification");
+  Check(Path(Target,sizeof(Target))==expected,"LOCAL classifies its complete captured PCI ancestry");
+  Check(!GuDisplayPath(NULL,256),"LOCAL null path rejected");
+  for(UINTN i=0;i<sizeof(Target);i++) {
+    Check(!Path(Target,i),"every truncated LOCAL target rejected");
+    memcpy(changed,Target,sizeof(Target));changed[i]^=0x40;
+    int want=(i>=sizeof(Target)-8 && i<sizeof(Target)-4)?2:0;
+    if(ExactAmd(changed,sizeof(Target)))want=1;
+    Check(Path(changed,sizeof(Target))==want,"LOCAL pins ancestry and shape while discovering output ADR");
+  }
+  memset(changed,0xa5,sizeof(changed));memcpy(changed,Target,sizeof(Target));
+  Check(Path(changed,sizeof(changed))==expected,"LOCAL bound may extend after end-entire");
+  (void)TestPaths; /* Fixed-profile vectors remain unchanged in their own builds. */
+}
+#endif
+
 int main(int Argc, char **Argv) {
   UINT32 Captured[64],Legacy[64];
   if (Argc != 2 || !LoadCapture(Argv[1], Captured)) return 2;
@@ -423,7 +452,11 @@ int main(int Argc, char **Argv) {
   TestIdentity();
   TestPowerAndPcie();
   TestCapabilities();
+#ifdef GU_PROFILE_LOCAL
+  TestLocalPaths();
+#else
   TestPaths();
+#endif
   if (Failures != 0) {
     fprintf(stderr, "%u/%u checks failed\n", Failures, Checks);
     return 1;

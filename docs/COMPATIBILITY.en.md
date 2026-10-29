@@ -9,10 +9,11 @@ comes from contributors ([PR #5](https://github.com/impacifist/Windows-GPU-UNLOC
 [PR #10](https://github.com/impacifist/Windows-GPU-UNLOCK/pull/10),
 [PR #24](https://github.com/impacifist/Windows-GPU-UNLOCK/pull/24),
 [PR #30](https://github.com/impacifist/Windows-GPU-UNLOCK/pull/30),
-[PR #77](https://github.com/impacifist/Windows-GPU-UNLOCK/pull/77)). Builds compile
+[PR #77](https://github.com/impacifist/Windows-GPU-UNLOCK/pull/77)). Fixed-profile builds compile
 for exactly one reviewed profile selected at build time in
 [internal-boot/unlock/machine-profile.h](../internal-boot/unlock/machine-profile.h);
-other GPUs or platforms remain unsupported.
+other GPUs or platforms cannot use those fixed profiles. Experimental LOCAL
+generation and its separate contributor reports are described below.
 
 | Build profile | Exact platform / CPU | Recorded headless route |
 |---|---|---|
@@ -190,6 +191,23 @@ Cold/full-flow tests and compile regressions are available. Full private-fixture
 transaction replay through `test-all.ps1` is not wired for this profile; the public
 evidence does not provide its exact FWSEC image offset/size or private inputs.
 Those tests remain blocked rather than accepting an inferred firmware layout.
+
+## Reported local-profile success
+
+[Issue #113](https://github.com/impacifist/Windows-GPU-UNLOCK/issues/113) reports one
+headless USB unlock, clean FLR/cleanup and Windows display recovery on a Gigabyte
+B460M D2VX SI BIOS FE / i5-10400F / Zotac RTX 3070 8GB. The tested source is based on
+`9692463`, with [public change 17b5e50](https://github.com/Wandraker/GPU-UNLOCK/commit/17b5e50b0a56ca593fffd764bd0fc85379b536b2).
+Its core changes cover probe ID, GA104 card traits, admission and refusal tests;
+unlock, ownership, DMA and FLR runtime code was unchanged. This is not a new
+physical validation of current main or long-term reliability evidence.
+
+Automatic LOCAL generation now admits `10de:2484` / chip `b74000a1` / `2000` MiB
+with nvgop `60009` and its existing reviewed code hash. Subsystem, PROM, paths and
+remaining firmware values still come from the owner's captures, and all 21 required
+host jobs must pass. GA104 RTX 3060 `2487` / `3000` MiB remains bound to `60010` code.
+No new named motherboard profile is added; use the [local-profile workflow](NEW-MACHINE.en.md).
+Other 3070 PCI IDs, VBIOS/driver combinations and console layouts need separate validation.
 
 ## Scope beyond the recorded configurations
 
