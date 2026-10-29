@@ -20,7 +20,7 @@ they do not contain a separate unlock implementation for each motherboard.
 | Family | Exact chip revision | Currently admitted card/layout combinations |
 |---|---|---|
 | GA102 | `0xb72000a1` | RTX 3090 / 3090 Ti; `0x6000` or `0x5ff4` MiB, still pinned exactly per machine |
-| GA104 | `0xb74000a1` | `10de:2482` with `0x2000` MiB; `10de:2487` with `0x3000` MiB |
+| GA104 | `0xb74000a1` | `10de:2482` / `10de:2484` with `0x2000` MiB; `10de:2487` with `0x3000` MiB |
 | GA106 | `0xb76000a1` | `10de:2504` with `0x3000` MiB |
 
 These describe current source admission, not physical verification of every
@@ -42,10 +42,15 @@ fixed profiles share the same nvgop `0x60010` tuple.
 LOCAL profiles always keep their captured driver hashes, including nvgop
 `0x60009`; they inherit no fixed template. Existing generated headers retain their
 literal chip/memory values. Family metadata is derived from the exact captured
-chip without changing the [local generator's admission](NEW-MACHINE.en.md).
-That route still admits only its existing GA102 envelope, including its two
-reviewed PCI IDs and both admitted memory sizes. This refactor does not make
-GA104/GA106 eligible for automatic local-profile generation.
+chip. The [local generator](NEW-MACHINE.en.md) also admits the exact 12 GiB
+GA104 `248710de` and GA106 `250410de` tuples. These require the reviewed nvgop
+`60010` code. RTX 3070 `248410de` / 8 GiB uses `60009`, based on
+[issue #113](https://github.com/impacifist/Windows-GPU-UNLOCK/issues/113).
+GA104 requires PCI-specific driver pins; a chip-level match cannot substitute for them.
+The existing GA102 combinations remain available. Recognized aggregate and
+non-aggregate LOCAL topologies require all 21 host jobs, including input policy
+and the topology-specific complete driver-release replay. Generated profiles are experimental candidates, not
+new physical compatibility reports.
 
 The identity-only H610M probe still has no chip, VRAM or PROM pins and cannot
 compile into a write/release image. External overrides of the selected family

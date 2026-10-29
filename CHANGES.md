@@ -1,5 +1,46 @@
 # Changes
 
+## Unreleased — connect reviewed RTX 3060 families to local capture and replay
+
+- Add bounded generic read-only capture for the exact `248710de` and `250410de`
+  RTX 3060 12GB identities. Preserve target pinning, BAR and MEM/BME restrictions.
+- Couple each admitted PCI identity to its exact chip revision, VRAM and reviewed
+  nvgop version/code hash. Preserve existing GA102 combinations; new 3060 tuples
+  require the recorded `60010` code.
+- Require full driver-release replay for every generated profile, including
+  EDID-present firmware. Older EDID-present evidence must be regenerated.
+  Generalize the host model's image sizes, stops, version and display-child count.
+- Extend synthetic admission and release matrices across GA102/GA104/GA106.
+  Aggregate LOCAL generation remains unsupported. These changes add experimental
+  per-machine candidates, not another hardware success or a universal support claim.
+
+## Unreleased — preserve valid late PCIe capability layouts
+
+- Match PCI configuration save bounds to the existing parser: aligned PCIe v1
+  capabilities may start as late as `0xec`, while v2 may start as late as `0xc4`.
+  Reject invalid offsets and unknown versions before device access.
+- Exercise production save, FLR and restore with RAM-only PCI services across
+  six layouts, IO/MEM command states and failure scenarios. Keep reset wait,
+  one-reset-only, status-write restrictions and containment checks.
+- Include layout regressions in the host test runner and extend captured-config
+  model tests to both layout boundaries. These are synthetic host tests, not
+  full firmware transactions or new hardware compatibility evidence.
+
+## Unreleased — discover the diagnostic target bus and replay captured PCI layouts
+
+- Automatically discover the single NVIDIA diagnostic target's nonzero PCI bus.
+  Pin its handle, interface, identity and BDF across callbacks and final revalidation;
+  target loss or drift invalidates the capture. Keep existing GPU/BAR/read restrictions.
+- Preserve optional explicit `-TargetBus` constraints through probe builds and resumed
+  new-machine captures; reject a different or ambiguous target before archive/copy/build.
+- Validate real captured PCI capability offsets and IO/MEM state in host tests.
+  Retain historical capability-layout and malformed-input regressions separately.
+  Add synthetic capture-model, bus-boundary and mocked build/resume regressions.
+- Accept exact JSON Int32/Int64 schema and exit-code values on Windows PowerShell
+  and PowerShell 7, while continuing to reject strings, floats, booleans and nulls.
+- This improves discovery and host portability; it adds no hardware validation or
+  new GPU admission. No transaction implementation, real EFI execution or GPU test is included.
+
 ## Unreleased — separate GPU family traits, firmware templates and machine pins
 
 - Centralize exact GA102/GA104/GA106 chip revisions and current PCI-ID/VRAM

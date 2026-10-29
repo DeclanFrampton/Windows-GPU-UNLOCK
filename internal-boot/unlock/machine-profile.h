@@ -10,6 +10,10 @@
  */
 #pragma once
 
+#ifdef GU_TARGET_SEGMENT
+#error Target segment must come from the selected profile, not a compiler override
+#endif
+
 #if defined(GU_GPU_FAMILY) || defined(GU_FIRMWARE_PROFILE)
 #error GPU family and firmware must be derived from the selected machine profile
 #endif
@@ -45,7 +49,7 @@
  * (original verified B650M headless topology). */
 #if defined(GU_PROFILE_B660M_3070TI) || defined(GU_PROFILE_B660M_3090TI) || defined(GU_PROFILE_B660PLUS_3060) || defined(GU_PROFILE_EVGA_Z790_3090)
 #define GU_CONSOLE_AGGREGATE 1
-#else
+#elif !defined(GU_PROFILE_LOCAL)
 #define GU_CONSOLE_AGGREGATE 0
 #endif
 
@@ -79,11 +83,31 @@
  * its read-only probe capture and never committed (see docs/NEW-MACHINE.en.md).
  * Same constants as a reviewed profile. Build scripts refuse a write build of it
  * unless research/profile/test-profile.ps1 passed against exactly this header and
- * this machine's PROM/capture fixtures. Only the non-aggregate single-RTX console
- * topology is generated. */
+ * this machine's PROM/capture fixtures. Console topology comes from generated
+ * metadata and requires its own topology-specific release replay evidence. */
 #include "profile-local.h"
-#if !defined(GU_LOCAL_PROFILE_GENERATOR) || GU_CONSOLE_AGGREGATE
-#error profile-local.h must come from research/profile/make-profile.py (non-aggregate topology)
+#if !defined(GU_LOCAL_PROFILE_GENERATOR)
+#error profile-local.h must come from research/profile/make-profile.py
+#endif
+#if defined(GU_CONSOLE_AGGREGATE) || defined(GU_CONSOLE_MULTI_CHILD) || defined(GU_CONSOLE_CHILD_COUNT)
+#error Local console topology must be derived from generated local metadata
+#endif
+#if defined(GU_LOCAL_CONSOLE_AGGREGATE) != defined(GU_LOCAL_CHILD_COUNT)
+#error Local topology metadata must contain both aggregate and child count
+#endif
+#ifdef GU_LOCAL_CONSOLE_AGGREGATE
+#if (GU_LOCAL_CONSOLE_AGGREGATE != 0 && GU_LOCAL_CONSOLE_AGGREGATE != 1) || (GU_LOCAL_CHILD_COUNT != 1 && GU_LOCAL_CHILD_COUNT != 2)
+#error Local topology requires aggregate 0/1 and child count 1/2
+#endif
+#else
+/* Compatibility with earlier non-aggregate generated headers. */
+#define GU_LOCAL_CONSOLE_AGGREGATE 0
+#define GU_LOCAL_CHILD_COUNT 0
+#endif
+#define GU_CONSOLE_AGGREGATE GU_LOCAL_CONSOLE_AGGREGATE
+#if GU_CONSOLE_AGGREGATE && GU_LOCAL_CHILD_COUNT == 2
+#define GU_CONSOLE_MULTI_CHILD 1
+#define GU_CONSOLE_CHILD_COUNT 2
 #endif
 
 #elif defined(GU_PROFILE_PROBE_H610M_3060)
@@ -242,7 +266,19 @@
 #endif
 #endif
 
-/* PCI bus of the RTX (segment 0, device 0, function 0). Every reviewed profile sits at
+/* Existing headers and every reviewed profile retain segment zero. A LOCAL
+ * header may pin another representable segment after its complete validation. */
+#ifndef GU_TARGET_SEGMENT
+#define GU_TARGET_SEGMENT 0U
+#endif
+#if GU_TARGET_SEGMENT < 0 || GU_TARGET_SEGMENT > 0xffffU
+#error GU_TARGET_SEGMENT must be in 0..65535
+#endif
+#if GU_TARGET_SEGMENT != 0U && !defined(GU_PROFILE_LOCAL)
+#error A non-default target segment is only for a generated local profile
+#endif
+
+/* PCI bus of the RTX (device 0, function 0). Every reviewed profile sits at
  * 01:00.0. Only a generated local profile (profile-local.h defines it first) may differ,
  * after its own captures and host tests pass; reviewed profiles keep 1. */
 #ifndef GU_TARGET_BUS
