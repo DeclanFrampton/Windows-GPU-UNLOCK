@@ -52,6 +52,7 @@ try {
   @{Name='preflight';Sources=@('tests/test_3090_preflight.c','app.c','app_io.c','ownership.c','format.c','sha256.c','checks.c')+$core;Defines=$defs;Args=@($Prom,$Capture)},
   @{Name='write-lock';Sources=@('tests/test_preflight_lock.c','port.c');Defines=@();Args=@()},
   @{Name='master-attributes';Sources=@('tests/test_master_attributes.c')+$core;Defines=$defs+@('-DGU_HOST_WRITE_TEST');Args=@()},
+  @{Name='capture-fixture';Sources=@('tests/test_capture_fixture.c','checks.c')+$core;Defines=$defs+@('-DGU_HOST_WRITE_TEST');Args=@()},
   @{Name='runtime';Sources=@('tests/test_runtime.c','format.c',"$out/runtime-host.obj");Defines=@('-fno-builtin');Args=@()}
  )
  foreach($profile in $profiles) {

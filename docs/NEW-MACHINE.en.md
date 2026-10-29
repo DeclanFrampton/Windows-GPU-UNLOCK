@@ -189,6 +189,24 @@ Run the same command repeatedly; each run does the next step.
 
 ## The evidence gate
 
+Host fixture setup derives IO/MEM/BME attributes once from the captured PCI
+command. Command `0x0002` therefore starts with attributes `0x200`, while command `0x0003`
+starts with `0x300`; a later injected mismatch is not repaired. The SHA host test
+also uses the selected profile's PROM hash. These fixes address the test issues
+reported in [#129](https://github.com/impacifist/Windows-GPU-UNLOCK/issues/129#issuecomment-6482780948)
+and [#105](https://github.com/impacifist/Windows-GPU-UNLOCK/issues/105).
+They do not reconcile real PCI attributes or authorize the research pre-step.
+
+The asset-free fixture regression can be run from an MSVC developer environment:
+
+```powershell
+python -I research/profile/test_capture_fixtures.py --clang C:\TOOLS\LLVM20\bin\clang.exe --mutations --output research/profile/build/your-new-fixture-run
+```
+
+Use a new output directory. It runs setup/port mocks and synthetic SHA inputs,
+without invoking the app entry point or a vendor transaction. It writes no LOCAL
+evidence and cannot replace the required actual PROM/assets tests below.
+
 A write build of `-HardwareProfile local` (`internal-boot/unlock/build.ps1`, `build-usb.ps1`,
 and `stage-usb.ps1` again before copying) is refused unless `test-results.json`:
 

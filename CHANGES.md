@@ -1,5 +1,20 @@
 # Changes
 
+## Unreleased — preserve captured state in host qualification fixtures
+
+- Initialize the app mock's PCI attributes from its captured command, including
+  BME-on inputs, rather than the original command=3 default. Apply this only during
+  setup so deliberately inconsistent attributes still fail the production guards.
+  This fixes the false command=2/cache=300 failure reported in issue #129.
+- Check PROM bytes against the selected machine/LOCAL profile's hash in the SHA
+  host test, as identified in issue #105. Preserve the fixed GSP hash and independent
+  SHA vectors; a changed file or another profile's pin still fails.
+- Run capture-fixture constructor/port regressions in test-all without firmware
+  assets. A separate RAM-only matrix covers compiler variants and compiled stale
+  cache/fixed-PROM mutations. These are fixture checks, not EFI/vendor transactions
+  or new hardware qualification. LOCAL still requires its complete 22 actual-input
+  jobs; changing the test sources invalidates older source-bound evidence.
+
 ## Unreleased — connect reviewed RTX 3060 families to local capture and replay
 
 - Add bounded generic read-only capture for the exact `248710de` and `250410de`
