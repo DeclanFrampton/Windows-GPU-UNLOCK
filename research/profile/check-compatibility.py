@@ -150,6 +150,12 @@ def validate_envelope(envelope):
                         any(driver.get('version') == known['version'] and driver.get('text_sha256') == known['text_sha256']
                             for known in drivers) for driver in allowed))
             require(len({(driver['version'], driver['text_sha256']) for driver in allowed}) == len(allowed))
+            if 'pci_nvgop' in chip or chip['chip'] == 'b74000a1':
+                try:
+                    for card in chip['pci_memory']:
+                        mp.card_nvgop(chip, int(card, 16))
+                except mp.Refused:
+                    raise ValueError('invalid installed envelope') from None
     except (KeyError, TypeError):
         raise ValueError('invalid installed envelope') from None
 

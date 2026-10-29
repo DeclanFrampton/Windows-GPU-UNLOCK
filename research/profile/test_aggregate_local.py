@@ -46,7 +46,7 @@ def main():
     for driver in envelope['nvgop']:
         if driver['version'] in lengths:driver['text_sha256']=hashlib.sha256(bytes(lengths[driver['version']])).hexdigest()
     for chip in envelope['chips']:
-        for driver in chip['nvgop']:
+        for driver in chip['nvgop']+[driver for pins in chip.get('pci_nvgop',{}).values() for driver in pins]:
             if driver['version'] in lengths:driver['text_sha256']=hashlib.sha256(bytes(lengths[driver['version']])).hexdigest()
     (out/'platform-config.h').write_text('#define GU_INTERNAL_PARTITION_INITIALIZER {0}\n#define GU_WINDOWS_PARTITION_INITIALIZER {0}\n')
     summaries=[]
@@ -57,7 +57,8 @@ def main():
         return result.stdout.strip()
     for children,(board,chip,memory) in itertools.product((1,2),(
         (0x220410de,0xb72000a1,0x6000),(0x220310de,0xb72000a1,0x5ff4),
-        (0x248710de,0xb74000a1,0x3000),(0x250410de,0xb76000a1,0x3000))):
+        (0x248710de,0xb74000a1,0x3000),(0x250410de,0xb76000a1,0x3000),
+        (0x248410de,0xb74000a1,0x2000))):
         case=out/f'id{board:x}-children{children}';case.mkdir()
         capture=case/'capture';capture.mkdir()
         text=data.synthetic_capture(aggregate=True,no_edid=False,board=board,chip=chip,memory=memory,
@@ -74,7 +75,7 @@ def main():
             text,hits=re.subn(pattern,lambda m:m[1]+f'img dump index={index:02x}\n',text,flags=re.M|re.S)
             if hits!=1:raise RuntimeError('Missing synthetic binding')
         for index in range(envelope['min_captures']):(capture/f'DIAG{index:02d}.TXT').write_text(text)
-        version='60009' if board==0x220410de else '60010'
+        version='60009' if board in (0x220410de,0x248410de) else '60010'
         (capture/'IMG00.BIN').write_bytes(images.driver_image(0x2be40 if version=='60009' else 0x26ae0,0x280,lengths[version]))
         (capture/'IMG01.BIN').write_bytes(images.driver_image(0x9000,0x1000,0x800))
         (capture/'PROM.BIN').write_bytes(bytes(1048576))

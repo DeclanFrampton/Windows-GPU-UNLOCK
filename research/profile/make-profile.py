@@ -83,6 +83,28 @@ def fail(message):
     raise Refused(message)
 
 
+def card_nvgop(chip, board):
+    """Keep shared chip code from admitting firmware proven only on another SKU."""
+    if 'pci_nvgop' not in chip:
+        if chip.get('chip') == 'b74000a1':
+            fail('invalid per-card nvgop pins: GA104 requires PCI-specific driver evidence')
+        return chip['nvgop']
+    mapping = chip['pci_nvgop']
+    try:
+        if not isinstance(mapping, dict) or set(mapping) != set(chip['pci_memory']):
+            fail('invalid per-card nvgop pins: every PCI identity must be covered exactly')
+        allowed = {(entry['version'], entry['text_sha256']) for entry in chip['nvgop']}
+        for entries in mapping.values():
+            if not isinstance(entries, list) or not entries or any(not isinstance(entry, dict) for entry in entries):
+                fail('invalid per-card nvgop pins: expected nonempty driver lists')
+            pairs = [(entry['version'], entry['text_sha256']) for entry in entries]
+            if len(set(pairs)) != len(pairs) or any(pair not in allowed for pair in pairs):
+                fail('invalid per-card nvgop pins: driver must be unique and chip-reviewed')
+        return mapping[f'{board:08x}']
+    except (KeyError, TypeError):
+        fail('invalid per-card nvgop pins')
+
+
 def node_file(nodes):
     """Return ('guid', str) for a PIWG firmware-file node, ('name', str) for a file path."""
     if len(nodes) != 2 or nodes[1] != b'\x7f\xff\x04\x00':
@@ -638,7 +660,7 @@ def analyze(diag, image_dir, envelope):
         edid_code = code_hash(image_dir, edid, EDID_TEXT_RVA) if edid else None
         nv_code = code_hash(image_dir, nv, NVGOP_TEXT_RVA)
         global_codes = {(g['version'], g['text_sha256']) for g in envelope['nvgop']}
-        known = [g for g in proven[0].get('nvgop', []) if (g['version'], g['text_sha256']) in global_codes and
+        known = [g for g in card_nvgop(proven[0], board) if (g['version'], g['text_sha256']) in global_codes and
                  int(g['version'], 16) == nv['version'] and g['text_sha256'] == nv_code['sha256']]
         if len(known) != 1:
             fail(f'nvgop {nv["version"]:#x} with .text {nv_code["sha256"][:16]}... has not released cleanly on proven hardware')

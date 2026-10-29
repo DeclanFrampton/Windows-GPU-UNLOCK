@@ -44,6 +44,7 @@ def main():
     parser.add_argument('--clang',default='clang')
     parser.add_argument('--topology',choices=('aggregate','nonaggregate','no-edid'),default='aggregate')
     parser.add_argument('--generated-profile',action='store_true')
+    parser.add_argument('--gpu',choices=('3090','3070'),default='3090')
     parser.add_argument('--segment',type=lambda value:int(value,0),default=0)
     parser.add_argument('--output',type=Path,required=True)
     args=parser.parse_args();out=args.output.resolve()
@@ -56,7 +57,8 @@ def main():
     image_data=load('variable_path_images','test_compatibility.py')
     refusals=load('variable_path_refusals','test_make_profile.py')
     envelope=copy.deepcopy(json.loads((HERE/'proven.json').read_text()))
-    for driver in envelope['nvgop']+[driver for chip in envelope['chips'] for driver in chip['nvgop']]:
+    for driver in envelope['nvgop']+[driver for chip in envelope['chips'] for driver in chip['nvgop']]+[
+            driver for chip in envelope['chips'] for pins in chip.get('pci_nvgop',{}).values() for driver in pins]:
         if driver['version']=='60009':driver['text_sha256']=hashlib.sha256(bytes(0x24426)).hexdigest()
     (out/'platform-config.h').write_text('#define GU_INTERNAL_PARTITION_INITIALIZER {0}\n#define GU_WINDOWS_PARTITION_INITIALIZER {0}\n')
     images=[]
@@ -73,10 +75,12 @@ def main():
         return result.stdout.strip()
     summaries=[]
     aggregate=args.topology=='aggregate';no_edid=args.topology=='no-edid'
+    card={'board':0x248410de,'chip':0xb74000a1,'memory':0x2000} if args.gpu=='3070' else {}
+    board=card.get('board',0x220410de)
     for hops,hid,children in itertools.product((1,2,3,8,16),(3,8),(1,2)):
         case=out/f'hops{hops}-root{hid}-children{children}';case.mkdir()
-        legacy=data.synthetic_capture(aggregate=aggregate,no_edid=no_edid,children=children)
-        baseline=data.analyze(legacy)
+        legacy=data.synthetic_capture(aggregate=aggregate,no_edid=no_edid,children=children,**card)
+        baseline=data.analyze(legacy,envelope=envelope)
         primary=vectors.path(hops,hid,0 if hid==3 else 42)
         layout=contract.decode_gpu_display_path(primary)
         controller=primary[:layout['controller_bytes']]
@@ -123,7 +127,7 @@ def main():
             images=[str(case/name) for name in ('IMG01.BIN','IMG00.BIN','PROM.BIN')]
         run(case/'fixture.log',[sys.executable,'-I',str(ROOT/'internal-boot/boot/make-console-fixture.py'),str(capture),
             *(['--aggregate'] if aggregate else []),*(['--no-edid-driver'] if no_edid else []),
-            '--single-rtx','--no-igpu','--no-edid-child','--output='+str(fixture)])
+            '--single-rtx','--no-igpu','--no-edid-child',f'--rtx-id={board:08x}','--output='+str(fixture)])
         if hashlib.sha256(capture.read_bytes()).hexdigest() not in fixture.read_text():
             raise RuntimeError('Fixture does not identify the generated profile capture')
         overlay=case/'overlay.json'
@@ -131,7 +135,7 @@ def main():
             {'type':'file','name':str(ROOT/'internal-boot/unlock/profile-local.h'),'external-contents':str(header),'use-external-name':False},
             {'type':'file','name':str(ROOT/'internal-boot/boot/build/aggregate/replay-fixture.h'),'external-contents':str(fixture),'use-external-name':False},
             {'type':'file','name':str(ROOT/'internal-boot/boot/build/r2/replay-fixture.h'),'external-contents':str(fixture),'use-external-name':False}]}))
-        config=case/'config.bin';config.write_bytes(struct.pack('<64I',*data.configuration()))
+        config=case/'config.bin';config.write_bytes(struct.pack('<64I',*data.configuration(board=board)))
         release_args=images if aggregate else [*(images[1:] if no_edid else images),str(config)]
         variants=(('prepare','test_aggregate_prepare.c' if aggregate else 'test_r2.c',[]),
                   ('release','test_aggregate_full.c' if aggregate else 'test_headless_full.c',release_args))
@@ -152,7 +156,7 @@ def main():
             summaries.append({'case':case.name,'path_bytes':len(actual_primary),'controller_bytes':len(controller),
                 'stage':stage,'result':result})
         probe=case/'probe.txt'
-        probe.write_text(''.join(f'config_offset=0x{i*4:x}\nvalue=0x{word:08x}\n' for i,word in enumerate(data.configuration())))
+        probe.write_text(''.join(f'config_offset=0x{i*4:x}\nvalue=0x{word:08x}\n' for i,word in enumerate(data.configuration(board=board))))
         checks=case/'checks.exe'
         run(case/'checks-compile.log',[*flags,'-ivfsoverlay',str(overlay),
             str(ROOT/'internal-boot/unlock/tests/test_checks.c'),str(ROOT/'internal-boot/unlock/checks.c'),'-o',str(checks)])
@@ -173,7 +177,7 @@ def main():
         print(case.name+': prepare and release passed; synthetic backend overlay only',flush=True)
     (out/'summary.json').write_text(json.dumps({'synthetic_only':True,'hardware_access':False,
         'profile_generated':args.generated_profile,'fwsec_locator_stubbed':args.generated_profile,
-        'synthetic_proof_envelope':True,'local_evidence_written':False,'segment':args.segment,'topology':args.topology,'cases':summaries},indent=2))
+        'synthetic_proof_envelope':True,'local_evidence_written':False,'gpu':args.gpu,'segment':args.segment,'topology':args.topology,'cases':summaries},indent=2))
 
 
 if __name__=='__main__':main()

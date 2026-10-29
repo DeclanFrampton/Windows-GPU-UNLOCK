@@ -26,6 +26,7 @@ GPU model.** Check the linked motherboard, BIOS and card requirements before bui
 | GPU | Current status | Details |
 |---|---|---|
 | **RTX 3060 12GB (GA104 / GA106)** | Hardware success reported; headless USB only | [GA104](docs/COMPATIBILITY.en.md#profile-4-asus-prime-b660-plus-d4--rtx-3060-12gb-headless-usb) · [GA106](docs/COMPATIBILITY.en.md#profile-5-gigabyte-h610m-h--rtx-3060-12gb-ga106-headless-usb) |
+| **RTX 3070 8GB (2484 / GA104)** | Contributor LOCAL USB success reported; experimental automatic profile | [Exact conditions](docs/COMPATIBILITY.en.md#reported-local-profile-success) |
 | **RTX 3070 Ti 8GB** | Hardware success reported; internal headless | [Supported configuration](docs/COMPATIBILITY.en.md#profile-2-asus-tuf-b660m-e-d4--rtx-3070-ti-aggregate-console) |
 | **RTX 3080** | No dedicated profile; Windows display-routing research available | [Research observations](research/rtx3080/README.md) · [Project origins](THIRD_PARTY_NOTICES.md) |
 | **RTX 3090 FE 24GB** | Hardware success recorded; internal headless; default profile | [Supported configuration](docs/COMPATIBILITY.en.md#profile-1-asus-tuf-b650m--rtx-3090-fe-original) |
@@ -192,7 +193,7 @@ support. New systems require [compatibility reporting](docs/CONTRIBUTING.en.md) 
 [portability validation](docs/PORTABILITY.en.md). A machine inside the hardware-proven envelope
 can build and test its own local profile with the [new-machine pipeline](docs/NEW-MACHINE.en.md).
 This experimental workflow inventories NVIDIA display devices, but deep capture is
-limited to one reviewed RTX 3090 / 3090 Ti or RTX 3060 12GB identity in the reviewed PCI/BAR state. A generated local
+limited to one reviewed RTX 3090 / 3090 Ti, RTX 3060 12GB or RTX 3070 `2484` identity in the reviewed PCI/BAR state. A generated local
 profile does not add another verified machine profile. USB write builds require all
 21 host jobs, including input policy and the topology-specific complete driver-release replay, and unchanged profile,
 fixtures and build inputs; hardware validation is still required. Within this envelope

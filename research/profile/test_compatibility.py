@@ -68,7 +68,8 @@ class CompatibilityTests(unittest.TestCase):
             self.assertEqual(hits, 1)
         for index in range(count):
             (self.folder / f'DIAG{index:02d}.TXT').write_text(text, encoding='ascii')
-        (self.folder / 'IMG00.BIN').write_bytes(driver_image(0x2be40, 0x280, 0x500))
+        nv_size=0x26ae0 if options.get('board') in (0x220310de,0x248710de,0x250410de) else 0x2be40
+        (self.folder / 'IMG00.BIN').write_bytes(driver_image(nv_size, 0x280, 0x500))
         if not no_edid:
             (self.folder / 'IMG01.BIN').write_bytes(driver_image(0x9000, 0x1000, 0x800))
         (self.folder / 'PROM.BIN').write_bytes(bytes(1048576))
@@ -240,6 +241,59 @@ class CompatibilityTests(unittest.TestCase):
         image[0x280] = 1
         (self.folder / 'IMG00.BIN').write_bytes(image)
         self.assert_reason('outside_scope', 'driver_scope')
+
+    def test_per_card_driver_pins_do_not_inherit_another_skus_firmware(self):
+        self.populate()
+        chip=self.envelope['chips'][0]
+        captured=copy.deepcopy(chip['nvgop'][0])
+        other={'version':'60010','text_sha256':'1'*64}
+        chip['nvgop'].append(other)
+        self.envelope['nvgop'].append(copy.deepcopy(other))
+        chip['pci_nvgop']={'220410de':[captured]}
+        self.assert_reason('candidate','images_pass')
+        chip['pci_nvgop']['220410de']=[other]
+        self.assert_reason('outside_scope','driver_scope')
+        with self.assertRaisesRegex(checker.mp.Refused,'has not released cleanly'):
+            checker.mp.analyze(self.folder/'DIAG01.TXT',self.folder,self.envelope)
+
+    def test_malformed_per_card_driver_pins_are_installation_errors(self):
+        self.populate()
+        captured=copy.deepcopy(self.envelope['chips'][0]['nvgop'][0])
+        for mapping in (None,[],{}, {'220410de':[]}, {'220410de':[captured,captured]},
+                        {'220410de':[{'version':'60010','text_sha256':'1'*64}]},
+                        {'220410de':[captured],'ffffffff':[captured]}, {'220410de':[{}]},
+                        {'220410de':['bad']}, {'220410de':[{'version':[],'text_sha256':'1'*64}]}):
+            with self.subTest(mapping=mapping):
+                self.envelope['chips'][0]['pci_nvgop']=mapping
+                self.assertEqual(self.result()['status'],'error')
+                with self.assertRaises(checker.mp.Refused):
+                    checker.mp.analyze(self.folder/'DIAG01.TXT',self.folder,self.envelope)
+
+    def test_ga104_card_memory_and_firmware_pins_stay_coupled(self):
+        self.envelope=json.loads((HERE/'proven.json').read_text())
+        for driver in self.envelope['nvgop']+[driver for chip in self.envelope['chips'] for driver in chip['nvgop']]+[
+                driver for chip in self.envelope['chips'] for pins in chip.get('pci_nvgop',{}).values() for driver in pins]:
+            driver['text_sha256']=hashlib.sha256(bytes(0x500)).hexdigest()
+        for board,memory,version in ((0x248410de,0x2000,'60009'),(0x248710de,0x3000,'60010')):
+            with self.subTest(board=board):
+                self.populate(board=board,memory=memory,chip=0xb74000a1)
+                self.assert_reason('candidate','images_pass')
+                with patch.object(checker.mp,'locate_fwsec',return_value={'image_off':0x100,'image_size':0x200}):
+                    header,report,_=checker.mp.generate(self.folder,Path('not-invoked'),self.envelope)
+                self.assertIn(f'#define GU_BOARD_ID 0x{board:08x}U',header)
+                self.assertIn(f'#define GU_NVGOP_VERSION 0x{version}U',header)
+                # The other SKU's driver is chip/global-reviewed, but still forbidden here.
+                chip=next(chip for chip in self.envelope['chips'] if chip['chip']=='b74000a1')
+                saved=copy.deepcopy(chip['pci_nvgop'])
+                chip['pci_nvgop'][f'{board:08x}']=copy.deepcopy(saved['248710de' if board==0x248410de else '248410de'])
+                self.assert_reason('outside_scope','driver_scope')
+                chip['pci_nvgop']=saved
+                self.populate(board=board,memory=0x3000 if memory==0x2000 else 0x2000,chip=0xb74000a1)
+                self.assert_reason('outside_scope','gpu_scope')
+        chip.pop('pci_nvgop')
+        self.assertEqual(self.result()['status'],'error')
+        with self.assertRaisesRegex(checker.mp.Refused,'requires PCI-specific'):
+            checker.mp.card_nvgop(chip,0x248410de)
 
     def test_malformed_image_and_prom_mismatch(self):
         self.populate()

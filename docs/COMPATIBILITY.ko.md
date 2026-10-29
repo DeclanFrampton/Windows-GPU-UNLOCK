@@ -10,8 +10,9 @@
 [PR #24](https://github.com/impacifist/Windows-GPU-UNLOCK/pull/24),
 [PR #30](https://github.com/impacifist/Windows-GPU-UNLOCK/pull/30),
 [PR #77](https://github.com/impacifist/Windows-GPU-UNLOCK/pull/77)).
-빌드는 [internal-boot/unlock/machine-profile.h](../internal-boot/unlock/machine-profile.h)에서
-빌드 시점에 선택된 하나의 검토된 프로필 전용이며, 다른 GPU·플랫폼은 지원하지 않습니다.
+고정 프로필 빌드는 [internal-boot/unlock/machine-profile.h](../internal-boot/unlock/machine-profile.h)에서
+선택한 정확한 구성 전용입니다. 다른 GPU·플랫폼에는 이 고정 프로필을 적용할 수 없습니다.
+실험적 LOCAL 생성 경로와 별도의 기여자 성공 보고는 아래에 설명합니다.
 
 | 빌드 프로필 | 정확한 플랫폼 / CPU | 기록된 headless 경로 |
 |---|---|---|
@@ -179,6 +180,22 @@ main 소스에서 `internal-boot/Configure.ps1`과 `research/headless/build-unlo
 Cold/full-flow와 컴파일 회귀 검사를 제공하지만 `test-all.ps1`의 전체 개인 fixture
 트랜잭션 재현은 아직 연결하지 않았습니다. 공개 근거에 정확한 FWSEC 이미지 offset·size와
 개인 입력이 없으므로 펌웨어 배치를 추정해 통과시키지 않고 해당 검증을 차단합니다.
+
+## 로컬 프로필 성공 보고
+
+[이슈 #113](https://github.com/impacifist/Windows-GPU-UNLOCK/issues/113)은
+Gigabyte B460M D2VX SI BIOS FE / i5-10400F / Zotac RTX 3070 8GB에서 한 번의
+headless USB 언락, clean FLR·정리, Windows 화면 복귀를 보고합니다. 시험 소스는
+`9692463` 기반 [공개 변경 17b5e50](https://github.com/Wandraker/GPU-UNLOCK/commit/17b5e50b0a56ca593fffd764bd0fc85379b536b2)이며,
+핵심 변경은 진단 ID·GA104 카드 조합·생성 허용 범위·거부 시험입니다. 언락·소유권·DMA·FLR
+실행 코드는 바꾸지 않았습니다. 현재 main의 새 실기기 검증이나 장기 안정성 근거는 아닙니다.
+
+현재 자동 로컬 프로필은 `10de:2484` / chip `b74000a1` / `2000` MiB와
+nvgop `60009`의 기존 검증 코드 해시 조합을 허용합니다. subsystem·PROM·경로·펌웨어
+나머지 값은 자신의 캡처로 고정하고 필수 host 시험 21개를 통과해야 합니다.
+같은 GA104인 RTX 3060 `2487` / `3000` MiB는 여전히 `60010` 코드만 허용합니다.
+새 장비별 고정 프로필은 추가하지 않았으며 [로컬 프로필 절차](NEW-MACHINE.en.md)를 사용합니다.
+다른 3070 PCI ID, VBIOS·드라이버 조합과 콘솔 구성은 별도 검증이 필요합니다.
 
 ## 기록된 구성 밖의 범위
 

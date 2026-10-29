@@ -18,8 +18,8 @@ reviewed profiles have proven on hardware. There is no override flag. Today that
 
 | Requirement | Why |
 |---|---|
-| RTX 3090 / 3090 Ti `220410de` / `220310de`, or RTX 3060 12GB `248710de` / `250410de` | exact reviewed PCI-ID/chip/VRAM combinations are required |
-| GA102 `b72000a1` with `6000` / `5ff4` MiB; GA104 `b74000a1` with `248710de` + `3000` MiB; GA106 `b76000a1` with `250410de` + `3000` MiB | these are coupled tuples, not independent choices; class/revision remains `030000a1` |
+| RTX 3090 / 3090 Ti `220410de` / `220310de`, RTX 3060 12GB `248710de` / `250410de`, or RTX 3070 8GB `248410de` | exact reviewed PCI-ID/chip/VRAM combinations are required |
+| GA102 `b72000a1` with `6000` / `5ff4` MiB; GA104 `b74000a1` with `248710de` + `3000` MiB or `248410de` + `2000` MiB; GA106 `b76000a1` with `250410de` + `3000` MiB | these are coupled tuples, not independent choices; class/revision remains `030000a1` |
 | exactly one NVIDIA display controller, at a captured 16-bit PCI segment, device 0, function 0 on a nonzero PCI bus (reviewed profiles: segment `0000`, bus `01`) | PCI identity and the captured segment/bus remain independently verified; other segments are experimental |
 | ACPI PNP0A03 or PNP0A08 root, a captured root UID, 1–16 legal PCI path nodes ending at `Pci(0,0)`, one ADR and an end node | LOCAL pins the complete ancestry; display paths are bounded to 120 bytes and the PCI parent must consume exactly the controller prefix |
 | at most one integrated (non-NVIDIA) display controller; the RTX owns the only physical GOP | a recognized pathless, zero-framebuffer AMI aggregate GOP is allowed; a second physical GOP is refused |
@@ -37,7 +37,11 @@ reviewed `.text` hash in `proven.json`. The GA104 evidence is an aggregate B660-
 machine. LOCAL aggregate and non-aggregate combinations still need their own replay
 and physical validation; generation is not another success report. The GA106
 evidence is one non-aggregate H610M success. Other boards and current builds still
-need their own host replay and physical validation. Widening the envelope needs a reviewed change that cites new
+need their own host replay and physical validation. RTX 3070 `2484` / `2000` MiB uses
+the existing `60009` code hash, based on the [contributor's exact build and success report](https://github.com/impacifist/Windows-GPU-UNLOCK/issues/113).
+GA104 requires a complete `pci_nvgop` map: 3060 `2487` remains `60010`-only and 3070
+`2484` is `60009`-only. A missing map, another SKU's driver or a different hash is refused.
+Widening the envelope needs a reviewed change that cites new
 hardware evidence, normally a new reviewed profile (PORTABILITY stage 4).
 
 **Bus, iGPU and EDID.** The generator accepts a card on another PCI bus, a machine without an
@@ -132,9 +136,9 @@ Run the same command repeatedly; each run does the next step.
    `EFI\BOOT\BOOTX64.EFI`, keeping any previous loader in `RTX3090-UNLOCK\backup\` and earlier
    capture files in `RTX3090-UNLOCK\old-*\`. Shut down fully, choose the stick in the firmware
    boot menu, and let it start Windows. Do this twice. The probe only reads: PCI config,
-   loaded driver images, and for a single eligible RTX 3090 / 3090 Ti or RTX 3060 12GB identity,
+   loaded driver images, and for a single eligible RTX 3090 / 3090 Ti, RTX 3060 12GB or RTX 3070 `2484` identity,
    16 BAR0 registers and the 1 MiB PROM window. The deep read requires MEM1/BME0,
-   the reviewed class/revision, the selected segment-0/device-0/function-0 bus, a 32-bit aligned 16 MiB BAR resource
+   the reviewed class/revision, the selected captured segment/bus at device 0/function 0, a 32-bit aligned 16 MiB BAR resource
    and unchanged handle/interface/config after resource queries and allocation. The bus is
    discovered automatically and the generator records it as `GU_TARGET_BUS`. An optional
    `-TargetBus 0x2b` on `new-machine.ps1` or `build-probe.ps1` constrains discovery to that

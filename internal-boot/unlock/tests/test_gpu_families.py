@@ -41,6 +41,7 @@ class FamilyTests(unittest.TestCase):
                  (102, 0x220410de, 0x6000, 0xb72000a2),
                  (104, 0x248210de, 0x3000, 0xb74000a1),
                  (104, 0x248710de, 0x2000, 0xb74000a1),
+                 (104, 0x248410de, 0x3000, 0xb74000a1),
                  (106, 0x250410de, 0x2000, 0xb76000a1),
                  (106, 0x248710de, 0x3000, 0xb76000a1),
                  (204, 0x278610de, 0x3000, 0x194000a1),
@@ -51,6 +52,11 @@ class FamilyTests(unittest.TestCase):
                     [f'-DGU_GPU_FAMILY={family}', f'-DGU_BOARD_ID={board}U',
                      f'-DGU_DEVICE_MEMORY_SIZE={memory}U', f'-DGU_CHIP_ID={chip}U'])
                 self.assertNotEqual(done.returncode, 0)
+
+    def test_rtx3070_uses_the_shared_ga104_implementation(self):
+        done=compile_source('#include "gpu-family.h"\n_Static_assert(GU_GPU_FAMILY == 104, "GA104");\n',
+            ['-DGU_PROFILE_LOCAL','-DGU_BOARD_ID=0x248410deU','-DGU_DEVICE_MEMORY_SIZE=0x2000U','-DGU_CHIP_ID=0xb74000a1U'])
+        self.assertEqual(done.returncode,0,done.stderr)
 
     def test_profile_family_and_firmware_cannot_be_overridden(self):
         for define in ('GU_GPU_FAMILY=104', 'GU_FIRMWARE_PROFILE=2', 'GU_GPU_FAMILY_GA102=104',
