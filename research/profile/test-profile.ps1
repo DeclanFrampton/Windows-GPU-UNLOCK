@@ -66,6 +66,7 @@ try {
  Run-Job 'checks (real config)' ($flags+$profile+@('tests/test_checks.c','checks.c','-o',"$out/checks.exe")) @("./$out/checks.exe",$probe)
  Run-Job 'checks other profile (must reject)' ($flags+@($foreign,'tests/test_checks.c','checks.c','-o',"$out/checks-other.exe")) @("./$out/checks-other.exe",$probe) 1
  Run-Job 'port' ($flags+$profile+@('-DGU_HOST_WRITE_TEST','tests/test_port.c','port.c','-o',"$out/port.exe")) @("./$out/port.exe")
+ Run-Job 'fresh PCI identity' ($flags+$profile+@('-DGU_HOST_WRITE_TEST','tests/test_refresh_identity.c','ownership.c','port.c','-o',"$out/fresh-identity.exe")) @("./$out/fresh-identity.exe")
  Run-Job 'write-lock' ($flags+$profile+@('tests/test_preflight_lock.c','port.c','-o',"$out/write-lock.exe")) @("./$out/write-lock.exe")
  Run-Job 'master-attributes' ($flags+$profile+$defs+@('-DGU_HOST_WRITE_TEST','tests/test_master_attributes.c')+$core+@('-o',"$out/master.exe")) @("./$out/master.exe")
  Run-Job 'runtime' ($flags+@('-fno-builtin','tests/test_runtime.c','format.c',"$out/runtime-host.obj",'-o',"$out/runtime.exe")) @("./$out/runtime.exe")

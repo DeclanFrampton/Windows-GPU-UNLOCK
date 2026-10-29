@@ -195,7 +195,7 @@ can build and test its own local profile with the [new-machine pipeline](docs/NE
 This experimental workflow inventories NVIDIA display devices, but deep capture is
 limited to one reviewed RTX 3090 / 3090 Ti, RTX 3060 12GB or RTX 3070 `2484` identity in the reviewed PCI/BAR state. A generated local
 profile does not add another verified machine profile. USB write builds require all
-21 host jobs, including input policy and the topology-specific complete driver-release replay, and unchanged profile,
+22 host jobs, including fresh PCI identity checks, input policy and the topology-specific complete driver-release replay, and unchanged profile,
 fixtures and build inputs; hardware validation is still required. Within this envelope
 the generic probe discovers the bus automatically and the generated profile pins it per
 machine. An optional `-TargetBus` constrains discovery and resumed captures.

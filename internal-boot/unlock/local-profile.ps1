@@ -88,6 +88,7 @@ function Get-LocalRequiredFiles {
    'internal-boot/unlock/gpu-family.h','internal-boot/unlock/firmware-profile.h',
    'internal-boot/unlock/gpu-path.h','research/profile/gpu_path.py',
    'internal-boot/unlock/tests/test_gpu_paths.c','internal-boot/unlock/tests/test_gpu_path_vectors.c',
+   'internal-boot/unlock/tests/test_refresh_identity.c','research/profile/test_refresh_identity.py',
    'research/profile/test_gpu_path.py','research/profile/test_gpu_path_contract.py',
    'internal-boot/unlock/build.ps1','internal-boot/boot/handoff.c',
    'research/headless/build-usb.ps1','research/headless/stage-usb.ps1',
@@ -134,7 +135,7 @@ function Get-LocalTreeDigest([string]$Repo) {Get-LocalInputDigest @(Get-LocalTre
 function Get-LocalExpectedJobs([bool]$NoEdidDriver=$false,[bool]$ConsoleAggregate=$false) {
  if($NoEdidDriver -and $ConsoleAggregate){throw 'Aggregate replay requires an EDID driver'}
  $jobs=[ordered]@{'generator refusals'=0;'stock-selection'=0;'checks (real config)'=0;
- 'checks other profile (must reject)'=1;'port'=0;'write-lock'=0;'master-attributes'=0;'runtime'=0;
+ 'checks other profile (must reject)'=1;'port'=0;'fresh PCI identity'=0;'write-lock'=0;'master-attributes'=0;'runtime'=0;
  'profile-lock-entryLatchedSs1Full'=0;'profile-lock-entryLatchedSs1Preserve'=0;
  'r2 console replay (real graph)'=0;'r2 replay other profile (must reject)'=1;
  'cold pre-check (read-only)'=0;'full flow gates'=0;'research input policy'=0;'core transaction (efi)'=0;

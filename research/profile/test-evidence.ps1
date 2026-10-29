@@ -87,6 +87,9 @@ Check 'fixture hash' {param($e) $e.Fixtures.'PROM.BIN'='0'*64}
 Check 'report hash' {param($e) $e.ProfileReportSha256='0'*64}
 Check 'missing job' {param($e) $e.Results.PSObject.Properties.Remove('runtime')}
 Check 'missing actual input policy job' {param($e) $e.Results.PSObject.Properties.Remove('research input policy')}
+Check 'previous job set without fresh PCI identity' {param($e) $e.Results.PSObject.Properties.Remove('fresh PCI identity')}
+Check 'fresh PCI identity failed' {param($e) $e.Results.'fresh PCI identity'.Exit=1}
+Check 'fresh PCI identity expectation weakened' {param($e) $e.Results.'fresh PCI identity'.Exit=1;$e.Results.'fresh PCI identity'.Expected=1}
 Check 'input policy expectation weakened' {param($e) $e.Results.'research input policy'.Exit=1;$e.Results.'research input policy'.Expected=1}
 Check 'extra job' {param($e) $e.Results|Add-Member NoteProperty extra @{Exit=0;Expected=0}}
 Check 'string exit' {param($e) $e.Results.runtime.Exit='0'}

@@ -187,7 +187,7 @@ Run the same command repeatedly; each run does the next step.
 A write build of `-HardwareProfile local` (`internal-boot/unlock/build.ps1`, `build-usb.ps1`,
 and `stage-usb.ps1` again before copying) is refused unless `test-results.json`:
 
-- uses evidence format 2 with boolean pass/no-hardware flags and the exact 21
+- uses evidence format 2 with boolean pass/no-hardware flags and the exact 22
   host results (including exit 1 for the two required rejection jobs and the full
   driver-release replay selected by the profile's EDID state),
 - was made against exactly the current `profile-local.h` bytes and PROM hash,

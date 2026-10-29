@@ -204,7 +204,7 @@ physical validation of current main or long-term reliability evidence.
 
 Automatic LOCAL generation now admits `10de:2484` / chip `b74000a1` / `2000` MiB
 with nvgop `60009` and its existing reviewed code hash. Subsystem, PROM, paths and
-remaining firmware values still come from the owner's captures, and all 21 required
+remaining firmware values still come from the owner's captures, and all 22 required
 host jobs must pass. GA104 RTX 3060 `2487` / `3000` MiB remains bound to `60010` code.
 No new named motherboard profile is added; use the [local-profile workflow](NEW-MACHINE.en.md).
 Other 3070 PCI IDs, VBIOS/driver combinations and console layouts need separate validation.

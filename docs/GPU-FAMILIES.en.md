@@ -48,7 +48,7 @@ GA104 `248710de` and GA106 `250410de` tuples. These require the reviewed nvgop
 [issue #113](https://github.com/impacifist/Windows-GPU-UNLOCK/issues/113).
 GA104 requires PCI-specific driver pins; a chip-level match cannot substitute for them.
 The existing GA102 combinations remain available. Recognized aggregate and
-non-aggregate LOCAL topologies require all 21 host jobs, including input policy
+non-aggregate LOCAL topologies require all 22 host jobs, including fresh PCI identity, input policy
 and the topology-specific complete driver-release replay. Generated profiles are experimental candidates, not
 new physical compatibility reports.
 

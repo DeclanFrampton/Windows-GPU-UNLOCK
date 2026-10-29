@@ -166,6 +166,8 @@ def main():
         summaries.append({'case':case.name,'path_bytes':len(actual_primary),'controller_bytes':len(controller),
             'stage':'checks and path classification','result':result})
         for stage,source,extra,sources in (
+            ('fresh-identity','../unlock/tests/test_refresh_identity.c',['-DGU_HOST_WRITE_TEST'],
+                [str(ROOT/'internal-boot/unlock/ownership.c'),str(ROOT/'internal-boot/unlock/port.c')]),
             ('cold','test_cold_precheck.c',[],[str(ROOT/'internal-boot/boot/console-flow.c'),
                 str(ROOT/'internal-boot/unlock/checks.c'),str(ROOT/'internal-boot/unlock/sha256.c')]),
             ('pci-layout','../unlock/tests/test_pci_layout.c',['-DGU_HOST_WRITE_TEST'],
