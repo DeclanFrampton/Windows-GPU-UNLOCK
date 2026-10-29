@@ -1,4 +1,4 @@
-param([Parameter(Mandatory)][string]$StateDirectory, [switch]$VerifyStable)
+param([Parameter(Mandatory)][string]$StateDirectory, [switch]$VerifyStable, [switch]$ExecuteCleanup)
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'shared-esp-firmware-lib.ps1')
 $s=Get-Content (Join-Path $StateDirectory 'firmware-backup.json') -Raw | ConvertFrom-Json
@@ -17,9 +17,19 @@ try {
  for($i=0;$i -lt $now.Length;$i+=2){$name='Boot{0:X4}' -f [BitConverter]::ToUInt16($now,$i);if($name -eq $s.OptionName -or $name -in $names){throw 'Referenced temporary or duplicate option'};$names+=$name;$v=& $read $name;if(!$v){throw 'Missing entry'};$entries+=,[pscustomobject]@{Name=$name;Value=$v}}
  if($null -ne (& $read 'BootNext')){throw 'BootNext is pending'}
  if(!(Test-FirmwareValueEqual (& $read $s.OptionName) $s.Option)){throw 'Temporary entry changed'}
- if($VerifyStable){
+ if($VerifyStable -or $ExecuteCleanup){
   $snapshot=[pscustomobject]@{BootOrder=$order;BootEntries=$entries}
   foreach($pass in 1..2){Assert-SharedEspFirmwareSnapshot $snapshot $read;if($null -ne (& $read 'BootNext')){throw 'BootNext changed during verification'};if(!(Test-FirmwareValueEqual (& $read $s.OptionName) $s.Option)){throw 'Temporary option changed during verification'}}
  }
- [ordered]@{stable_passes=$(if($VerifyStable){2}else{0});read_only=$true;cleanup_candidate=$true;preserved_entries=$names;temporary_option=$s.OptionName;boot_next_clear=$true;original_prefix_matches=$true;firmware_writes=0} | ConvertTo-Json -Depth 4
+ $deleted=$false
+ if($ExecuteCleanup){
+  Assert-SharedEspFirmwareSnapshot $snapshot $read
+  if($null -ne (& $read 'BootNext') -or !(Test-FirmwareValueEqual (& $read $s.OptionName) $s.Option)){throw 'State changed before deletion'}
+  [SharedEspFirmware.Native]::Write($s.OptionName,$null,[uint32]$s.Option.Attributes)
+  if($null -ne (& $read $s.OptionName)){throw 'Deletion did not persist; preserve backup'}
+  Assert-SharedEspFirmwareSnapshot $snapshot $read
+  if($null -ne (& $read 'BootNext')){throw 'BootNext changed after deletion; preserve backup'}
+  $deleted=$true
+ }
+ [ordered]@{cleanup_completed=$deleted;stable_passes=$(if($VerifyStable -or $ExecuteCleanup){2}else{0});read_only=(!$ExecuteCleanup);cleanup_candidate=$true;preserved_entries=$names;temporary_option=$s.OptionName;boot_next_clear=$true;original_prefix_matches=$true;firmware_writes=$(if($deleted){1}else{0})} | ConvertTo-Json -Depth 4
 }finally{$scope.Dispose()}
