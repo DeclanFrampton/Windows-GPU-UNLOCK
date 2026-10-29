@@ -31,7 +31,7 @@ def main():
         parser.error('Expected synthetic host replay inputs')
     cases=sorted({row['case'] for row in inputs['cases'] if row['stage']=='release'})
     if not cases:parser.error('No completed LOCAL release cases')
-    if any(not re.fullmatch(r'(id[0-9a-f]{8}|hops(1|2|3|8|16)-root[38])-children[12]',name) for name in cases):
+    if any(not re.fullmatch(r'(id[0-9a-f]{8}|hops(1|2|3|8|16)-root[38])-children[1-4]',name) for name in cases):
         parser.error('Unexpected synthetic case path')
     out.mkdir(parents=True)
     (out/'NOT-A-PACKAGE.txt').write_text('Synthetic compile regression only. No LOCAL evidence or package authorization. Do not stage or execute.\n')

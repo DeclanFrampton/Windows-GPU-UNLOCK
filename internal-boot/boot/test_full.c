@@ -22,8 +22,27 @@ static UINT8 MousePath[24],NvPath[32];
 static UINT32 InitialFullConfig[64],MockConfig[64];
 static UINT64 MockAttributes;
 static int FullScenario,EnableCalls,ClaimCalls,CloseCalls,Phase,ColdCalls;
+static BOOLEAN LateChildDrift;
 #ifdef GU_HEADLESS_RESEARCH
-static UINT8 SecondChildPath[GU_RTX_DISPLAY_BYTES];
+static UINT8 AdditionalChildPaths[GU_HEADLESS_MAX_DISPLAY_CHILDREN-1][GU_RTX_DISPLAY_BYTES];
+#ifdef FX_EXTRA_DISPLAY_CHILD_COUNT
+static const UINTN AdditionalChildCount=FX_EXTRA_DISPLAY_CHILD_COUNT;
+static const EFI_HANDLE AdditionalChildren[GU_HEADLESS_MAX_DISPLAY_CHILDREN-1]=FX_EXTRA_CHILD_HANDLES;
+static const UINT8 RecordedAdditionalPaths[GU_HEADLESS_MAX_DISPLAY_CHILDREN-1][GU_RTX_DISPLAY_BYTES]=FX_EXTRA_CHILD_PATHS;
+#else
+static const UINTN AdditionalChildCount=FX_EXTRA_DISPLAY_CHILD;
+static const EFI_HANDLE AdditionalChildren[GU_HEADLESS_MAX_DISPLAY_CHILDREN-1]={FX_EdidChild};
+#endif
+static EFI_HANDLE LastDisplayChild(VOID) {return AdditionalChildCount?AdditionalChildren[AdditionalChildCount-1]:FX_Rtx;}
+static BOOLEAN DisplayChild(EFI_HANDLE h) {
+  if(h==FX_Rtx)return TRUE;
+  for(UINTN i=0;i<AdditionalChildCount;i++)if(h==AdditionalChildren[i])return TRUE;
+  return FALSE;
+}
+#if GU_NO_EDID_DRIVER
+static BOOLEAN CapacityProbe;
+static UINT8 CapacityPaths[4][GU_RTX_DISPLAY_BYTES];
+#endif
 static BOOLEAN PhaseForHeadlessTest(VOID) {return Phase>=4;}
 #endif
 static const UINT32 MockCold[]={GU_CHIP_ID,0x8b8f,0x3ff,0x10,0,0xffffff8f,0x03000062,6,GU_DEVICE_MEMORY_SIZE};
@@ -62,11 +81,19 @@ static VOID LoadDriverFixture(const char *path,UINT8 *memory,UINTN size) {
 #endif
 static EFI_STATUS ExtraHandle(EFI_HANDLE h,EFI_GUID *g,VOID **out) {
 #ifdef GU_HEADLESS_RESEARCH
-  if(h==FX_EdidChild && GuGuidEqual(g,&PathGuid) && Phase<4){*out=SecondChildPath;return EFI_SUCCESS;}
 #if GU_NO_EDID_DRIVER
-  if((h==FX_Rtx || h==FX_EdidChild) && GuGuidEqual(g,&EdidGuid) && Phase<4){*out=EdidInterfaceMark;return EFI_SUCCESS;}
+  if(CapacityProbe)for(UINTN i=0;i<4;i++)if(h==(EFI_HANDLE)(UINTN)(FX_HANDLES+2+i)) {
+    if(GuGuidEqual(g,&PathGuid)){*out=CapacityPaths[i];return EFI_SUCCESS;}
+    if(GuGuidEqual(g,&EdidGuid)){*out=EdidInterfaceMark;return EFI_SUCCESS;}
+  }
+#endif
+  for(UINTN i=0;i<AdditionalChildCount;i++)
+    if(h==AdditionalChildren[i] && GuGuidEqual(g,&PathGuid) && Phase<4){*out=AdditionalChildPaths[i];return EFI_SUCCESS;}
+#if GU_NO_EDID_DRIVER
+  if(FullScenario==37 && h==LastDisplayChild() && GuGuidEqual(g,&EdidGuid))return EFI_UNSUPPORTED;
+  if(DisplayChild(h) && GuGuidEqual(g,&EdidGuid) && Phase<4){*out=EdidInterfaceMark;return EFI_SUCCESS;}
 #else
-  if((h==FX_Rtx || h==FX_EdidChild) && GuGuidEqual(g,&EdidGuid) && Phase<4){*out=&MouseBinding;return EFI_SUCCESS;}
+  if(DisplayChild(h) && GuGuidEqual(g,&EdidGuid) && Phase<4){*out=&MouseBinding;return EFI_SUCCESS;}
 #endif
 #endif
 #if GU_NO_EDID_DRIVER
@@ -98,6 +125,18 @@ static EFI_STATUS EFIAPI MemRead(EFI_PCI_IO_PROTOCOL *io,EFI_PCI_IO_PROTOCOL_WID
     /* Phase 3 follows the EDID stage; without an EDID driver the last cold read before the NV stop is phase 2. */
     if(FullScenario==19 && Phase==(GU_NO_EDID_DRIVER?2:3) && i==8)Live.Edges[Live.Count++]=(EDGE){FX_RtxPci,FX_NvAgent,FX_Input,PathGuid,8,1};
 #ifdef GU_HEADLESS_RESEARCH
+#if GU_NO_EDID_DRIVER
+    if((FullScenario==35 || FullScenario==36) && Phase==2 && i==8 && !LateChildDrift) {
+      LateChildDrift=TRUE;
+      if(FullScenario==35) {
+        if(AdditionalChildCount)AdditionalChildPaths[AdditionalChildCount-1][GU_RTX_DISPLAY_BYTES-8]^=1;
+        else TestRtxPath[GU_RTX_DISPLAY_BYTES-8]^=1;
+      } else {
+        EFI_HANDLE last=LastDisplayChild();
+        Live.Edges[Live.Count++]=(EDGE){last,FX_OutAgent,last,EdidGuid,EFI_OPEN_PROTOCOL_BY_DRIVER,1};
+      }
+    }
+#endif
     if(FullScenario==32 && Phase==3 && i==8)RtxInfo.HorizontalResolution--;
 #endif
     return EFI_SUCCESS;
@@ -194,7 +233,7 @@ static EFI_STATUS FullLog(VOID *ctx,const char *event,EFI_STATUS status) {
   if(!strcmp(event,"headless-console-pre-release-verification")) {
     if(FullScenario==23)Live.Edges[Live.Count++]=(EDGE){FX_RtxPci,FX_NvAgent,FX_Input,PathGuid,8,1};
     if(FullScenario==24) {
-      EFI_HANDLE child=FX_EdidChild?FX_EdidChild:FX_Rtx;
+      EFI_HANDLE child=LastDisplayChild();
       Live.Edges[Live.Count++]=(EDGE){child,FX_OutAgent,child,TextGuid,16,1};
     }
     if(FullScenario==27)return EFI_WARN_UNKNOWN_GLYPH;
@@ -202,16 +241,24 @@ static EFI_STATUS FullLog(VOID *ctx,const char *event,EFI_STATUS status) {
     /* An EDID driver that appears on a display child after the console was prepared is unreviewed. */
     if(FullScenario==33)Live.Edges[Live.Count++]=(EDGE){FX_Rtx,FX_OutAgent,FX_Rtx,EdidGuid,EFI_OPEN_PROTOCOL_BY_DRIVER,1};
     if(FullScenario==34) {
-      EFI_HANDLE child=FX_EdidChild?FX_EdidChild:FX_Rtx;
+      EFI_HANDLE child=LastDisplayChild();
       Live.Edges[Live.Count++]=(EDGE){child,FX_OutAgent,child,EdidGuid,EFI_OPEN_PROTOCOL_BY_DRIVER,1};
     }
+    if(FullScenario==38) {
+      UINTN changed=0;
+      for(UINTN i=0;i<Live.Count;i++) {
+        EDGE *e=&Live.Edges[i];
+        if(e->Handle==FX_RtxPci && e->Controller==LastDisplayChild() && e->Attributes==EFI_OPEN_PROTOCOL_BY_CHILD_CONTROLLER){e->Agent=FX_OutAgent;changed++;}
+      }
+      Check(changed==1,"last captured display child's NVIDIA owner was actually changed");
+    }
 #else
-    if(FullScenario==28)Drop(FX_EdidChild?FX_EdidChild:FX_Rtx,FX_EdidAgent,&EdidGuid);
+    if(FullScenario==28)Drop(LastDisplayChild(),FX_EdidAgent,&EdidGuid);
 #endif
   }
   if(!strcmp(event,"detach-nvidia-gop-intent")) {
     if(FullScenario==25) {
-      if(FX_EdidChild)SecondChildPath[sizeof(SecondChildPath)-8]^=1;
+      if(AdditionalChildCount)AdditionalChildPaths[AdditionalChildCount-1][GU_RTX_DISPLAY_BYTES-8]^=1;
       else TestRtxPath[sizeof(TestRtxPath)-8]^=1;
     }
     if(FullScenario==26)NvMemory[0x280]^=1;
@@ -232,14 +279,17 @@ static EFI_STATUS FullLog(VOID *ctx,const char *event,EFI_STATUS status) {
 }
 static EFI_STATUS RunFull(int scenario) {
   FullMode=FALSE;Check(Run(scenario==21?23:scenario==22?24:0)==EFI_SUCCESS,"hardware-validated Stage2A replay prerequisite");
-  FullScenario=scenario;EnableCalls=ClaimCalls=CloseCalls=0;Phase=2;ColdCalls=0;
+  FullScenario=scenario;EnableCalls=ClaimCalls=CloseCalls=0;Phase=2;ColdCalls=0;LateChildDrift=FALSE;
 #ifdef GU_HEADLESS_RESEARCH
-#ifdef FX_EDID_CHILD_PATH_BYTES
+#ifdef FX_EXTRA_DISPLAY_CHILD_COUNT
+  Check(AdditionalChildCount<GU_HEADLESS_MAX_DISPLAY_CHILDREN,"captured child count fits runtime capacity");
+  memcpy(AdditionalChildPaths,RecordedAdditionalPaths,sizeof(AdditionalChildPaths));
+#elif defined(FX_EDID_CHILD_PATH_BYTES)
   const UINT8 recordedChildPath[]={FX_EDID_CHILD_PATH_BYTES};
-  Check(sizeof(recordedChildPath)==sizeof(SecondChildPath),"recorded child path has compiled target length");
-  memcpy(SecondChildPath,recordedChildPath,sizeof(recordedChildPath));
+  Check(sizeof(recordedChildPath)==sizeof(AdditionalChildPaths[0]),"recorded child path has compiled target length");
+  memcpy(AdditionalChildPaths[0],recordedChildPath,sizeof(recordedChildPath));
 #else
-  memcpy(SecondChildPath,TestRtxPath,sizeof(SecondChildPath));SecondChildPath[sizeof(SecondChildPath)-8]^=0x50;
+  memcpy(AdditionalChildPaths[0],TestRtxPath,sizeof(AdditionalChildPaths[0]));AdditionalChildPaths[0][GU_RTX_DISPLAY_BYTES-8]^=0x50;
 #endif
 #endif
   memcpy(MockConfig,InitialFullConfig,sizeof(MockConfig));

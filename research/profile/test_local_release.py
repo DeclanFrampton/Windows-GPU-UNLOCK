@@ -44,8 +44,10 @@ def main():
     summaries, child_checks, image_refusals = [], [], []
     envelope=json.loads((ROOT / 'research/profile/proven.json').read_text())
     cards=((0x220410de,0xb72000a1,0x6000),(0x220410de,0xb72000a1,0x5ff4),
-           (0x248710de,0xb74000a1,0x3000),(0x250410de,0xb76000a1,0x3000))
-    for bus, children, command, (board,chip,memory), no_edid in itertools.product((1, 0x2b), (1, 2), (2, 3), cards, (False,True)):
+           (0x248710de,0xb74000a1,0x3000),(0x250410de,0xb76000a1,0x3000),
+           (0x220310de,0xb72000a1,0x5ff4),(0x248410de,0xb74000a1,0x2000))
+    for bus, children, command, (board,chip,memory), no_edid in itertools.product((1, 0x2b), (1, 2, 3, 4), (2, 3), cards, (False,True)):
+        if children>2 and not no_edid:continue
         name = f'id{board:x}-bus{bus:x}-children{children}-cmd{command}-memory{memory:x}-noedid{int(no_edid)}'
         case = out / name
         case.mkdir()
@@ -53,7 +55,7 @@ def main():
         capture.write_text(data.synthetic_capture(bus=bus, children=children, command=command, memory=memory,
                                                  child_adr=0x10 if bus == 1 else 0xa0, board=board,chip=chip,no_edid=no_edid), encoding='ascii')
         admitted = data.analyze(capture.read_text(), envelope)
-        nv_size,nv_text=(0x26ae0,0x20d33) if board in (0x248710de,0x250410de) else (0x2be40,0x24426)
+        nv_size,nv_text=(0x26ae0,0x20d33) if board in (0x248710de,0x250410de,0x220310de) else (0x2be40,0x24426)
         defines = admitted['defines'] + [
             ('GU_NVGOP_TEXT_BYTES', f'0x{nv_text:x}U'),
             ('GU_NVGOP_TEXT_SHA256', '"' + hashlib.sha256(bytes(nv_text)).hexdigest() + '"')]

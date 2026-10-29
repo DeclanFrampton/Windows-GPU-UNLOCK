@@ -186,6 +186,10 @@ def main():
     # The EDID driver is optional, but a driver other than the reviewed AMI one may never own the
     # EdidDiscovered interface of the RTX GOP, whether or not this machine has one.
     edid_refusal=('BY_DRIVER opener of '+mp.EDID_DISCOVERED) if info and info['aggregate'] else 'edid:'
+    if info and info['no_edid_driver'] and info['child_count']>2:
+        # An EDID owner also removes this topology's permission for 3/4 children,
+        # so the exact topology guard rejects before driver fingerprint parsing.
+        edid_refusal='console topology requires 1..2 unique NVIDIA-owned display children'
     case('unreviewed driver owns the EDID interface', edid_refusal,
          lambda w, d: [add_edid_open(p, mp.BY_DRIVER) for p in d])
     if info and info['no_edid_driver']:

@@ -62,12 +62,13 @@ function Get-LocalProfile([string]$Repo) {
  $consoleAggregate=$false;$childCount=0
  if(!$legacyTopology) {
   if($aggregateRows.Count -ne 1 -or $aggregateRows[0].Value -cnotmatch '^#define GU_LOCAL_CONSOLE_AGGREGATE [01]$' -or
-     $childRows.Count -ne 1 -or $childRows[0].Value -cnotmatch '^#define GU_LOCAL_CHILD_COUNT [12]$'){
-   throw 'Local topology requires one exact aggregate 0/1 and child count 1/2'
+     $childRows.Count -ne 1 -or $childRows[0].Value -cnotmatch '^#define GU_LOCAL_CHILD_COUNT [1-4]$'){
+   throw 'Local topology requires one exact aggregate 0/1 and child count 1..4'
   }
   $consoleAggregate=$aggregateRows[0].Value.EndsWith(' 1');$childCount=[int]$childRows[0].Value.Substring($childRows[0].Value.Length-1)
  }
  if($consoleAggregate -and $noEdidDriver){throw 'Aggregate local profiles require an EDID driver'}
+ if($childCount -gt 2 -and ($consoleAggregate -or !$noEdidDriver)){throw 'Three/four children require non-aggregate firmware without an EDID driver'}
  return [ordered]@{
   Define='-DGU_PROFILE_LOCAL';Name=(Value 'GU_PROFILE_NAME' '"(LOCAL-[0-9a-f]{8}-[0-9a-f]{8}-[0-9a-f]{8})"')
   TargetPci=(Value 'GU_BOARD_ID' '0x([0-9a-f]{8})U');Subsystem=(Value 'GU_BOARD_SUBSYSTEM' '0x([0-9a-f]{8})U')

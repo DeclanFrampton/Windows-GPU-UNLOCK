@@ -206,6 +206,9 @@ LOCAL discovery and generation can pin a unique target on any 16-bit PCI segment
 Prepare, release and PCI access must match that segment as well as the captured bus;
 nonzero-segment operation is experimental and still needs physical validation.
 Single-RTX systems may have no iGPU or separate EDID driver on the non-aggregate path.
+Without a separate EDID driver, non-aggregate LOCAL generation/replay accepts one
+to four unique NVIDIA display children. Three/four-child paths remain experimental;
+four-child coverage is host-only. EDID-driver and aggregate generation retain a two-child limit.
 Recognized AMI aggregate consoles with one or
 two display children can generate an experimental local profile and require their own
 prepare/release replay; this does not establish another hardware success. Multiple NVIDIA GPUs are not generated.

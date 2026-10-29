@@ -37,8 +37,9 @@ def synthetic_capture(*, bus=0x2b, igpu=False, no_edid=True, children=2, command
                       board=0x220410de, chip=0xb72000a1, aggregate=False):
     cfg = configuration(command, board)
     handles = {i: {} for i in (1, 2, 3, 4, 5, 6, 8, 10, 11)}
-    if children == 2:
-        handles[7] = {}
+    siblings=[7]+list(range(20,20+max(0,children-2))) if children>1 else []
+    for child in siblings:
+        handles[child] = {}
     if not no_edid:
         handles[9] = {}
     def protocol(h, p, opens=(), detail=''):
@@ -54,7 +55,7 @@ def synthetic_capture(*, bus=0x2b, igpu=False, no_edid=True, children=2, command
     protocol(1, mp.PCI_IO, [(3, 1, 16, 1)],
              f'pci location-status=0x0 segment=0x0 bus=0x{bus:x} device=0x0 function=0x0\n'
              'pci config-status=0x0000000000000000\npci config-dwords=' + ' '.join(f'{v:08x}' for v in cfg[:16]) + '\n')
-    child_edges = [(3, 2, 8, 1)] + ([(3, 7, 8, 1)] if children == 2 else [])
+    child_edges = ([(3, 2, 8, 1)] if children else []) + [(3, child, 8, 1) for child in siblings]
     protocol(1, mp.PATH, child_edges, path(PCI_PATH + END))
     protocol(2, mp.PATH, detail=path(RTX_PATH))
     protocol(2, mp.GOP, [(5, 2, 16, 1)],
@@ -62,10 +63,10 @@ def synthetic_capture(*, bus=0x2b, igpu=False, no_edid=True, children=2, command
              'gop width=0x780 height=0x438 stride=0x780\ngop pixel-format=0x0 info-bytes=0x24\n')
     protocol(2, mp.TEXT_OUT, [(4, 2, 16, 1), (4, 6, 8, 1)])
     protocol(2, mp.EDID_DISCOVERED, [(3, 2, 2, 1)] if no_edid else [(9, 2, 16, 1)])
-    if children == 2:
-        second = bytearray(RTX_PATH); second[28] = child_adr
-        protocol(7, mp.PATH, detail=path(second))
-        protocol(7, mp.EDID_DISCOVERED, [] if no_edid else [(9, 7, 16, 1)])
+    for index, child in enumerate(siblings):
+        second = bytearray(RTX_PATH); second[28] = child_adr+index
+        protocol(child, mp.PATH, detail=path(second))
+        protocol(child, mp.EDID_DISCOVERED, [] if no_edid else [(9, child, 16, 1)])
     for h, image in ((3, 3), (4, 10), (5, 11)):
         protocol(h, '18a031ab-b443-4d1a-a5c0-0c09261e9f71', detail=f'driver image=0x{image:x} binding=0x{h:x}\n')
     protocol(6, '387477c1-69c7-11d2-8e39-00a0c969723b')
@@ -142,6 +143,7 @@ def add_open(text, handle, protocol, row):
     end = text.find('\nhandle id=', start + 1)
     if end < 0:
         end = text.index('\ncapture-complete=', start)
+    end += 1  # Include the final newline, also for the last handle in a capture.
     block = text[start:end]
     pattern = r'(protocol guid=' + re.escape(protocol) + r'\nopens status=0x0000000000000000 count=0x)([0-9a-f]+)(\n)'
     changed, count = re.subn(pattern, lambda m: m[1] + f'{int(m[2],16)+1:x}' + m[3] + row + '\n', block, count=1)
@@ -150,6 +152,40 @@ def add_open(text, handle, protocol, row):
 
 
 class LocalTopologyTests(unittest.TestCase):
+    def test_no_edid_child_capacity_matches_the_runtime(self):
+        runtime=(HERE.parents[1]/'internal-boot/boot/full-release.c').read_text()
+        values=re.findall(r'^#define GU_HEADLESS_MAX_DISPLAY_CHILDREN ([0-9]+)$',runtime,re.M)
+        self.assertEqual(values,[str(mp.MAX_NO_EDID_CHILDREN)])
+        for children in (3,4):
+            self.assertEqual(analyze(synthetic_capture(children=children))['child_count'],children)
+            for aggregate,no_edid in ((False,False),(True,False),(True,True)):
+                with self.subTest(children=children,aggregate=aggregate,no_edid=no_edid),self.assertRaises(mp.Refused):
+                    analyze(synthetic_capture(children=children,aggregate=aggregate,no_edid=no_edid))
+        for children in (0,5):
+            with self.subTest(children=children),self.assertRaisesRegex(mp.Refused,'1..4 unique'):
+                analyze(synthetic_capture(children=children))
+
+    def test_last_child_remains_part_of_admission(self):
+        for children in (3,4):
+            text=synthetic_capture(children=children)
+            last=20+children-3
+            block=re.search(rf'(^handle id=0x{last:x}\n)(.*?)(?=^handle id=|^capture-complete=)',text,re.M|re.S)
+            self.assertIsNotNone(block)
+            for changed in (
+                    block[2].replace('path-node raw=010106000103','path-node raw=010106000104'),
+                    re.sub(r'^path-node raw=02030800[0-9a-f]{8}$','path-node raw=0203080070030180',block[2],flags=re.M),
+                    block[2].replace('protocol guid='+mp.EDID_DISCOVERED+'\nopens status=0x0000000000000000 count=0x0\n','')):
+                self.assertNotEqual(changed,block[2])
+                with self.assertRaises(mp.Refused):analyze(text[:block.start(2)]+changed+text[block.end(2):])
+            for old,new in ((f'open agent=0x3 controller=0x{last:x} attributes=0x8 count=0x1',
+                             f'open agent=0x4 controller=0x{last:x} attributes=0x8 count=0x1'),
+                            (f'controller=0x{last:x} attributes=0x8 count=0x1',
+                             'controller=0x7 attributes=0x8 count=0x1')):
+                self.assertIn(old,text)
+                with self.assertRaises(mp.Refused):analyze(text.replace(old,new))
+            with self.assertRaisesRegex(mp.Refused,'active EdidDiscovered opener'):
+                analyze(add_open(text,last,mp.EDID_DISCOVERED,f'open agent=0x4 controller=0x{last:x} attributes=0x10 count=0x1'))
+
     def test_valid_local_matrix(self):
         for bus in (1, 0x2b, 255):
             for igpu in (False, True):
@@ -254,7 +290,7 @@ class LocalTopologyTests(unittest.TestCase):
         script = HERE.parents[1] / 'internal-boot/boot/make-console-fixture.py'
         for igpu in (False, True):
             for no_edid in (False, True):
-                for children in (1, 2):
+                for children in ((1,2,3,4) if no_edid else (1,2)):
                     with self.subTest(igpu=igpu, no_edid=no_edid, children=children), tempfile.TemporaryDirectory() as folder:
                         capture, output = Path(folder) / 'DIAG.TXT', Path(folder) / 'fixture.h'
                         capture.write_text(synthetic_capture(igpu=igpu, no_edid=no_edid, children=children, child_adr=0xa0), encoding='ascii')
@@ -267,8 +303,9 @@ class LocalTopologyTests(unittest.TestCase):
                         self.assertEqual(done.returncode, 0, done.stderr)
                         fixture = output.read_text()
                         self.assertIn(f'#define FX_NO_EDID_DRIVER {int(no_edid)}', fixture)
-                        self.assertIn(f'#define FX_EXTRA_DISPLAY_CHILD {children - 1}', fixture)
-                        if children == 2:
+                        self.assertIn(f'#define FX_EXTRA_DISPLAY_CHILD {int(children>1)}', fixture)
+                        self.assertIn(f'#define FX_EXTRA_DISPLAY_CHILD_COUNT {children-1}',fixture)
+                        if children > 1:
                             self.assertIn('#define FX_EDID_CHILD_PATH_BYTES', fixture)
 
     def test_fixture_flags_cannot_invent_absence(self):

@@ -45,10 +45,12 @@ def main():
     parser.add_argument('--topology',choices=('aggregate','nonaggregate','no-edid'),default='aggregate')
     parser.add_argument('--generated-profile',action='store_true')
     parser.add_argument('--gpu',choices=('3090','3070'),default='3090')
+    parser.add_argument('--children',nargs='+',type=int,choices=(1,2,3,4),default=(1,2))
     parser.add_argument('--segment',type=lambda value:int(value,0),default=0)
     parser.add_argument('--output',type=Path,required=True)
     args=parser.parse_args();out=args.output.resolve()
     if not 0<=args.segment<=0xffff:parser.error('Segment must be in 0..65535')
+    if args.topology!='no-edid' and any(children>2 for children in args.children):parser.error('Three/four children require the no-EDID topology')
     if out.exists():parser.error('Output must be a new directory')
     out.mkdir(parents=True)
     data=load('variable_path_data','test_local_topology.py')
@@ -77,7 +79,7 @@ def main():
     aggregate=args.topology=='aggregate';no_edid=args.topology=='no-edid'
     card={'board':0x248410de,'chip':0xb74000a1,'memory':0x2000} if args.gpu=='3070' else {}
     board=card.get('board',0x220410de)
-    for hops,hid,children in itertools.product((1,2,3,8,16),(3,8),(1,2)):
+    for hops,hid,children in itertools.product((1,2,3,8,16),(3,8),args.children):
         case=out/f'hops{hops}-root{hid}-children{children}';case.mkdir()
         legacy=data.synthetic_capture(aggregate=aggregate,no_edid=no_edid,children=children,**card)
         baseline=data.analyze(legacy,envelope=envelope)

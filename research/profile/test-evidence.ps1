@@ -214,6 +214,38 @@ $baseline=$normalBaseline
 Put 'internal-boot/unlock/profile-local.h' $header
 Put 'research/profile/local/profile.json' ($report|ConvertTo-Json -Depth 8)
 Check 'release replay job on a profile that has an EDID driver' {param($e) $e.Results|Add-Member NoteProperty 'release replay, no EDID driver (real graph)' @{Exit=0;Expected=0}}
+foreach($children in @(3,4)) {
+ $manyHeader=$noEdidHeader+"`n#define GU_LOCAL_CONSOLE_AGGREGATE 0`n#define GU_LOCAL_CHILD_COUNT $children`n"
+ Put 'internal-boot/unlock/profile-local.h' $manyHeader
+ $manyHw=Get-LocalProfile $sandbox
+ if(!$manyHw.NoEdidDriver -or $manyHw.ConsoleAggregate -or $manyHw.ChildCount -ne $children){throw 'Many-child topology parsed incorrectly'};$checks++
+ Check 'previous evidence cannot authorize a many-child header' {}
+ $manyReport=[ordered]@{Format=1;ProfileName=$hw.Name;HeaderSha256=$manyHw.HeaderSha256;PromSha256=$prom;HardwareTested=$false;Fixtures=$fixtures;Replay=[ordered]@{NoEdidDriver=$true;Aggregate=$false;ChildCount=$children}}
+ Put 'research/profile/local/profile.json' ($manyReport|ConvertTo-Json -Depth 8)
+ $e=$normalBaseline|ConvertFrom-Json
+ $e.HeaderSha256=$manyHw.HeaderSha256;$e.ProfileReportSha256=Get-GuSha256 (Join-Path $sandbox 'research/profile/local/profile.json')
+ $e.Results=$jobsNoEdid;$baseline=$e|ConvertTo-Json -Depth 10
+ Check 'matching many-child evidence and release replay' {} $true
+ foreach($token in @('null','true','"3"','"4"','3.0','4e0','0','5',(''+($children -bxor 1)))) {
+  $text=$manyReport|ConvertTo-Json -Depth 8
+  Put 'research/profile/local/profile.json' ([regex]::Replace($text,'"ChildCount":\s*[34]\b',('"ChildCount": '+$token)))
+  Check ('many-child report mismatch '+$token) {param($e) $e.ProfileReportSha256=Get-GuSha256 (Join-Path $sandbox 'research/profile/local/profile.json')}
+ }
+ foreach($bad in @($manyHeader.Replace('GU_NO_EDID_DRIVER 1','GU_NO_EDID_DRIVER 0'),
+                    $manyHeader.Replace('GU_LOCAL_CONSOLE_AGGREGATE 0','GU_LOCAL_CONSOLE_AGGREGATE 1'))) {
+  Put 'internal-boot/unlock/profile-local.h' $bad
+  $accepted=$true;try{$null=Get-LocalProfile $sandbox}catch{$accepted=$false}
+  if($accepted){throw 'Many-child profile escaped no-EDID/nonaggregate restriction'};$checks++
+ }
+ $baseline=$normalBaseline
+}
+foreach($children in @(0,5)) {
+ Put 'internal-boot/unlock/profile-local.h' ($noEdidHeader+"`n#define GU_LOCAL_CONSOLE_AGGREGATE 0`n#define GU_LOCAL_CHILD_COUNT $children`n")
+ $accepted=$true;try{$null=Get-LocalProfile $sandbox}catch{$accepted=$false}
+ if($accepted){throw 'Invalid no-EDID child count accepted'};$checks++
+}
+Put 'internal-boot/unlock/profile-local.h' $header
+Put 'research/profile/local/profile.json' ($report|ConvertTo-Json -Depth 8)
 # A matching header/report is required even if evidence hashes were recomputed.
 foreach($segment in @(0,1,65535)) {
  $segmentHeader=$header+("`n#define GU_TARGET_SEGMENT 0x{0:x}U`n" -f $segment)

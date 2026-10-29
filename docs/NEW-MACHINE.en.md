@@ -73,10 +73,22 @@ host-test evidence and per-machine physical validation as other experimental lay
 
 Admission and replay share a strict parser: incomplete/ambiguous handle, protocol,
 open and PCI snapshots cannot establish absence of an adapter or EDID owner. The
-no-EDID path admits one or two unique NVIDIA-owned display children. The generated
+non-aggregate no-EDID path admits one to four unique NVIDIA-owned display children;
+EDID-driver and aggregate paths remain limited to one or two. The generated
 header explicitly records `GU_NO_EDID_DRIVER 0/1`; the report must contain the same
 boolean, and this header-bound value selects the required release replay. Regenerate
 older local profiles that lack this flag from their existing valid captures.
+
+Three/four-child no-EDID generation uses the existing runtime capacity of four;
+it does not enlarge the driver's release permissions. The replay fixture carries
+every captured sibling handle/path and checks faults on the final child, including
+late path changes, new EDID/other consumers and a fifth valid-route child. Header,
+report and host evidence must agree on the recorded count. The non-aggregate runtime
+continues to discover and verify its bounded current-boot children; this metadata
+is not a new exact runtime count pin. Four-child coverage is synthetic host evidence.
+[Report #102](https://github.com/impacifist/Windows-GPU-UNLOCK/issues/102) motivated
+the three-monitor case, but its separate IO-cache correction and new nvgop `6000a`
+entry are not admitted by this change. It does not qualify that whole machine on main.
 
 **Aggregate console.** The generator records `GU_LOCAL_CONSOLE_AGGREGATE` and
 `GU_LOCAL_CHILD_COUNT` together, plus the observed Combo driver metadata. The report

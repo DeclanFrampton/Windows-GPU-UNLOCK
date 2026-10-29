@@ -72,10 +72,12 @@ roles = {
 }
 if single:
     child_records = [e for e in edges if e[0] == roles['RtxPci'] and str(e[3]) == '09576e91-6d3f-11d2-8e39-00a0c969723b' and e[4] == 8 and e[2] != roles['Rtx']]
-    # The B650M capture had a second EDID-only RTX child; a one-monitor
-    # capture has none. More than one is still unreviewed.
-    if len(child_records) > 1 or ('--no-edid-child' not in sys.argv[2:] and len(child_records) != 1):
-        raise ValueError('Expected one additional RTX EDID-only child')
+    # Only non-aggregate firmware without an EDID driver admits up to three
+    # siblings. Preserve the legacy exact-two-child option when not disabled.
+    child_limit = 3 if no_edid_driver else 1
+    if len(child_records) > child_limit or len({record[2] for record in child_records}) != len(child_records) or \
+            ('--no-edid-child' not in sys.argv[2:] and len(child_records) != 1):
+        raise ValueError('Unexpected additional RTX display child count')
     if child_records:
         roles['EdidChild'] = child_records[0][2]
     else:
@@ -118,6 +120,14 @@ for role, value in zip(['Console', 'Error', 'Input'], console.groups()):
 lines = [f'/* Local diagnostic sha256 {hashlib.sha256(raw).hexdigest()} */', f'#define FX_HANDLES {len(blocks)}',
          f'#define FX_NO_EDID_DRIVER {1 if no_edid_driver else 0}',
          f'#define FX_EXTRA_DISPLAY_CHILD {1 if roles.get("EdidChild") else 0}']
+if single:
+    if any(record[1]!=roles['NvAgent'] or record[5]!=1 for record in child_records):
+        raise ValueError('Additional display child has an unreviewed NVIDIA owner/count')
+    if no_edid_driver and any(EDID_DISCOVERED not in parsed[int(handle,16)]['protocols']
+            for handle,index in indices.items() if index in [roles['Rtx']]+[record[2] for record in child_records]):
+        raise ValueError('Every no-EDID display child requires its captured EdidDiscovered interface')
+    lines.append(f'#define FX_EXTRA_DISPLAY_CHILD_COUNT {len(child_records)}')
+    lines.append('#define FX_EXTRA_CHILD_HANDLES {'+(','.join(f'(EFI_HANDLE){record[2]}' for record in child_records) or 'NULL')+'}')
 primary_key=next(handle for handle,index in indices.items() if index==roles['Rtx'])
 primary_block=blocks[primary_key]
 primary_path=profile.path_of(primary_block)
@@ -205,14 +215,24 @@ if aggregate:
         raise ValueError('Aggregate replay requires all cold register observations')
     lines.append('static const UINT32 FixtureCold[9]={'+','.join(f'0x{cold[offset]:x}U' for offset in profile.COLD)+'};')
     lines.append('static const UINT32 FixtureColdOffsets[9]={'+','.join(f'0x{offset:x}U' for offset in profile.COLD)+'};')
-if roles.get('EdidChild'):
-    child_block = blocks[next(h for h, index in indices.items() if index == roles['EdidChild'])]
+child_paths=[]
+for child in ([record[2] for record in child_records] if single else []):
+    child_key=next(h for h,index in indices.items() if index==child)
+    child_block = blocks[child_key]
+    if profile.GOP in parsed[int(child_key,16)]['protocols'] or profile.TEXT_OUT in parsed[int(child_key,16)]['protocols']:
+        raise ValueError('Additional display child must not invent a physical GOP or text console')
     path_rows = re.findall(r'^path-node raw=([0-9a-f]+)$', child_block, re.M)
     child_path = b''.join(bytes.fromhex(row) for row in path_rows)
     child_layout=profile.gpu_display_path(child_path)
     if child_layout['controller_bytes']!=controller_bytes or child_path[:controller_bytes]!=primary_path[:controller_bytes]:
         raise ValueError('Additional display child has a different PCI route')
-    lines.append('#define FX_EDID_CHILD_PATH_BYTES ' + ','.join(str(byte) for byte in child_path))
+    if child_path==primary_path or child_path in child_paths:
+        raise ValueError('Additional display children require unique paths')
+    child_paths.append(child_path)
+if single:
+    lines.append('#define FX_EXTRA_CHILD_PATHS {'+(','.join('{'+','.join(str(byte) for byte in path)+'}' for path in child_paths) or '{0}')+'}')
+if child_paths:
+    lines.append('#define FX_EDID_CHILD_PATH_BYTES ' + ','.join(str(byte) for byte in child_paths[0]))
 for role, value in roles.items():
     lines.append(f'#define FX_{role} ((EFI_HANDLE){value})')
 lines.append('static const EDGE FixtureEdges[]={')
