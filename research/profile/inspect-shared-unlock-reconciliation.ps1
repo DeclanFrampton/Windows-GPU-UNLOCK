@@ -19,4 +19,9 @@ $res=Get-AuditCheckedPath $usb @('EVGA-UNLOCK8.ARMED') $false
 if((Get-Item -LiteralPath $res).Length -gt 4096){throw 'Unexpected reservation size'}
 $expected="RESERVED FOR SHARED ESP SULK01 SLOT 8. NOT EXECUTION PROOF. DO NOT DELETE OR RETRY.`r`n"
 $checks['usb_reservation_matches']=([IO.File]::ReadAllText($res) -ceq $expected)
-[ordered]@{read_only=$true;slot=8;checks=$checks;esp_log_sha256=$hash;usb_reservation_sha256=(Get-FileHash -LiteralPath $res).Hash;staging_eligible=$false;next_attempt_authorized=$false} | ConvertTo-Json -Depth 5
+. (Join-Path $PSScriptRoot 'shared-unlock-progression.ps1')
+$usbMarkers=@(Get-ChildItem -LiteralPath $usb -File -Filter 'EVGA-UNLOCK*.ARMED' | ForEach-Object {$_.Name})
+$espCapture=Get-AuditCheckedPath $root @('RTX3090-UNLOCK') $true
+$espMarkers=@(Get-ChildItem -LiteralPath $espCapture -File -Filter 'EVGA-UNLOCK*.ARMED' | ForEach-Object {$_.Name})
+$qualifiedNext=Get-ReviewedSharedUnlockNextSlot -UsbMarkers $usbMarkers -EspMarkers $espMarkers -LogSha256 $hash -ReservationSha256 (Get-FileHash -LiteralPath $res).Hash
+[ordered]@{reviewed_next_slot=$qualifiedNext;read_only=$true;slot=8;checks=$checks;esp_log_sha256=$hash;usb_reservation_sha256=(Get-FileHash -LiteralPath $res).Hash;staging_eligible=$false;next_attempt_authorized=$false} | ConvertTo-Json -Depth 5
