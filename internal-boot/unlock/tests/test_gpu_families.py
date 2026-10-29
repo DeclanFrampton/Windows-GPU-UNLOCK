@@ -36,7 +36,10 @@ class FamilyTests(unittest.TestCase):
                 self.assertEqual(done.returncode, 0, done.stderr)
 
     def test_wrong_family_identity_memory_or_revision_is_refused(self):
-        cases = [(102, 0x221610de, 0x6000, 0xb72000a1),
+        cases = [(102, 0x220a10de, 0x6000, 0xb72000a1),
+                 (102, 0x220a10de, 0x5ff4, 0xb72000a1),
+                 (102, 0x220a10de, 0x2800, 0xb72000a1),
+                 (102, 0x221610de, 0x6000, 0xb72000a1),
                  (102, 0x220410de, 0x3000, 0xb72000a1),
                  (102, 0x220410de, 0x6000, 0xb72000a2),
                  (104, 0x248210de, 0x3000, 0xb74000a1),
@@ -64,6 +67,11 @@ class FamilyTests(unittest.TestCase):
     def test_rtx3060ti_uses_the_shared_ga104_implementation(self):
         done=compile_source('#include "gpu-family.h"\n_Static_assert(GU_GPU_FAMILY == 104, "GA104");\n',
             ['-DGU_PROFILE_LOCAL','-DGU_BOARD_ID=0x24c910deU','-DGU_DEVICE_MEMORY_SIZE=0x2000U','-DGU_CHIP_ID=0xb74000a1U'])
+        self.assertEqual(done.returncode,0,done.stderr)
+
+    def test_rtx3080_12gb_uses_exact_ga102_tuple(self):
+        done=compile_source('#include "gpu-family.h"\n_Static_assert(GU_GPU_FAMILY == 102, "GA102");\n',
+            ['-DGU_PROFILE_LOCAL','-DGU_BOARD_ID=0x220a10deU','-DGU_DEVICE_MEMORY_SIZE=0x3000U','-DGU_CHIP_ID=0xb72000a1U'])
         self.assertEqual(done.returncode,0,done.stderr)
 
     def test_profile_family_and_firmware_cannot_be_overridden(self):
