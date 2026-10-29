@@ -29,6 +29,7 @@ if(!(Test-Path -LiteralPath $dir) -or (Captures).Count -lt $need) {
  & (Join-Path $PSScriptRoot 'build-probe.ps1') -WindowsEspGuid $WindowsEspGuid -Clang $Clang -LldLink $LldLink -Python $Python @probeOptions
  if(!$?){throw 'Probe build failed'}
  $m=Get-Content -LiteralPath (Join-Path $repo 'internal-boot/boot/build/probe-generic/manifest.json') -Raw | ConvertFrom-Json
+ Assert-GuGenericProbeManifest $repo $m (Join-Path $repo 'internal-boot/boot/build/probe-generic/BOOTX64.EFI')
  $bootFile=Join-Path $usb 'EFI\BOOT\BOOTX64.EFI'
  $current=if(Test-Path -LiteralPath $bootFile){Get-GuSha256 $bootFile}else{''}
  if($current -ne $m.EfiSha256) {
@@ -38,6 +39,7 @@ if(!(Test-Path -LiteralPath $dir) -or (Captures).Count -lt $need) {
   $old=@(Get-ChildItem -LiteralPath $dir -File | Where-Object {$_.Name -match '^(DIAG\d\d\.TXT|IMG\d\d\.BIN|PROM\.BIN)$'})
   if($old.Count){$keep=Join-Path $dir ('old-'+[DateTime]::Now.ToString('yyyyMMdd-HHmmss'));[void][IO.Directory]::CreateDirectory($keep);$old | Move-Item -Destination $keep;"earlier capture files moved to $keep"}
   [void][IO.Directory]::CreateDirectory((Split-Path $bootFile))
+  Assert-GuGenericProbeManifest $repo $m (Join-Path $repo 'internal-boot/boot/build/probe-generic/BOOTX64.EFI')
   Copy-Item -LiteralPath (Join-Path $repo 'internal-boot/boot/build/probe-generic/BOOTX64.EFI') -Destination $bootFile -Force
   if((Get-GuSha256 $bootFile) -ne $m.EfiSha256){throw 'Probe copy verification failed'}
   'READ-ONLY PROBE (research/profile/build-probe.ps1). Logs DIAGnn.TXT, PROM.BIN and IMGnn.BIN here, then starts Windows.' | Set-Content -LiteralPath (Join-Path $dir 'README.TXT') -Encoding ascii

@@ -100,6 +100,9 @@ Check 'missing manifest row' {param($e) $e.Inputs=@($e.Inputs|Select-Object -Ski
 Check 'manifest hash' {param($e) $e.Inputs[0].Sha256='0'*64}
 Check 'manifest path' {param($e) $e.Inputs[0].Path='other.c'}
 Check 'digest' {param($e) $e.TreeSha256='0'*64}
+Put 'research/pci-decode/snapshot.c' 'changed readonly input'
+Check 'external readonly source changed' {param($e)}
+Put 'research/pci-decode/snapshot.c' 'synthetic input'
 # A firmware without an EDID driver releases the GPU unlike every reviewed profile, so its evidence
 # must also hold the driver-release replay on its own graph, and that replay must have passed.
 $noEdidHeader=$header.Replace('#define GU_NO_EDID_DRIVER 0','#define GU_NO_EDID_DRIVER 1')

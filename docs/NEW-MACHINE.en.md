@@ -189,6 +189,23 @@ Run the same command repeatedly; each run does the next step.
 
 ## The evidence gate
 
+The generic read-only probe now attempts an optional parent PCI baseline. It logs
+`parent-baseline` status/availability and distinct `parent-baseline-device` /
+`parent-baseline-config` records, without adding another target config snapshot.
+This captures up to 15 parent bridges through exact controller prefixes. Current
+observation scope is command `2` and the research 2204/2203/2484/2487/2504 IDs;
+command `3`, 24c9 and unsupported paths can remain `available=0` while the ordinary
+diagnostic still completes. Parent availability never grants profile or correction
+approval. Target/capability drift instead stops before further GPU deep reads.
+Named diagnostic profiles do not request this extra collection.
+
+Generic build/staging validates the exact diagnostic flags, bus constraint, EFI hash
+and source manifest, including the six external read-only collector files. Those
+files are also bound into LOCAL input hashes. Older source-bound evidence becomes
+stale; all 22 actual-input LOCAL jobs remain required. The generic image links the
+read collector and pure predicates, never the correction core or ownership adapter.
+These integrations have host/PE evidence only, with no new physical EFI result.
+
 Host fixture setup derives IO/MEM/BME attributes once from the captured PCI
 command. Command `0x0002` therefore starts with attributes `0x200`, while command `0x0003`
 starts with `0x300`; a later injected mismatch is not repaired. The SHA host test

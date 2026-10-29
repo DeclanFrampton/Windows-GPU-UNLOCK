@@ -194,7 +194,9 @@ support. New systems require [compatibility reporting](docs/CONTRIBUTING.en.md) 
 [portability validation](docs/PORTABILITY.en.md). A machine inside the hardware-proven envelope
 can build and test its own local profile with the [new-machine pipeline](docs/NEW-MACHINE.en.md).
 This experimental workflow inventories NVIDIA display devices, but deep capture is
-limited to one reviewed RTX 3090 / 3090 Ti, RTX 3060 12GB, RTX 3060 Ti `24c9` or RTX 3070 `2484` identity in the reviewed PCI/BAR state. A generated local
+limited to one reviewed RTX 3090 / 3090 Ti, RTX 3060 12GB, RTX 3060 Ti `24c9` or RTX 3070 `2484` identity in the reviewed PCI/BAR state.
+The generic probe also records optional parent PCI information when its observation
+conditions match, helping investigate motherboard differences. This does not enable an unlock or correct PCI state. A generated local
 profile does not add another verified machine profile. USB write builds require all
 22 host jobs, including fresh PCI identity checks, input policy and the topology-specific complete driver-release replay, and unchanged profile,
 fixtures and build inputs; hardware validation is still required. Within this envelope

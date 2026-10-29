@@ -109,7 +109,8 @@ def main():
         print(f'PASS {len(mutations)} compiled guard mutations detected')
     (output / 'summary.json').write_text(json.dumps({
         'research_only': True, 'hardware_access': False, 'efi_executed': False,
-        'shipped_build_wired': False, 'local_evidence_written': False, 'adapter_host_only': True,
+        'correction_build_wired': False, 'readonly_collector_build_wired': True,
+        'local_evidence_written': False, 'adapter_host_only': True,
         'results': results, 'mutations': mutations,
     }, indent=2))
 

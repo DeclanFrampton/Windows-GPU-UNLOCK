@@ -83,6 +83,7 @@ function Get-LocalProfile([string]$Repo) {
 
 # Everything the host tests compile or that decides what they check. Local build inputs written
 # by the build scripts themselves (platform-config.h, generated.h, build/) are excluded.
+. (Join-Path $PSScriptRoot '../../research/profile/probe-manifest.ps1')
 function Get-LocalRequiredFiles {
  @('internal-boot/efi_runtime.c','internal-boot/unlock/local-profile.ps1',
    'internal-boot/unlock/gpu-family.h','internal-boot/unlock/firmware-profile.h',
@@ -95,7 +96,7 @@ function Get-LocalRequiredFiles {
    'research/profile/make-profile.py','research/profile/capture_graph.py','research/profile/test-profile.ps1',
    'internal-boot/boot/make-console-fixture.py','internal-boot/boot/test_aggregate_full.c',
    'internal-boot/boot/test_aggregate_prepare.c','internal-boot/boot/test_research_input.c',
-   'research/profile/host.ps1','research/profile/proven.json')
+   'research/profile/host.ps1','research/profile/proven.json','research/profile/probe-manifest.ps1')+@(Get-GuReadonlyCaptureFiles)
 }
 function Get-LocalTreeInputs([string]$Repo) {
  $Repo=[IO.Path]::GetFullPath($Repo).TrimEnd('\','/')
@@ -122,6 +123,14 @@ function Get-LocalTreeInputs([string]$Repo) {
   if(!$found){throw "Empty input root: $entry"}
  }
  $files['internal-boot/efi_runtime.c']=Get-GuSha256 (Join-Path $Repo 'internal-boot/efi_runtime.c')
+ foreach($directory in @('research','research/pci-decode')) {
+  if((Get-Item -LiteralPath (Join-Path $Repo $directory) -Force).Attributes -band [IO.FileAttributes]::ReparsePoint){throw 'Indirect readonly source directory'}
+ }
+ foreach($relative in (Get-GuReadonlyCaptureFiles)) {
+  $path=Join-Path $Repo $relative
+  if((Get-Item -LiteralPath $path -Force).Attributes -band [IO.FileAttributes]::ReparsePoint){throw 'Indirect readonly source file'}
+  $files[$relative]=Get-GuSha256 $path
+ }
  [string[]]$paths=@($files.Keys);[Array]::Sort($paths,[StringComparer]::Ordinal)
  foreach($path in $paths){[pscustomobject][ordered]@{Path=$path;Sha256=$files[$path]}}
 }

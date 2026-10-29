@@ -2,11 +2,12 @@
 # Never stages an EFI or queries a real partition. Resulting EFI uses a dummy GUID: do not boot it.
 param([Parameter(Mandatory)][string]$Clang,[Parameter(Mandatory)][string]$LldLink,[string]$Python='python')
 $ErrorActionPreference='Stop'
+. (Join-Path $PSScriptRoot 'probe-manifest.ps1')
 $repo=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $sandbox=Join-Path $PSScriptRoot ('build/probe-cli-'+[Guid]::NewGuid().ToString('N'))
 [void][IO.Directory]::CreateDirectory($sandbox)
 # Copy source files only, never private local fixtures, captures or previous build output.
-foreach($base in @('internal-boot/boot','internal-boot/unlock','deps/edk2/MdePkg/Include')) {
+foreach($base in @('internal-boot/boot','internal-boot/unlock','deps/edk2/MdePkg/Include','research/pci-decode')) {
  foreach($file in (Get-ChildItem -LiteralPath (Join-Path $repo $base) -Recurse -File)) {
   $rel=$file.FullName.Substring($repo.Length+1).Replace('\','/')
   if($rel -match '/(build|local)/' -or $file.Name -in @('profile-local.h','platform-config.h','generated.h')){continue}
@@ -17,7 +18,7 @@ foreach($base in @('internal-boot/boot','internal-boot/unlock','deps/edk2/MdePkg
  }
 }
 foreach($rel in @('internal-boot/efi_runtime.c','research/profile/build-probe.ps1','research/profile/new-machine.ps1',
-                 'internal-boot/unlock/local-profile.ps1','research/profile/host.ps1','research/profile/proven.json')) {
+                 'internal-boot/unlock/local-profile.ps1','research/profile/host.ps1','research/profile/proven.json','research/profile/probe-manifest.ps1')) {
  $dest=Join-Path $sandbox $rel;[void][IO.Directory]::CreateDirectory((Split-Path $dest))
  Copy-Item -LiteralPath (Join-Path $repo $rel) -Destination $dest
 }
@@ -33,6 +34,35 @@ foreach($bus in @($null,1,43,255)) {
  if(!$?){throw 'Sandbox probe build failed'}
  $m=Get-Content -LiteralPath (Join-Path $sandbox 'internal-boot/boot/build/probe-generic/manifest.json') -Raw | ConvertFrom-Json
  if($m.CanUnlock -or $m.CanDetach -or $m.WritesFirmwareVariables -or $m.HardwareTested){throw 'Invalid diagnostic flags'}
+ $efi=Join-Path $sandbox 'internal-boot/boot/build/probe-generic/BOOTX64.EFI'
+ Assert-GuGenericProbeManifest $sandbox $m $efi
+ foreach($change in @(
+  {param($x) $x.Defines=@($x.Defines|Where-Object {$_ -cne '-DGU_DIAGNOSTIC_ONLY'})},
+  {param($x) $x.Defines[0]='-DGU_FULL_UNLOCK'},
+  {param($x) $x.Defines+= '-DGU_UEFI_PORT'},
+  {param($x) $x.Defines[0]=$x.Defines[1]},
+  {param($x) $x.ProbeBusMode='auto';$x.TargetBus=1},
+  {param($x) $x.ProbeBusMode='explicit';$x.TargetBus='1'},
+  {param($x) $x.Mode=@($x.Mode)},
+  {param($x) $x.Sources[0].Path=@($x.Sources[0].Path)},
+  {param($x) $x.CanUnlock='false'},
+  {param($x) $x.Sources=@($x.Sources|Select-Object -Skip 1)}
+ )) {
+  $bad=$m|ConvertTo-Json -Depth 8|ConvertFrom-Json
+  & $change $bad
+  $refused=$false;try {Assert-GuGenericProbeManifest $sandbox $bad $efi}catch {$refused=$true}
+  if(!$refused){throw 'Malformed generic probe metadata accepted'};$checks++
+ }
+ $map=[IO.File]::ReadAllText((Join-Path $sandbox 'internal-boot/boot/build/probe-generic/PROBE.map'))
+ if($map -match '\b(GuDecodeSync|GuDsEfiRun|GuDsEfiInitialize)\b'){throw 'Actuator reached generic probe'}
+ $readonly=Join-Path $sandbox 'research/pci-decode/snapshot.c';$before=[IO.File]::ReadAllBytes($readonly)
+ try {
+  [IO.File]::AppendAllText($readonly,"`n/* Changed after build. */`n")
+  $refused=$false;try {Assert-GuGenericProbeManifest $sandbox $m $efi}catch {$refused=$true}
+  if(!$refused){throw 'Changed external readonly source accepted'}
+ }finally {[IO.File]::WriteAllBytes($readonly,$before)}
+ Assert-GuGenericProbeManifest $sandbox $m $efi
+ $checks++
  if($null -eq $bus) {
   if($m.ProbeBusMode -cne 'auto' -or $null -ne $m.TargetBus -or $m.Defines -cnotcontains '-DGU_PROBE_AUTO_BUS' -or
      @($m.Defines|Where-Object {$_ -match '^-DGU_PROBE_BUS='}).Count){throw 'Missing/ambiguous automatic bus selection'}

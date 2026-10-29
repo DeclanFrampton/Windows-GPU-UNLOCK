@@ -10,6 +10,13 @@
 #include <IndustryStandard/Acpi.h>
 #include "../unlock/sha256.h"
 #include "probe.h"
+#include "probe-pin.h"
+#ifdef GU_PROBE_PARENT_BASELINE
+#include "probe-parent.h"
+#if !defined(GU_PROBE_GENERIC) || !defined(GU_DIAGNOSTIC_ONLY) || !defined(GU_DIAGNOSTIC_PROBE) || defined(GU_FULL_UNLOCK) || defined(GU_EXPERIMENTAL_3090)
+#error Parent baseline requires the generic read-only probe
+#endif
+#endif
 #include "../unlock/machine-profile.h"
 
 #if defined(GU_PROBE_DUMP_PROM) && (!defined(GU_DIAGNOSTIC_ONLY) || !defined(GU_DIAGNOSTIC_PROBE) || !defined(GU_USB_MEDIA) || defined(GU_FULL_UNLOCK) || defined(GU_EXPERIMENTAL_3090))
@@ -174,6 +181,8 @@ static BOOLEAN ProbeEnvelope(CAPTURE *c,EFI_PCI_IO_PROTOCOL *io,const UINT32 *cf
   if(!identity || cfg[2]!=0x030000a1U ||
      (cfg[1]&6U)!=2U || !cfg[4] || (cfg[4]&0xffffffU) || !io->GetBarAttributes || !io->Mem.Read)return FALSE;
   VOID *raw=NULL;
+  EFI_FREE_POOL release=c->Table->BootServices->FreePool;
+  if(!release)return FALSE;
   EFI_STATUS s=io->GetBarAttributes(io,0,NULL,&raw);
   BOOLEAN good=FALSE;
   if(s==EFI_SUCCESS && raw) {
@@ -195,14 +204,18 @@ static BOOLEAN ProbeEnvelope(CAPTURE *c,EFI_PCI_IO_PROTOCOL *io,const UINT32 *cf
       End(c);
     }
   }
-  if(raw && c->Table->BootServices->FreePool(raw)!=EFI_SUCCESS)good=FALSE;
+  if(raw && release(raw)!=EFI_SUCCESS)good=FALSE;
   return good;
 }
 static BOOLEAN ProbeUnchanged(CAPTURE *c,EFI_HANDLE handle,EFI_PCI_IO_PROTOCOL *io,const UINT32 *cfg,UINTN expectedSegment,UINTN expectedBus) {
-  EFI_PCI_IO_PROTOCOL *current=NULL;UINTN seg=0,bus=0,dev=0,fun=0;UINT32 now[64];
-  if(c->Table->BootServices->HandleProtocol(handle,&PciGuidL,(VOID **)&current)!=EFI_SUCCESS || current!=io ||
+  EFI_PCI_IO_PROTOCOL *current=NULL;UINTN seg=~(UINTN)0,bus=~(UINTN)0,dev=~(UINTN)0,fun=~(UINTN)0;UINT32 now[64];
+  /* Every byte differs from its expected value; successful short output cannot
+   * reuse a preceding snapshot or accidentally match a zero BDF field. */
+  for(UINTN j=0;j<64;j++)now[j]=~cfg[j];
+  if(!io || !c->Table->BootServices || !c->Table->BootServices->HandleProtocol ||
+     c->Table->BootServices->HandleProtocol(handle,&PciGuidL,(VOID **)&current)!=EFI_SUCCESS || current!=io ||
      !io->GetLocation || io->GetLocation(io,&seg,&bus,&dev,&fun)!=EFI_SUCCESS || seg!=expectedSegment || bus!=expectedBus || dev || fun ||
-     io->Pci.Read(io,EfiPciIoWidthUint32,0,64,now)!=EFI_SUCCESS)return FALSE;
+     !io->Pci.Read || io->Pci.Read(io,EfiPciIoWidthUint32,0,64,now)!=EFI_SUCCESS)return FALSE;
   for(UINTN j=0;j<64;j++)if(now[j]!=cfg[j])return FALSE;
   return TRUE;
 }
@@ -216,16 +229,20 @@ static VOID ProbeBar(CAPTURE *c,EFI_PCI_IO_PROTOCOL *io,UINT32 bar,EFI_FILE_PROT
   };
   UINT8 *page=NULL;EFI_STATUS s;
 #ifdef GU_CHECKED_PROBE
+  GU_PROBE_PIN pin;
+  if(!GuProbeTakePin(c,io,&pin)){Problem(c,"probe-capabilities",EFI_NOT_READY);return;}
   if(!ProbeEnvelope(c,io,cfg)){Problem(c,"probe-unreviewed-envelope",EFI_UNSUPPORTED);return;}
-  s=c->Table->BootServices->AllocatePool(EfiBootServicesData,0x100000,(VOID **)&page);
-  if(s!=EFI_SUCCESS || !page){Problem(c,"prom-alloc",s==EFI_SUCCESS?EFI_OUT_OF_RESOURCES:s);return;}
+  if(!GuProbePinSame(c,&pin)){Problem(c,"probe-capabilities-changed",EFI_NOT_READY);return;}
+  s=pin.Allocate(EfiBootServicesData,0x100000,(VOID **)&page);
+  if(s!=EFI_SUCCESS || !page){if(page)pin.Free(page);Problem(c,"prom-alloc",s==EFI_SUCCESS?EFI_OUT_OF_RESOURCES:s);return;}
+  if(!GuProbePinSame(c,&pin)){pin.Free(page);Problem(c,"probe-capabilities-changed",EFI_NOT_READY);return;}
   /* The release's CapturePermit requires the PciIo attribute cache to match the raw IO/MEM/BME
    * command bits. Record it here, read-only (Get only), so a local profile can be refused before
    * any release instead of stopping mid-release. A protocol call, so it precedes the recheck. */
   UINT64 pciAttributes=0;
   EFI_STATUS attributesStatus=io->Attributes?io->Attributes(io,EfiPciIoAttributeOperationGet,0,&pciAttributes):EFI_UNSUPPORTED;
-  if(!ProbeUnchanged(c,handle,io,cfg,expectedSegment,expectedBus)) {
-    c->Table->BootServices->FreePool(page);Problem(c,"probe-identity-changed",EFI_NOT_READY);return;
+  if(!GuProbePinSame(c,&pin) || !ProbeUnchanged(c,handle,io,cfg,expectedSegment,expectedBus) || !GuProbePinSame(c,&pin)) {
+    pin.Free(page);Problem(c,"probe-identity-changed",EFI_NOT_READY);return;
   }
 #else
   (void)handle;(void)cfg;(void)expectedSegment;(void)expectedBus;
@@ -279,7 +296,11 @@ static VOID ProbeBar(CAPTURE *c,EFI_PCI_IO_PROTOCOL *io,UINT32 bar,EFI_FILE_PROT
       (void)root; /* Reviewed fixed-profile diagnostics remain hash-only. */
 #endif
     } else { Problem(c,"prom-read",s); }
+#ifdef GU_CHECKED_PROBE
+    if(pin.Free(page)!=EFI_SUCCESS)Problem(c,"prom-free",EFI_DEVICE_ERROR);
+#else
     if(c->Table->BootServices->FreePool(page)!=EFI_SUCCESS)Problem(c,"prom-free",EFI_DEVICE_ERROR);
+#endif
   } else Problem(c,"prom-alloc",s==EFI_SUCCESS?EFI_OUT_OF_RESOURCES:s);
 }
 
@@ -319,6 +340,11 @@ static VOID ProbeGops(CAPTURE *c) {
 EFI_STATUS GuProbeGpu(EFI_SYSTEM_TABLE *t,CAPTURE *c) {
   SysT=t;
   DumpIndex=0;
+#ifdef GU_PROBE_PARENT_BASELINE
+  /* A distinct diagnostic invocation owns a fresh observation, never a retry of
+   * a correction transaction. Static storage keeps it off the firmware stack. */
+  static GU_DS_CAPTURE parentObservation;parentObservation=(GU_DS_CAPTURE){0};
+#endif
   EFI_FILE_PROTOCOL *root=c->DumpRoot;
   if(root && !root->Open){Problem(c,"dump-volume",EFI_INVALID_PARAMETER);root=NULL;}
   EFI_BOOT_SERVICES *bs=t->BootServices;EFI_HANDLE *hs=NULL;UINTN n=0,found=0,cfgFailed=0;
@@ -370,6 +396,7 @@ EFI_STATUS GuProbeGpu(EFI_SYSTEM_TABLE *t,CAPTURE *c) {
       Text(c," dev=0x");Hex(c,dev,4);Text(c," fun=0x");Hex(c,fun,4);End(c);
     }
     UINT32 cfg[64];
+    for(UINTN j=0;j<64;j++)cfg[j]=0xa5a5a5a5U;
     s=io->Pci.Read(io,EfiPciIoWidthUint32,0,64,cfg);
     PH(c,"cfg256 status=0x",s);
     if(s!=EFI_SUCCESS) {
@@ -400,7 +427,30 @@ EFI_STATUS GuProbeGpu(EFI_SYSTEM_TABLE *t,CAPTURE *c) {
     expectedSegment=targetSegment;
     targetValidated=TRUE;
 #endif
+#ifdef GU_CHECKED_PROBE
+    GU_PROBE_PIN original;
+    if(!GuProbeTakePin(c,io,&original)) {
+      Problem(c,"probe-capabilities",EFI_NOT_READY);
+      if(hs && bs->FreePool)bs->FreePool(hs);
+      return EFI_COMPROMISED_DATA;
+    }
+#endif
+#ifdef GU_PROBE_PARENT_BASELINE
+    EFI_FREE_POOL release=bs->FreePool;
+    EFI_STATUS parent=GuProbeParentBaseline(c,&parentObservation,hs[i],io,cfg,expectedSegment,expectedBus);
+    if(parent==EFI_COMPROMISED_DATA) {
+      Problem(c,"parent-baseline-capability-changed",EFI_NOT_READY);
+      if(hs && release)release(hs);
+      return EFI_COMPROMISED_DATA;
+    }
+    if(c->Io!=EFI_SUCCESS)break;
+#endif
     if(bar)ProbeBar(c,io,bar,root,hs[i],cfg,expectedSegment,expectedBus);else Problem(c,"bar0",EFI_UNSUPPORTED);
+#ifdef GU_CHECKED_PROBE
+    if(!GuProbePinSame(c,&original)) {
+      Problem(c,"probe-capabilities-changed",EFI_NOT_READY);if(hs)original.Free(hs);return EFI_COMPROMISED_DATA;
+    }
+#endif
   }
 #ifdef GU_PROBE_GENERIC
   /* A selected target disappearing or turning non-display during the second

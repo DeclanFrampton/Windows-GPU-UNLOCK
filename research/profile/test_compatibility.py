@@ -243,6 +243,20 @@ class CompatibilityTests(unittest.TestCase):
         (self.folder / 'IMG00.BIN').write_bytes(image)
         self.assert_reason('outside_scope', 'driver_scope')
 
+    def test_optional_parent_records_cannot_change_profile_assessment(self):
+        supplemental=('parent-baseline status=0x0000000000000000 available=1 parents=0x01\n'
+            'parent-baseline-device index=0x00 segment=0xffff bus=0xff device=0x00 function=0x00 attributes=0x0000000000000200 supported=0x0000000000000700\n'
+            'parent-baseline-config index=0x00 words='+' '.join(['ffffffff']*64)+'\n')
+        for mismatch in (False,True):
+            self.populate()
+            if mismatch:
+                for path in self.folder.glob('DIAG*.TXT'):
+                    path.write_text(path.read_text().replace('value=0x0000000000000300','value=0x0000000000000700'))
+            before=self.result()
+            for path in self.folder.glob('DIAG*.TXT'):path.write_text(path.read_text()+supplemental)
+            self.assertEqual(self.result(),before)
+            self.assert_reason('invalid_data' if mismatch else 'candidate','attributes_mismatch' if mismatch else 'images_pass')
+
     def test_per_card_driver_pins_do_not_inherit_another_skus_firmware(self):
         self.populate()
         chip=self.envelope['chips'][0]

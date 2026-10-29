@@ -1,4 +1,4 @@
-/* GPL-2.0-only. Research-only current-boot read collector; no entry point. */
+/* GPL-2.0-only. Read-only current-boot collector; no entry point or correction. */
 #pragma once
 #include "efi-binding.h"
 

@@ -184,6 +184,9 @@ static EFI_STATUS GenericRun(int mode,BOOLEAN withRoot) {
   Check(RootCloses==0,"borrowed root is never closed");
   return s;
 }
+#ifdef GU_PROBE_PARENT_FIXTURE
+#define main GenericProbeMain
+#endif
 int main(void) {
 #ifdef GU_PROBE_GENERIC
   GenericSetup(G_OK);TestId=0x999910deU;

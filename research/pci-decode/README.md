@@ -1,8 +1,10 @@
 # PCI decode-cache synchronization research
 
-This is a host-testable research core, **not an executable fix**. No production
-build, probe, LOCAL profile gate, USB staging script or EFI entry point uses it.
-Current captures with inconsistent PCI attributes remain refused.
+The correction core and owned adapter are host-testable research libraries,
+**not an executable fix**. No production build, probe, LOCAL profile gate or USB
+staging script invokes correction. The generic diagnostic uses only the shared
+read-only collector/predicates for optional observations. Current captures with
+inconsistent PCI attributes remain refused by LOCAL admission.
 
 Reports [#102](https://github.com/impacifist/Windows-GPU-UNLOCK/issues/102),
 [#121](https://github.com/impacifist/Windows-GPU-UNLOCK/issues/121) and
@@ -217,10 +219,15 @@ The tested clang 20 build reports 248 bytes maximum versus 13,960 bytes in the
 negative. These are build observations, not physical firmware stack guarantees.
 No image is executed, staged or an authorized package.
 
-The generic diagnostic is not connected yet. Its integration must also bind the
-new external read-only source hashes into build/resume/evidence manifests, use
-distinct parent-record syntax and preserve the final target check before MMIO.
-An optional collector failure cannot justify calling a changed/NULL PCI method.
+The generic diagnostic now links only this read-only layer for optional parent
+baseline records, under `GU_PROBE_PARENT_BASELINE`. Its manifests bind the external
+read-only files; LOCAL input hashes include the same files. Parent records use
+distinct syntax, and the final target/capability check remains before bounded MMIO.
+An unavailable optional observation never permits a changed/NULL method to be
+called. Capability compromise ends the capture using frozen cleanup, without
+continuing into graph services whose methods may have changed. Named probes do
+not request this extra collection. The correction core and owned adapter remain
+unconnected; no physical EFI or unlock qualification was performed.
 
 Capture fixtures cover all parent depths, both root types, UID/segment boundaries,
 stable wrong GPU pins, bad bus chains, interface replacement between scans, missing
