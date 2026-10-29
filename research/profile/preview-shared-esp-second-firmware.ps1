@@ -14,7 +14,14 @@ $launcher=Get-AuditCheckedPath $v[0].Path @('EFI','EVGA-SHARED-LAUNCH02.EFI') $f
 $child=Get-AuditCheckedPath $v[0].Path @('EFI','EVGA-SHARED-UNLOCK02.EFI') $false
 $build=Join-Path $PSScriptRoot '../../internal-boot/boot/build/shared-esp-unlock'
 $m=Get-Content (Join-Path $build 'launcher-manifest.json') -Raw | ConvertFrom-Json
-if($m.Mode -cne 'shared-esp-second-launcher-development' -or [guid]$m.WindowsEspGuid -ne $WindowsEspGuid -or (Get-FileHash $launcher).Hash -ine $m.EfiSha256 -or (Get-FileHash $child).Hash -ine $m.AuditEfiSha256){throw 'Staged payload differs from launcher manifest'}
+. (Join-Path $PSScriptRoot 'shared-esp-second-manifest-lib.ps1')
+$childHash=(Get-FileHash -LiteralPath $child).Hash
+$launcherHash=(Get-FileHash -LiteralPath $launcher).Hash
+$checks=Get-SharedSecondManifestChecks $m $WindowsEspGuid $childHash $launcherHash
+if(@($checks.Values | Where-Object {!$_}).Count){
+ [ordered]@{read_only=$true;staged_payloads_match=$false;checks=$checks;manifest_mode=$m.Mode;manifest_child_name=$m.AuditFileName;staged_child_sha256=$childHash;expected_child_sha256=$m.AuditEfiSha256;staged_launcher_sha256=$launcherHash;expected_launcher_sha256=$m.EfiSha256;firmware_registered=$false;attempt_armed=$false;boot_authorized=$false} | ConvertTo-Json -Depth 5
+ return
+}
 $value=ConvertTo-FirmwareValue (New-SharedEspLoadOption $WindowsEspGuid ([uint32]$p[0].PartitionNumber) ([uint64]([decimal]$p[0].Offset/$sector)) ([uint64]([decimal]$p[0].Size/$sector)) 'EVGA SULK02 development preview' '\EFI\EVGA-SHARED-LAUNCH02.EFI')
 $decoded=Read-SharedEspLoadOption $value
 if($decoded.Path -cne '\EFI\EVGA-SHARED-LAUNCH02.EFI' -or $decoded.PartitionGuid -ne $WindowsEspGuid -or $decoded.PartitionNumber -ne $p[0].PartitionNumber){throw 'Load option roundtrip failed'}
