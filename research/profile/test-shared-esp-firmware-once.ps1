@@ -58,6 +58,19 @@ Check ($blocked -and (Test-FirmwareValueEqual $global:fwMap.BootNext $foreign) -
 Reset-Fake;$global:fwMap.Boot7E00=$state.Option;$global:fwMap.BootNext=ConvertTo-FirmwareValue ([byte[]](0,126)) 6
 $blocked=$false;try{Remove-OwnedSharedEspFirmware $state $read $write}catch{$blocked=$true}
 Check ($blocked -and !$global:fwWrites.Count) 'Cleanup ignored changed BootNext attributes'
+Reset-Fake
+Register-SharedEspFirmwareOption $state $read $write $save
+Check ($global:fwSaved -eq 1 -and $global:fwWrites.Count -eq 1 -and $global:fwWrites[0].Name -eq 'Boot7E00' -and !$global:fwMap.ContainsKey('BootNext')) 'Register-only wrote a boot selection'
+foreach($mode in @('pending','existing','backup-fail','order-change','foreign-next')){
+ Reset-Fake
+ if($mode -eq 'pending'){$global:fwMap.BootNext=$foreign}
+ elseif($mode -eq 'existing'){$global:fwMap.Boot7E00=$state.Option}
+ else{$global:fwMode=$mode}
+ $blocked=$false;try{Register-SharedEspFirmwareOption $state $read $write $save}catch{$blocked=$true}
+ Check $blocked ('Register-only accepted '+$mode)
+ if($mode -in @('pending','existing','backup-fail')){Check (!$global:fwWrites.Count) 'Register-only wrote after a precondition refusal'}
+ Check (@($global:fwWrites | Where-Object {$_.Name -ne 'Boot7E00'}).Count -eq 0) 'Register-only wrote an unrelated variable'
+}
 $tokens=$null;$errors=$null;[void][Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'shared-esp-firmware-once.ps1'),[ref]$tokens,[ref]$errors)
 Check (!$errors.Count) 'Preparation script has syntax errors'
 $out=Join-Path $PSScriptRoot 'build/firmware-once-vector.bin';[void][IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($out));[IO.File]::WriteAllBytes($out,[Convert]::FromBase64String($option.DataBase64))

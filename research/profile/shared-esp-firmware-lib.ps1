@@ -91,3 +91,17 @@ function Invoke-SharedEspFirmwareOnce($State,[scriptblock]$Read,[scriptblock]$Wr
   throw "$original. Owned temporary variables were rolled back where safe; preserve backup and do not reboot."
  }
 }
+
+# Register only: no BootNext selection. Backup precedes the first write.
+function Register-SharedEspFirmwareOption($State,[scriptblock]$Read,[scriptblock]$Write,[scriptblock]$Save){
+ Assert-SharedEspFirmwareSnapshot $State $Read
+ if($null -ne (& $Read 'BootNext')){throw 'Pending BootNext; registration refused'}
+ if($null -ne (& $Read $State.OptionName)){throw 'Registration option already exists'}
+ & $Save $State
+ Assert-SharedEspFirmwareSnapshot $State $Read
+ if($null -ne (& $Read 'BootNext') -or $null -ne (& $Read $State.OptionName)){throw 'State changed after backup; no registration attempted'}
+ & $Write $State.OptionName $State.Option
+ if(!(Test-FirmwareValueEqual (& $Read $State.OptionName) $State.Option)){throw 'Registration readback failed; preserve backup and partial state'}
+ Assert-SharedEspFirmwareSnapshot $State $Read
+ if($null -ne (& $Read 'BootNext')){throw 'BootNext appeared during registration; preserve backup and partial state'}
+}
