@@ -19,7 +19,13 @@ static EFI_STATUS EFIAPI Protocol(EFI_HANDLE h,EFI_GUID *g,VOID **p){
 }
 static EFI_STATUS EFIAPI Close(EFI_FILE_PROTOCOL *f){(void)f;closes++;return closeError?EFI_DEVICE_ERROR:EFI_SUCCESS;}
 static EFI_STATUS EFIAPI Open(EFI_FILE_PROTOCOL *r,EFI_FILE_PROTOCOL **f,CHAR16 *name,UINT64 mode,UINT64 attrs){
- (void)r;(void)attrs;const CHAR16 expected[]=L"\\RTX3090-UNLOCK\\SULK01.TXT";
+ (void)r;(void)attrs;
+#ifdef GU_SHARED_ESP_SECOND
+ const CHAR16 expected[]=L"\\RTX3090-UNLOCK\\SULK02.TXT";
+#else
+ const CHAR16 expected[]=L"\\RTX3090-UNLOCK\\SULK01.TXT";
+#endif
+
  for(UINTN i=0;i<sizeof(expected)/sizeof(CHAR16);i++)if(name[i]!=expected[i])return EFI_ACCESS_DENIED;
  if(mode==EFI_FILE_MODE_READ){if(!existing)return EFI_NOT_FOUND;*f=&log;return EFI_SUCCESS;}
  if(mode!=(EFI_FILE_MODE_READ|EFI_FILE_MODE_WRITE|EFI_FILE_MODE_CREATE))return EFI_ACCESS_DENIED;

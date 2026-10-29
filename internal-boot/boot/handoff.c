@@ -150,7 +150,11 @@ static EFI_STATUS OpenLog(VOID) {
 #if defined(GU_SHARED_ESP_INTEGRATION) || defined(GU_SHARED_ESP_QUAL) || defined(GU_SHARED_ESP_UNLOCK)
   {
 #ifdef GU_SHARED_ESP_UNLOCK
+#ifdef GU_SHARED_ESP_SECOND
+    CHAR16 name[]=L"\\RTX3090-UNLOCK\\SULK02.TXT";
+#else
     CHAR16 name[]=L"\\RTX3090-UNLOCK\\SULK01.TXT";
+#endif
 #elif defined(GU_SHARED_ESP_QUAL)
     CHAR16 name[]=L"\\RTX3090-UNLOCK\\QUAL01.TXT";
 #else

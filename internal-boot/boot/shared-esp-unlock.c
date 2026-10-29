@@ -2,6 +2,15 @@
 #if !defined(GU_SHARED_ESP_UNLOCK) || !defined(GU_EVGA_STOP_ONLY) || !defined(GU_EVGA_PROBE_RESOURCES) || !defined(GU_EVGA_SHARED_ESP_ADMISSION) || defined(GU_USB_MEDIA) || !defined(GU_EVGA_UNLOCK)
 #error SULK01 requires the isolated shared-ESP unlock, never USB
 #endif
+#ifdef GU_SHARED_ESP_SECOND
+#define GU_SULK_PATH L"\\RTX3090-UNLOCK\\SULK02.ARMED"
+#define GU_SULK_PENDING "PENDING SULK02\r\n"
+#define GU_SULK_STARTED "STARTED SULK02 - DO NOT REPEAT - SEE SULK02.TXT\r\n"
+#else
+#define GU_SULK_PATH L"\\RTX3090-UNLOCK\\SULK01.ARMED"
+#define GU_SULK_PENDING "PENDING SULK01\r\n"
+#define GU_SULK_STARTED "STARTED SULK01 - DO NOT REPEAT - SEE SULK01.TXT\r\n"
+#endif
 #define efi_main unlock_handoff_entry
 #include "handoff.c"
 #undef efi_main
@@ -19,7 +28,7 @@ static EFI_STATUS WriteReceipt(EFI_FILE_PROTOCOL *file,const char *message){
  return s;
 }
 static EFI_STATUS OpenReceipt(EFI_FILE_PROTOCOL *root,EFI_FILE_PROTOCOL **receipt){
- const CHAR16 path[]=L"\\RTX3090-UNLOCK\\SULK01.ARMED";
+ const CHAR16 path[]=GU_SULK_PATH;
  EFI_STATUS s=root->Open(root,receipt,(CHAR16 *)path,EFI_FILE_MODE_READ|EFI_FILE_MODE_WRITE,0);
  if(s!=EFI_SUCCESS || !*receipt)return s==EFI_SUCCESS?EFI_DEVICE_ERROR:s;
  UINT8 data[512],extra;UINTN bytes=sizeof(data),tail=1;
@@ -27,7 +36,7 @@ static EFI_STATUS OpenReceipt(EFI_FILE_PROTOCOL *root,EFI_FILE_PROTOCOL **receip
  if(s==EFI_SUCCESS && bytes!=sizeof(data))s=EFI_BAD_BUFFER_SIZE;
  if(s==EFI_SUCCESS)s=(*receipt)->Read(*receipt,&tail,&extra);
  if(s==EFI_SUCCESS && tail)s=EFI_BAD_BUFFER_SIZE;
- const char pending[]="PENDING SULK01\r\n";
+ const char pending[]=GU_SULK_PENDING;
  if(s==EFI_SUCCESS)for(UINTN i=0;i<sizeof(data);i++){
   UINT8 expected=i<sizeof(pending)-1?(UINT8)pending[i]:0;
   if(data[i]!=expected){s=EFI_ACCESS_DENIED;break;}
@@ -48,9 +57,9 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE image,EFI_SYSTEM_TABLE *table){
  s=bs->HandleProtocol(pinned,&FsGuid,(VOID **)&fs);if(s!=EFI_SUCCESS || !fs)return EFI_DEVICE_ERROR;
  s=fs->OpenVolume(fs,&root);if(s!=EFI_SUCCESS || !root)return EFI_DEVICE_ERROR;
  s=OpenReceipt(root,&marker);
- if(s==EFI_SUCCESS)s=WriteReceipt(marker,"STARTED SULK01 - DO NOT REPEAT - SEE SULK01.TXT\r\n");
+ if(s==EFI_SUCCESS)s=WriteReceipt(marker,GU_SULK_STARTED);
  if(marker){EFI_STATUS closed=marker->Close(marker);if(s==EFI_SUCCESS)s=closed;}
  EFI_STATUS closed=root->Close(root);if(s==EFI_SUCCESS)s=closed;if(s!=EFI_SUCCESS)return s;
- Say(L"SULK01: SHARED ESP ACTUAL GPU UNLOCK: ONE TRANSACTION.\r\nFresh Shift+G after guards starts driver release, GPU/PCI writes, DMA, firmware execution and FLR.\r\nDisplay may go black; failure may require power off and USB removal. No automatic retry.\r\n");
+ Say(L"SHARED ESP ACTUAL GPU UNLOCK: ONE TRANSACTION.\r\nFresh Shift+G after guards starts driver release, GPU/PCI writes, DMA, firmware execution and FLR.\r\nDisplay may go black; failure may require power off and USB removal. No automatic retry.\r\n");
  return unlock_handoff_entry(image,table);
 }
