@@ -16,7 +16,11 @@ static EFI_STATUS EFIAPI Output(EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL *out,CHAR16 *tex
 static EFI_STATUS EFIAPI Load(BOOLEAN policy,EFI_HANDLE parent,EFI_DEVICE_PATH_PROTOCOL *path,VOID *buffer,UINTN size,EFI_HANDLE *image){
  (void)parent;(void)buffer;(void)size;loads++;if(policy || !path || loadFailure)return EFI_LOAD_ERROR;
  UINTN base=sizeof(HARDDRIVE_DEVICE_PATH);EFI_DEVICE_PATH_PROTOCOL *node=(VOID *)((UINT8 *)path+base);
+#ifdef GU_SHARED_ESP_SECOND
+ const CHAR16 expected[]=L"\\EFI\\EVGA-SHARED-UNLOCK02.EFI";
+#else
  const CHAR16 expected[]=L"\\EFI\\EVGA-SHARED-UNLOCK.EFI";
+#endif
  if(node->Type!=MEDIA_DEVICE_PATH || node->SubType!=MEDIA_FILEPATH_DP)return EFI_LOAD_ERROR;
  for(UINTN i=0;i<sizeof(expected)/sizeof(CHAR16);i++)if(((CHAR16 *)((UINT8 *)node+4))[i]!=expected[i])return EFI_LOAD_ERROR;
  windowsImage.DeviceHandle=wrongChild?handles[1]:handles[0];*image=(EFI_HANDLE)4;return EFI_SUCCESS;
