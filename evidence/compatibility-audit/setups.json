@@ -1258,7 +1258,7 @@
       ],
       "classification": "setup-report",
       "assessment": "Logged clean transaction and Windows/display return",
-      "resolution_recommendation": "route-already-present"
+      "resolution_recommendation": "close-on-merge-of-pr142"
     },
     {
       "number": 13,
@@ -2012,7 +2012,7 @@
       "comment_sha256": [],
       "classification": "setup-report",
       "assessment": "One logged USB transaction; Windows/HDMI return; DP required monitor power-cycle/replug",
-      "resolution_recommendation": "not-resolved-by-this-audit"
+      "resolution_recommendation": "close-on-merge-of-pr142"
     },
     {
       "number": 74,
@@ -2113,7 +2113,7 @@
       "comment_sha256": [],
       "classification": "setup-report",
       "assessment": "One full-shutdown transaction and Windows/display return; no tracked diff",
-      "resolution_recommendation": "route-already-present"
+      "resolution_recommendation": "close-on-merge-of-pr142"
     },
     {
       "number": 83,
@@ -2139,7 +2139,7 @@
       "comment_sha256": [],
       "classification": "setup-report",
       "assessment": "One logged cold transaction, Windows/display return; downloaded ZIP commit unknown",
-      "resolution_recommendation": "route-already-present"
+      "resolution_recommendation": "close-on-merge-of-pr142"
     },
     {
       "number": 85,
@@ -2183,7 +2183,7 @@
       ],
       "classification": "setup-report",
       "assessment": "Latest hardware update supersedes the original incomplete capture.",
-      "resolution_recommendation": "route-already-present"
+      "resolution_recommendation": "close-on-merge-of-pr142"
     },
     {
       "number": 89,
@@ -2222,7 +2222,7 @@
       "comment_sha256": [],
       "classification": "setup-report",
       "assessment": "One logged cold USB transaction and Windows recovery; current tuple covered via #113",
-      "resolution_recommendation": "route-already-present"
+      "resolution_recommendation": "close-on-merge-of-pr142"
     },
     {
       "number": 92,
@@ -2383,7 +2383,7 @@
       "comment_sha256": [],
       "classification": "setup-report",
       "assessment": "One clean restart-based transaction and Windows return; captures not all full shutdowns",
-      "resolution_recommendation": "route-already-present"
+      "resolution_recommendation": "close-on-merge-of-pr142"
     },
     {
       "number": 106,
@@ -2484,7 +2484,7 @@
       ],
       "classification": "setup-report",
       "assessment": "One logged cold transaction and Windows/display return",
-      "resolution_recommendation": "route-already-present"
+      "resolution_recommendation": "close-on-merge-of-pr142"
     },
     {
       "number": 114,
@@ -2619,7 +2619,7 @@
       ],
       "classification": "setup-report",
       "assessment": "One logged transaction/Windows return; one capture after reset, only one full shutdown",
-      "resolution_recommendation": "route-already-present"
+      "resolution_recommendation": "close-on-merge-of-pr142"
     },
     {
       "number": 125,
@@ -2746,7 +2746,7 @@
       "comment_sha256": [],
       "classification": "setup-report",
       "assessment": "Two logged USB boots; one manual and one default USB-first; Windows/display return",
-      "resolution_recommendation": "route-already-present"
+      "resolution_recommendation": "close-on-merge-of-pr142"
     },
     {
       "number": 134,
@@ -2785,7 +2785,7 @@
       "comment_sha256": [],
       "classification": "setup-report",
       "assessment": "One logged full-shutdown transaction and both displays return; no tracked diff",
-      "resolution_recommendation": "route-already-present"
+      "resolution_recommendation": "close-on-merge-of-pr142"
     },
     {
       "number": 137,
@@ -2830,6 +2830,21 @@
       124,
       133,
       136
-    ]
+    ],
+    "resolution_pull_request": 142,
+    "close_on_merge": [
+      12,
+      73,
+      81,
+      84,
+      87,
+      91,
+      105,
+      113,
+      124,
+      133,
+      136
+    ],
+    "resolution_method": "PR description Resolves keywords; closes when merged into default main, not a custom label."
   }
 }
