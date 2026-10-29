@@ -2,6 +2,8 @@
 
 [English](COMPATIBILITY.en.md) | **한국어**
 
+**2026-10-29 이슈 감사:** [보고된 구성과 프로필 판단](CONFIRMED-SETUPS.ko.md) · [전체 이슈 105개](ISSUE-AUDIT.ko.md). 아래 고정 프로필 6개 외에도 LOCAL 성공 보고가 있습니다.
+
 현재 소스에는 실기기 결과가 기록된 정확한 장비 프로필 여섯 개가 있습니다.
 내부 headless 세 구성과 headless USB 세 구성입니다. 최초 B650M은 유지관리자가
 시험했고, B660M·X870·B660-PLUS의 근거는 기여자의 보고입니다

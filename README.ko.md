@@ -27,7 +27,8 @@ PR에 남겨주세요. [커뮤니티 룰 — English](docs/DISCORD-RULES.en.md)�
 | **RTX 3060 Ti 8GB (24c9 / GA104)** | 기여자 로컬 USB 성공 보고 · 실험적 자동 프로필 | [정확한 조건](docs/COMPATIBILITY.ko.md#로컬-프로필-성공-보고) |
 | **RTX 3070 8GB (2484 / GA104)** | 기여자 로컬 USB 성공 보고 · 실험적 자동 프로필 | [정확한 조건](docs/COMPATIBILITY.ko.md#로컬-프로필-성공-보고) |
 | **RTX 3070 Ti 8GB** | 실기기 성공 보고 · 내부 headless | [지원 구성](docs/COMPATIBILITY.ko.md#프로필-2-asus-tuf-b660m-e-d4--rtx-3070-tiaggregate-console) |
-| **RTX 3080** | 전용 프로필 없음 · Windows 화면 연결 연구 자료 제공 | [연구 관측](research/rtx3080/README.md) · [프로젝트 출처](THIRD_PARTY_NOTICES.md) |
+| **RTX 3080 12GB (220a / GA102)** | 기여자 USB 성공; 좁은 실험적 LOCAL 허용, DP 복구 제한 포함 | [정확한 구성과 근거](evidence/b550-3080-12gb-local/README.ko.md) |
+| **기타 RTX 3080 / RTX 3080 Ti** | 비공개/연구 성공 보고; 일반적인 upstream 지원 아님 | [구성 감사](docs/CONFIRMED-SETUPS.ko.md) |
 | **RTX 3090 FE 24GB** | 실기기 성공 기록 · 내부 headless · 기본 프로필 | [지원 구성](docs/COMPATIBILITY.ko.md#프로필-1-asus-tuf-b650m--rtx-3090-fe최초-검증) |
 | **RTX 3090 Ti 24GB** | 실기기 성공 보고 · 정확한 장비별 경로 확인 | [X870 USB](docs/COMPATIBILITY.ko.md#프로필-3-gigabyte-x870-aorus-elite-wifi7--rtx-3090-tiheadless-usb) · [B660M 내부](docs/COMPATIBILITY.ko.md#프로필-6-asus-tuf-b660m-e-d4--colorful-rtx-3090-ti내부) |
 
@@ -39,6 +40,8 @@ host·빌드 검증을 거쳤으며, **새 실기기 부팅·복구 시험을 �
 USB 경로와 X870 프로필 등을 포함하며, 이를 새 릴리스가 발행됐다는 뜻으로 읽지 마세요.
 자신의 파티션 GUID로 로컬 빌드해야 합니다. 펌웨어와 개인 파티션 설정이 들어간
 EFI 바이너리는 포함하지 않습니다.
+
+[보고된 동작 구성 및 프로필 범위](docs/CONFIRMED-SETUPS.ko.md) · [전체 이슈 감사](docs/ISSUE-AUDIT.ko.md).
 
 ## 부팅 경로 선택
 
