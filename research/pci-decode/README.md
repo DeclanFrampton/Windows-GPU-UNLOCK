@@ -57,18 +57,64 @@ dword of the GPU and all 16 parents, full attribute/token/location drift, and
 attempts to reuse a transaction. All protocol effects are RAM callbacks; no GPU,
 firmware, boot setting or physical media is accessed. Passing this model grants
 no hardware support, LOCAL write evidence or permission to run a correction.
-The optional mutation checks compile ten deliberately broken copies in the ignored
+The optional mutation checks compile sixteen deliberately broken copies in the ignored
 output directory and require the host tests to reject them. A compile failure does
 not count as detecting a broken guard. Original source files remain unchanged.
 
 ## Research UEFI adapter
 
 `efi-adapter.c` binds an exact caller-supplied baseline and PCI controller paths.
-Initialization validates/copies inputs without firmware calls and cannot reset a
+Initialization requires the caller's non-NULL `OwnerImage`, validates/copies inputs without firmware calls and cannot reset a
 used context. Run freezes a private copy and spends the context before its first
 callback, including against reentry through a fresh core transaction object.
 Caller-owned policy changes cannot alter the active copy. Contexts must remain
 private, zero-initialized and serialized; callers must not reset/recreate them to retry.
+
+The adapter now observes an already-held exclusive claim on the GPU's PciIo
+protocol. It never acquires or closes that claim. The caller must retain it for
+the entire call, retain the input/context/transaction storage and all interface
+lifetimes, and serialize other operations. The research-only initialization API
+adds `OwnerImage` immediately after `Boot`; no shipped API or build uses it.
+
+`OpenProtocolInformation` must return exactly one self-agent, NULL-controller,
+`EXCLUSIVE`, `OpenCount=1` record. Additional observation records may have only
+the exact passive attributes 1/2/4 and positive counts. Driver/child openers,
+BY_DRIVER|EXCLUSIVE, foreign/duplicate exclusive records, missing output, warnings
+and malformed counts refuse. Queries are bounded to 64 records; byte-range checks
+reject known borrowed storage, misalignment and address overflow before access or
+free. These checks cannot authenticate an arbitrary pointer as a pool allocation;
+the firmware service's allocation contract remains a requirement. This follows the
+[UEFI OpenProtocolInformation and pool-buffer contract](https://uefi.org/specs/UEFI/2.10/07_Services_Boot_Services.html).
+
+Ownership is sampled around full snapshots, after successful logging, and once
+more before Disable(IO). The final query's pool buffer stays allocated until after
+that call, avoiding an intervening FreePool callback. Holding this buffer does
+**not** lock or extend protocol ownership. OpenProtocolInformation and FreePool
+method pointers join the frozen whole-chain capability checks. Returned allocations
+are freed once, including valid outputs accompanying an error; cleanup failure is
+not retried and permanently marks `OwnershipFault`.
+
+The context separately retains `OwnershipStatus`, `CleanupStatus` and the actual
+`DisableIoStatus`. `OwnershipObserved`, `CleanupObserved` and `DisableInvoked`
+distinguish an uncalled operation from a real EFI_NOT_STARTED return. First failures
+survive subsequent successful observations. The core's Attempted/adapter WriteSpent
+flags can be set before the actual protocol call; neither proves that Disable ran.
+A failed cleanup after a write therefore remains an attempted write with uncertain
+cleanup, even if the write itself succeeded.
+
+This is a guard for one protocol's observed opener list, not ownership acquisition,
+all-controller isolation or an atomic snapshot. In particular, a final ownership
+query or cleanup callback that violates its read-only/device-state contract can
+change GPU/parent state after an earlier read. Finite rechecks cannot exclude every
+such window. Caller serialization, continued claim/lifetime retention and trusted
+firmware API behavior remain necessary; passing mocks does not prove physical safety.
+
+Production integration is still unresolved: full-release's CapturePermit rejects
+the real mismatch before NVIDIA Stop, whereas its exclusive claim is acquired
+after Stop in RestoreDecode. A self-exclusive adapter cannot simply replace the
+contributor pre-step while NVIDIA still owns the protocol. This change does not
+relax CapturePermit, stop a driver, force an exclusive OpenProtocol, restore decode,
+stage an image or qualify any of the reported machines.
 
 The GPU controller route uses the existing bounded PNP0A03/PNP0A08 parser. Two to
 sixteen PCI nodes correspond to one to fifteen immediate parent bridges. Each
@@ -91,6 +137,10 @@ partial config, path/Locate-consumption errors, changed interfaces/methods,
 early and late parent drift, Init/Run reentry, caller input changes and a failing
 write that nevertheless changes state. Mutation checks also break Locate bounds,
 the differing sentinels, whole-chain method checks and one-shot initialization.
+Ownership fixtures cover callback-time claim loss, passive/managing combinations,
+known borrowed/misaligned/overflowing buffers, output-less success, error with valid
+output and pre/post-write cleanup failures. A reproduced EFI_NOT_STARTED status-loss
+regression verifies that later successful queries cannot erase the first error.
 
 This is not ownership acquisition, GPU qualification, a snapshot of all firmware
 state, atomic observation across devices or proof of real-time stability. A future

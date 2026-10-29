@@ -52,6 +52,16 @@ def main():
         mutation_specs = [(name, 'decode-sync.c', 'test_decode_sync.c', [], replacements)
                           for name, replacements in changes.items()]
         adapter_changes = {
+            'overwrite-real-not-started-error': [('if(!c->OwnershipObserved || c->OwnershipStatus==EFI_SUCCESS)',
+                'if(c->OwnershipStatus==EFI_NOT_STARTED || c->OwnershipStatus==EFI_SUCCESS)')],
+            'accept-missing-self-claim': [('owned!=1', 'owned>1')],
+            'ignore-exclusive-agent': [('e->AgentHandle!=c->OwnerImage || ', '')],
+            'accept-managing-co-owner': [('} else if(e->Attributes!=EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL && e->Attributes!=EFI_OPEN_PROTOCOL_GET_PROTOCOL &&\n'
+                '              e->Attributes!=EFI_OPEN_PROTOCOL_TEST_PROTOCOL)', '} else if(FALSE)')],
+            'free-final-owner-view-before-write': [('GU_DS_EFI_DEVICE *g=&c->Devices[0];\n    c->DisableInvoked=TRUE;',
+                'DropOwner(c,held);held=NULL;\n    GU_DS_EFI_DEVICE *g=&c->Devices[0];\n    c->DisableInvoked=TRUE;')],
+            'ignore-owner-cleanup-error': [('if(s!=EFI_SUCCESS){c->OwnershipFault=TRUE;return EFI_DEVICE_ERROR;}',
+                'if(s!=EFI_SUCCESS){return EFI_SUCCESS;}')],
             'ignore-late-peer-capability-drift': [('!AllCaps(c) || ', ''), (' && AllCaps(c)', ''),
                 ('static EFI_STATUS AdapterDisable(VOID *context) {', 'static EFI_STATUS AdapterDisable(VOID *context) {\n  (void)AllCaps;')],
             'accept-partial-locate-consumption': [(' || (UINTN)rest!=(UINTN)copy+d->Pin.PathBytes-4', '')],

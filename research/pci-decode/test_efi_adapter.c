@@ -17,6 +17,10 @@ typedef struct {
   DEVICE Devices[16];
   unsigned Count,Calls,Writes,DisableAt,Logs,Reads,FaultAt,DropAt,Partial,LocateMode,Alias,Mutation,MutateAt;
   unsigned LogFault,LogDrift,Reenter,Freeze,WriteExtra,MutationDevice;
+  UINTN OwnerTag;
+  unsigned OwnerMode,OwnerDriftAt,OwnerQueries,Frees,PoolLive,LastOwnerQuery,LastFree,OwnerLogDrift;
+  EFI_OPEN_PROTOCOL_INFORMATION_ENTRY *Pool;
+  UINT8 NoOutput[4096];
   EFI_STATUS FaultStatus,WriteStatus;
 } MODEL;
 static MODEL *M;
@@ -30,7 +34,7 @@ static EFI_STATUS Tick(void) {
   if(M->Reenter) {
     GU_DS_TRANSACTION fresh={0};
     Check(GuDsEfiRun(&M->Adapter,&fresh)==GU_DS_REUSED,"same adapter refuses reentry through a fresh transaction");
-    Check(GuDsEfiInitialize(&M->Adapter,&M->Boot,M->Bindings,M->Count,&M->Expected,NULL,NULL)==EFI_ALREADY_STARTED,
+    Check(GuDsEfiInitialize(&M->Adapter,&M->Boot,(EFI_HANDLE)&M->OwnerTag,M->Bindings,M->Count,&M->Expected,NULL,NULL)==EFI_ALREADY_STARTED,
       "Init cannot reset a running adapter");
   }
   if(M->MutateAt==M->Calls) {
@@ -45,8 +49,61 @@ static EFI_STATUS Tick(void) {
     if(M->Mutation==8)d->Io.Pci.Read=NULL;
     if(M->Mutation==9)d->Io.Attributes=NULL;
     if(M->Mutation==10)M->Boot.LocateDevicePath=NULL;
+    if(M->Mutation==11)M->Boot.OpenProtocolInformation=NULL;
+    if(M->Mutation==12)M->Boot.FreePool=NULL;
   }
+  if(M->OwnerDriftAt==M->Calls)M->OwnerMode=2;
   return M->FaultAt==M->Calls?M->FaultStatus:EFI_SUCCESS;
+}
+static EFI_STATUS EFIAPI Owners(EFI_HANDLE handle,EFI_GUID *guid,EFI_OPEN_PROTOCOL_INFORMATION_ENTRY **out,UINTN *count) {
+  Check(handle==(EFI_HANDLE)&M->Devices[0].Tag && !memcmp(guid,&PciGuid,sizeof(*guid)),"ownership queries only the pinned GPU PCI protocol");
+  M->OwnerQueries++;M->LastOwnerQuery=M->Calls+1;
+  EFI_STATUS s=Tick();if(M->DropAt==M->Calls)return s;
+  unsigned mode=M->OwnerMode;
+  if(mode==1){*out=NULL;*count=0;return s;}
+  if(mode==13){*out=NULL;*count=1;return s;}
+  if(mode==33 || mode==34) {
+    *out=(VOID *)(mode==33?(UINTN)&M->Adapter+1:~(UINTN)0-7);
+    *count=GU_DS_EFI_MAX_OPENERS;return s;
+  }
+  if(mode>=21 && mode<=27) {
+    VOID *borrowed[]={&M->Adapter,&M->Transaction,M->Bindings,&M->Expected,&M->Boot,&M->Devices[0].Io,&M->OwnerTag};
+    *out=borrowed[mode-21];*count=1;return s;
+  }
+  Check(!M->PoolLive && !M->Pool,"only one query allocation outstanding");
+  unsigned n=mode==9 || mode==10 || mode>=28?2:mode==11?4:mode==20?64:1;
+  M->Pool=calloc(n,sizeof(*M->Pool));Check(M->Pool!=NULL,"mock query pool allocation");M->PoolLive++;
+  *out=M->Pool;
+  if(mode!=14)*count=mode==15?65:mode==16?0:n;
+  EFI_OPEN_PROTOCOL_INFORMATION_ENTRY *e=M->Pool;
+  e[0]=(EFI_OPEN_PROTOCOL_INFORMATION_ENTRY){(EFI_HANDLE)&M->OwnerTag,NULL,EFI_OPEN_PROTOCOL_EXCLUSIVE,1};
+  if(mode==2)e[0].AgentHandle=(EFI_HANDLE)&M->Devices[1].Tag;
+  if(mode==3)e[0].ControllerHandle=handle;
+  if(mode==4)e[0].Attributes=EFI_OPEN_PROTOCOL_BY_DRIVER;
+  if(mode==5)e[0].Attributes=EFI_OPEN_PROTOCOL_BY_DRIVER|EFI_OPEN_PROTOCOL_EXCLUSIVE;
+  if(mode==6)e[0].Attributes=EFI_OPEN_PROTOCOL_BY_CHILD_CONTROLLER;
+  if(mode==7)e[0].OpenCount=0;
+  if(mode==8)e[0].OpenCount=2;
+  if(mode==9 || mode==10){e[1]=e[0];if(mode==10)e[1].AgentHandle=handle;}
+  if(mode==11)for(unsigned i=1;i<4;i++)e[i]=(EFI_OPEN_PROTOCOL_INFORMATION_ENTRY){handle,NULL,1U<<(i-1),i};
+  if(mode==12)e[0].Attributes=0x40;
+  if(mode==17)e[0]=(EFI_OPEN_PROTOCOL_INFORMATION_ENTRY){handle,NULL,EFI_OPEN_PROTOCOL_GET_PROTOCOL,0};
+  if(mode==18)e[0].Attributes=EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL|EFI_OPEN_PROTOCOL_GET_PROTOCOL;
+  if(mode==19)e[0].Attributes=EFI_OPEN_PROTOCOL_GET_PROTOCOL;
+  if(mode==20)for(unsigned i=1;i<n;i++)e[i]=(EFI_OPEN_PROTOCOL_INFORMATION_ENTRY){handle,NULL,EFI_OPEN_PROTOCOL_GET_PROTOCOL,1};
+  if(mode>=28) {
+    e[1]=(EFI_OPEN_PROTOCOL_INFORMATION_ENTRY){handle,NULL,
+      mode==28?EFI_OPEN_PROTOCOL_BY_DRIVER:mode==29?EFI_OPEN_PROTOCOL_BY_CHILD_CONTROLLER:
+      mode==30?(EFI_OPEN_PROTOCOL_BY_DRIVER|EFI_OPEN_PROTOCOL_EXCLUSIVE):mode==31?0x40:EFI_OPEN_PROTOCOL_GET_PROTOCOL,
+      mode==32?0:1};
+  }
+  return s;
+}
+static EFI_STATUS EFIAPI Free(VOID *p) {
+  Check(p && p==M->Pool && M->PoolLive==1,"only a query-owned allocation is freed exactly once");
+  free(p);M->Pool=NULL;M->PoolLive=0;M->Frees++;M->LastFree=M->Calls+1;
+  Check(M->Calls+1<sizeof(M->NoOutput),"mock callback trace is bounded");M->NoOutput[M->Calls+1]=1;
+  return Tick();
 }
 static EFI_STATUS EFIAPI Handle(EFI_HANDLE h,EFI_GUID *guid,VOID **out) {
   DEVICE *d=NULL;
@@ -84,6 +141,8 @@ static EFI_STATUS EFIAPI Attributes(EFI_PCI_IO_PROTOCOL *io,EFI_PCI_IO_PROTOCOL_
   if(op==EfiPciIoAttributeOperationDisable) {
     Check(d==&M->Devices[0] && mask==GU_DS_IO && !out,"sole write is Disable(IO) on pinned GPU");
     M->Writes++;M->DisableAt=M->Calls+1;Check(M->Transaction.Attempted,"core attempt marked before firmware write");
+    Check(M->PoolLive==1 && M->LastOwnerQuery==M->Calls && M->LastFree<M->LastOwnerQuery,
+      "final ownership buffer is held; no FreePool callback between final query and Disable");
     d->State.Attributes&=~GU_DS_IO;
     if(M->WriteExtra)d->State.Config[1]|=4;
     EFI_STATUS s=Tick();return s==EFI_SUCCESS?M->WriteStatus:s;
@@ -96,17 +155,20 @@ static BOOLEAN Log(VOID *context,const char *event) {
   Check(context==M && event,"logger has frozen context");M->Logs++;
   if(M->Reenter) {
     GU_DS_TRANSACTION fresh={0};Check(GuDsEfiRun(&M->Adapter,&fresh)==GU_DS_REUSED,"log reentry blocked");
-    Check(GuDsEfiInitialize(&M->Adapter,&M->Boot,M->Bindings,M->Count,&M->Expected,Log,M)==EFI_ALREADY_STARTED,"log Init reentry blocked");
+    Check(GuDsEfiInitialize(&M->Adapter,&M->Boot,(EFI_HANDLE)&M->OwnerTag,M->Bindings,M->Count,&M->Expected,Log,M)==EFI_ALREADY_STARTED,"log Init reentry blocked");
   }
   if(M->Freeze) {
     M->Adapter.Expected.Gpu.Config[20]^=1;M->Adapter.Devices[0].Pin.Path[8]^=1;
     M->Bindings[0].Path[8]^=1;M->Expected.Gpu.Config[20]^=1;
+    M->Adapter.OwnerImage=NULL;
   }
   if(M->LogDrift==M->Logs)M->Devices[M->Count-1].State.Config[63]^=1;
+  if(M->OwnerLogDrift==M->Logs)M->OwnerMode=2;
   return M->LogFault!=M->Logs;
 }
 static void Setup(MODEL *m,unsigned parents,UINTN segment) {
   memset(m,0,sizeof(*m));M=m;m->Count=parents+1;m->Boot.HandleProtocol=Handle;m->Boot.LocateDevicePath=Locate;
+  m->OwnerTag=0xface;m->Boot.OpenProtocolInformation=Owners;m->Boot.FreePool=Free;
   m->Expected.Complete=TRUE;m->Expected.ParentCount=parents;
   UINT8 gpuPath[GU_DS_EFI_MAX_PATH]={2,1,12,0,0xd0,0x41,3,0x0a,42,0,0,0};
   for(unsigned i=0;i<=parents;i++) {
@@ -129,11 +191,12 @@ static void Setup(MODEL *m,unsigned parents,UINTN segment) {
     if(i)m->Expected.Parents[i-1]=*s;else m->Expected.Gpu=*s;
   }
 }
-static EFI_STATUS Init(MODEL *m) {return GuDsEfiInitialize(&m->Adapter,&m->Boot,m->Bindings,m->Count,&m->Expected,Log,m);}
+static EFI_STATUS Init(MODEL *m) {return GuDsEfiInitialize(&m->Adapter,&m->Boot,(EFI_HANDLE)&m->OwnerTag,m->Bindings,m->Count,&m->Expected,Log,m);}
 static GU_DS_RESULT Run(MODEL *m) {return GuDsEfiRun(&m->Adapter,&m->Transaction);}
 static void Refuse(MODEL *m) {
   GU_DS_RESULT r=Run(m);Check(r!=GU_DS_FIXED && r!=GU_DS_ALREADY_CONSISTENT,"fault refuses successful correction");
   Check(m->Writes<=1,"at most one physical Disable callback");
+  Check(!m->PoolLive && !m->Pool,"failure paths dispose every owned mock pool allocation without retry");
   unsigned n=m->Calls,w=m->Writes,l=m->Logs;GU_DS_TRANSACTION fresh={0};
   Check(GuDsEfiRun(&m->Adapter,&fresh)==GU_DS_REUSED,"new transaction cannot reuse adapter");
   Check(m->Calls==n && m->Writes==w && m->Logs==l,"reused adapter cannot call firmware");
@@ -151,13 +214,13 @@ int main(void) {
     Check(m.Adapter.WriteSpent && m.Adapter.RunUsed,"adapter permanently spends run and write");
   }
   Setup(&m,1,0);Check(Init(&m)==EFI_SUCCESS,"baseline Init");Check(Run(&m)==GU_DS_FIXED,"baseline run");
-  unsigned calls=m.Calls,disableAt=m.DisableAt;
+  unsigned calls=m.Calls,disableAt=m.DisableAt;UINT8 outputless[4096];memcpy(outputless,m.NoOutput,sizeof(outputless));
   for(unsigned at=1;at<=calls;at++)for(unsigned warning=0;warning<2;warning++) {
     Setup(&m,1,0);Check(Init(&m)==EFI_SUCCESS,"fault fixture Init");m.FaultAt=at;
     m.FaultStatus=warning?EFI_WARN_UNKNOWN_GLYPH:EFI_DEVICE_ERROR;Refuse(&m);
     if(at<disableAt)Check(!m.Writes,"pre-write callback fault has no mutation");
   }
-  for(unsigned at=1;at<=calls;at++)if(at!=disableAt) {
+  for(unsigned at=1;at<=calls;at++)if(at!=disableAt && !outputless[at]) {
     Setup(&m,1,0);Check(Init(&m)==EFI_SUCCESS,"missing output fixture Init");m.DropAt=at;Refuse(&m);
     if(at<disableAt)Check(!m.Writes,"success without required output cannot authorize a write");
   }
@@ -167,7 +230,7 @@ int main(void) {
   for(unsigned i=0;i<m.Count;i++){m.Devices[i].State.Config[63]=0xa5a5a5a5;m.Expected.Gpu.Config[63]=0xa5a5a5a5;m.Expected.Parents[0].Config[63]=0xa5a5a5a5;}
   Check(Init(&m)==EFI_SUCCESS,"partial sentinel fixture Init");m.Partial=1;Refuse(&m);
   Check(!m.Writes && m.Reads>=3,"different scan sentinels detect partial success that matched the first pattern");
-  for(unsigned mutation=1;mutation<=10;mutation++) {
+  for(unsigned mutation=1;mutation<=12;mutation++) {
     Setup(&m,2,0);Check(Init(&m)==EFI_SUCCESS,"drift fixture Init");m.Mutation=mutation;m.MutateAt=1;Refuse(&m);Check(!m.Writes,"early parent, method or boot capability drift prevents mutation");
   }
   for(unsigned at=1;at<=5;at++) {
@@ -187,6 +250,53 @@ int main(void) {
     Setup(&m,2,0);Check(Init(&m)==EFI_SUCCESS,"late earlier-parent fixture Init");
     m.Mutation=method?7+method:6;m.MutateAt=late;m.MutationDevice=1;Refuse(&m);
     Check(!m.Writes,"last parent callback cannot alter an earlier parent's capability before write");
+  }
+  for(unsigned mode=1;mode<=34;mode++) {
+    if(mode==11 || mode==20)continue;
+    Setup(&m,2,0);m.OwnerMode=mode;Check(Init(&m)==EFI_SUCCESS,"ownership fixture Init");
+    Refuse(&m);Check(!m.Writes,"missing, malformed, foreign, driver and borrowed ownership records cannot authorize writes");
+    if((mode>=21 && mode<=27) || mode>=33)Check(m.Adapter.OwnershipFault && !m.Frees,
+      "borrowed, unaligned and overflowing memory is never freed or dereferenced as pool entries");
+  }
+  for(unsigned mode=11;mode<=20;mode+=9) {
+    Setup(&m,2,0);m.OwnerMode=mode;Check(Init(&m)==EFI_SUCCESS,"passive reader Init");
+    Check(Run(&m)==GU_DS_FIXED && m.Writes==1 && !m.PoolLive,"exact passive flags and bounded opener count preserve an exclusive self claim");
+  }
+  Setup(&m,2,0);Check(Init(&m)==EFI_SUCCESS && Run(&m)==GU_DS_FIXED,"ownership callback baseline");
+  unsigned ownershipWrite=m.DisableAt;
+  Setup(&m,2,0);m.FaultAt=ownershipWrite-1;m.FaultStatus=EFI_NOT_STARTED;
+  Check(Init(&m)==EFI_SUCCESS,"actual NOT_STARTED ownership error Init");Refuse(&m);
+  Check(!m.Writes && m.Adapter.OwnershipObserved && !m.Adapter.DisableInvoked && m.Adapter.OwnershipStatus==EFI_NOT_STARTED,
+    "a real NOT_STARTED error is retained across subsequent successful ownership observations");
+  for(unsigned at=1;at<ownershipWrite;at++) {
+    Setup(&m,2,0);m.OwnerDriftAt=at;Check(Init(&m)==EFI_SUCCESS,"claim loss fixture Init");
+    Refuse(&m);Check(!m.Writes,"claim loss in a pre-write snapshot, query or FreePool callback prevents Disable");
+  }
+  for(unsigned log=1;log<=5;log++) {
+    Setup(&m,2,0);m.OwnerLogDrift=log;Check(Init(&m)==EFI_SUCCESS,"claim loss in log Init");Refuse(&m);
+    if(log==1)Check(!m.Writes,"intent log cannot drop ownership and authorize correction");
+  }
+  Setup(&m,2,0);m.FaultAt=2;m.FaultStatus=EFI_WARN_UNKNOWN_GLYPH;
+  Check(Init(&m)==EFI_SUCCESS,"pre-write cleanup warning Init");Refuse(&m);
+  Check(!m.Writes && m.Adapter.OwnershipFault && m.Adapter.CleanupStatus==EFI_WARN_UNKNOWN_GLYPH,
+    "pre-write FreePool warning is retained and cannot authorize a write");
+  for(unsigned error=0;error<2;error++) {
+    Setup(&m,2,0);Check(Init(&m)==EFI_SUCCESS,"post-write cleanup error Init");
+    m.FaultAt=ownershipWrite+1;m.FaultStatus=EFI_OUT_OF_RESOURCES;
+    m.WriteStatus=error?EFI_DEVICE_ERROR:EFI_SUCCESS;Refuse(&m);
+    Check(m.Writes==1 && m.Transaction.Attempted && m.Adapter.WriteSpent && m.Adapter.DisableInvoked && m.Adapter.OwnershipFault,
+      "cleanup failure after a write cannot imply no write or authorize a retry");
+    Check(m.Adapter.DisableIoStatus==m.WriteStatus && m.Adapter.CleanupStatus==EFI_OUT_OF_RESOURCES,
+      "Disable and cleanup failures retain separate original statuses");
+  }
+  for(unsigned bad=0;bad<4;bad++) {
+    Setup(&m,2,0);EFI_HANDLE owner=(EFI_HANDLE)&m.OwnerTag;
+    if(bad==0)owner=NULL;
+    if(bad==1)owner=m.Bindings[0].Handle;
+    if(bad==2)m.Boot.OpenProtocolInformation=NULL;
+    if(bad==3)m.Boot.FreePool=NULL;
+    Check(GuDsEfiInitialize(&m.Adapter,&m.Boot,owner,m.Bindings,m.Count,&m.Expected,Log,&m)!=EFI_SUCCESS && !m.Calls,
+      "missing or aliased ownership capability refuses during pure Init");
   }
   for(unsigned bad=0;bad<8;bad++) {
     Setup(&m,2,0);
