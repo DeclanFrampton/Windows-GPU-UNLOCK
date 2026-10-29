@@ -69,6 +69,7 @@ class CompatibilityTests(unittest.TestCase):
         for index in range(count):
             (self.folder / f'DIAG{index:02d}.TXT').write_text(text, encoding='ascii')
         nv_size=0x26ae0 if options.get('board') in (0x220310de,0x248710de,0x250410de) else 0x2be40
+        if options.get('board')==0x24c910de:nv_size=0x26e00
         (self.folder / 'IMG00.BIN').write_bytes(driver_image(nv_size, 0x280, 0x500))
         if not no_edid:
             (self.folder / 'IMG01.BIN').write_bytes(driver_image(0x9000, 0x1000, 0x800))
@@ -274,7 +275,7 @@ class CompatibilityTests(unittest.TestCase):
         for driver in self.envelope['nvgop']+[driver for chip in self.envelope['chips'] for driver in chip['nvgop']]+[
                 driver for chip in self.envelope['chips'] for pins in chip.get('pci_nvgop',{}).values() for driver in pins]:
             driver['text_sha256']=hashlib.sha256(bytes(0x500)).hexdigest()
-        for board,memory,version in ((0x248410de,0x2000,'60009'),(0x248710de,0x3000,'60010')):
+        for board,memory,version in ((0x248410de,0x2000,'60009'),(0x248710de,0x3000,'60010'),(0x24c910de,0x2000,'60015')):
             with self.subTest(board=board):
                 self.populate(board=board,memory=memory,chip=0xb74000a1)
                 self.assert_reason('candidate','images_pass')
@@ -282,13 +283,25 @@ class CompatibilityTests(unittest.TestCase):
                     header,report,_=checker.mp.generate(self.folder,Path('not-invoked'),self.envelope)
                 self.assertIn(f'#define GU_BOARD_ID 0x{board:08x}U',header)
                 self.assertIn(f'#define GU_NVGOP_VERSION 0x{version}U',header)
-                # The other SKU's driver is chip/global-reviewed, but still forbidden here.
+                image_path=self.folder/'IMG00.BIN'
+                original=image_path.read_bytes()
+                changed=bytearray(original);changed[0x280]^=1
+                image_path.write_bytes(changed)
+                self.assert_reason('outside_scope','driver_scope')
+                with self.assertRaises(checker.mp.Refused):
+                    checker.mp.generate(self.folder,Path('not-invoked'),self.envelope)
+                image_path.write_bytes(original)
+                # Every other SKU's driver is chip/global-reviewed, but forbidden here.
                 chip=next(chip for chip in self.envelope['chips'] if chip['chip']=='b74000a1')
                 saved=copy.deepcopy(chip['pci_nvgop'])
-                chip['pci_nvgop'][f'{board:08x}']=copy.deepcopy(saved['248710de' if board==0x248410de else '248410de'])
-                self.assert_reason('outside_scope','driver_scope')
+                for other,pins in saved.items():
+                    if other==f'{board:08x}':continue
+                    chip['pci_nvgop'][f'{board:08x}']=copy.deepcopy(pins)
+                    self.assert_reason('outside_scope','driver_scope')
                 chip['pci_nvgop']=saved
                 self.populate(board=board,memory=0x3000 if memory==0x2000 else 0x2000,chip=0xb74000a1)
+                self.assert_reason('outside_scope','gpu_scope')
+                self.populate(board=board,memory=memory,chip=0xb74000a2)
                 self.assert_reason('outside_scope','gpu_scope')
         chip.pop('pci_nvgop')
         self.assertEqual(self.result()['status'],'error')

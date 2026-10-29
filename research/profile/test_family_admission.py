@@ -23,9 +23,10 @@ class FamilyAdmissionTests(unittest.TestCase):
     def test_exact_card_chip_memory_tuples(self):
         accepted = {(0x220410de, 0xb72000a1, 0x6000), (0x220410de, 0xb72000a1, 0x5ff4),
                     (0x220310de, 0xb72000a1, 0x6000), (0x220310de, 0xb72000a1, 0x5ff4),
-                    (0x248710de, 0xb74000a1, 0x3000), (0x250410de, 0xb76000a1, 0x3000)}
+                    (0x248710de, 0xb74000a1, 0x3000), (0x250410de, 0xb76000a1, 0x3000),
+                    (0x248410de, 0xb74000a1, 0x2000), (0x24c910de, 0xb74000a1, 0x2000)}
         for board, chip, memory in itertools.product(
-                (0x220410de, 0x220310de, 0x248710de, 0x250410de, 0x248210de, 0x999910de),
+                (0x220410de, 0x220310de, 0x248710de, 0x250410de, 0x248410de, 0x24c910de, 0x248210de, 0x999910de),
                 (0xb72000a1, 0xb74000a1, 0xb76000a1, 0xb76000a2), (0x6000, 0x5ff4, 0x3000, 0x2000)):
             text = data.synthetic_capture(board=board, chip=chip, memory=memory)
             with self.subTest(board=board, chip=chip, memory=memory):
@@ -47,18 +48,23 @@ class FamilyAdmissionTests(unittest.TestCase):
 
     def test_driver_code_is_bound_to_family(self):
         # Hashing is stubbed to isolate the admission decision, not prove driver bytes.
-        for board, chip in ((0x220410de, 0xb72000a1), (0x248710de, 0xb74000a1), (0x250410de, 0xb76000a1)):
+        cases=((0x220410de,0xb72000a1,0x6000,('60008','60009','60010')),
+               (0x248710de,0xb74000a1,0x3000,('60010',)),
+               (0x250410de,0xb76000a1,0x3000,('60010',)),
+               (0x248410de,0xb74000a1,0x2000,('60009',)),
+               (0x24c910de,0xb74000a1,0x2000,('60015',)))
+        for board,chip,memory,versions in cases:
             for version_code, hash_code in itertools.product(ENVELOPE['nvgop'], repeat=2):
                 code={'version':version_code['version'],'text_sha256':hash_code['text_sha256']}
                 text = data.synthetic_capture(board=board, chip=chip,
-                                              memory=0x6000 if chip==0xb72000a1 else 0x3000)
-                text = re.sub(r'version=0x600(?:09|10)', 'version=0x'+code['version'], text)
+                                              memory=memory)
+                text = re.sub(r'version=0x600(?:09|10|15)', 'version=0x'+code['version'], text)
                 with tempfile.TemporaryDirectory() as folder:
                     diag=Path(folder)/'DIAG00.TXT';diag.write_text(text)
                     with patch.object(data.mp, 'code_hash', return_value={'sha256':code['text_sha256'], 'bytes':0x500}):
                         known=any(code['version']==item['version'] and code['text_sha256']==item['text_sha256']
                                   for item in ENVELOPE['nvgop'])
-                        if known and (chip==0xb72000a1 or code['version']=='60010'):
+                        if known and code['version'] in versions:
                             data.mp.analyze(diag, Path(folder), ENVELOPE)
                         else:
                             with self.assertRaisesRegex(data.mp.Refused, 'not released cleanly'):

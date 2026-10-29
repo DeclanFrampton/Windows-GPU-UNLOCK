@@ -42,6 +42,9 @@ class FamilyTests(unittest.TestCase):
                  (104, 0x248210de, 0x3000, 0xb74000a1),
                  (104, 0x248710de, 0x2000, 0xb74000a1),
                  (104, 0x248410de, 0x3000, 0xb74000a1),
+                 (104, 0x24c910de, 0x3000, 0xb74000a1),
+                 (104, 0x24c910de, 0x2000, 0xb74000a2),
+                 (102, 0x24c910de, 0x2000, 0xb72000a1),
                  (106, 0x250410de, 0x2000, 0xb76000a1),
                  (106, 0x248710de, 0x3000, 0xb76000a1),
                  (204, 0x278610de, 0x3000, 0x194000a1),
@@ -56,6 +59,11 @@ class FamilyTests(unittest.TestCase):
     def test_rtx3070_uses_the_shared_ga104_implementation(self):
         done=compile_source('#include "gpu-family.h"\n_Static_assert(GU_GPU_FAMILY == 104, "GA104");\n',
             ['-DGU_PROFILE_LOCAL','-DGU_BOARD_ID=0x248410deU','-DGU_DEVICE_MEMORY_SIZE=0x2000U','-DGU_CHIP_ID=0xb74000a1U'])
+        self.assertEqual(done.returncode,0,done.stderr)
+
+    def test_rtx3060ti_uses_the_shared_ga104_implementation(self):
+        done=compile_source('#include "gpu-family.h"\n_Static_assert(GU_GPU_FAMILY == 104, "GA104");\n',
+            ['-DGU_PROFILE_LOCAL','-DGU_BOARD_ID=0x24c910deU','-DGU_DEVICE_MEMORY_SIZE=0x2000U','-DGU_CHIP_ID=0xb74000a1U'])
         self.assertEqual(done.returncode,0,done.stderr)
 
     def test_profile_family_and_firmware_cannot_be_overridden(self):

@@ -39,7 +39,7 @@ def main():
     images=load('aggregate_local_images','test_compatibility.py')
     refusals=load('aggregate_local_refusals','test_make_profile.py')
     envelope=json.loads((HERE/'proven.json').read_text())
-    lengths={'60009':0x24426,'60010':0x20d33}
+    lengths={'60009':0x24426,'60010':0x20d33,'60015':0x2106f}
     envelope=copy.deepcopy(envelope)
     # Replace only code hashes for zero-filled executable sections in this test.
     # The actual installed proven.json and production files are never edited.
@@ -58,7 +58,7 @@ def main():
     for children,(board,chip,memory) in itertools.product((1,2),(
         (0x220410de,0xb72000a1,0x6000),(0x220310de,0xb72000a1,0x5ff4),
         (0x248710de,0xb74000a1,0x3000),(0x250410de,0xb76000a1,0x3000),
-        (0x248410de,0xb74000a1,0x2000))):
+        (0x248410de,0xb74000a1,0x2000),(0x24c910de,0xb74000a1,0x2000))):
         case=out/f'id{board:x}-children{children}';case.mkdir()
         capture=case/'capture';capture.mkdir()
         text=data.synthetic_capture(aggregate=True,no_edid=False,board=board,chip=chip,memory=memory,
@@ -76,7 +76,9 @@ def main():
             if hits!=1:raise RuntimeError('Missing synthetic binding')
         for index in range(envelope['min_captures']):(capture/f'DIAG{index:02d}.TXT').write_text(text)
         version='60009' if board in (0x220410de,0x248410de) else '60010'
-        (capture/'IMG00.BIN').write_bytes(images.driver_image(0x2be40 if version=='60009' else 0x26ae0,0x280,lengths[version]))
+        if board==0x24c910de:version='60015'
+        nv_size={'60009':0x2be40,'60010':0x26ae0,'60015':0x26e00}[version]
+        (capture/'IMG00.BIN').write_bytes(images.driver_image(nv_size,0x280,lengths[version]))
         (capture/'IMG01.BIN').write_bytes(images.driver_image(0x9000,0x1000,0x800))
         (capture/'PROM.BIN').write_bytes(bytes(1048576))
         refusal_log=io.StringIO()

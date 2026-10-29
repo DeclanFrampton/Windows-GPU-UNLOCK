@@ -183,6 +183,23 @@ Cold/full-flow와 컴파일 회귀 검사를 제공하지만 `test-all.ps1`의 �
 
 ## 로컬 프로필 성공 보고
 
+[이슈 #105](https://github.com/impacifist/Windows-GPU-UNLOCK/issues/105)는 X870 EAGLE WIFI7
+BIOS F11 / Ryzen 9 9950X에서 Gigabyte RTX 3060 Ti LHR(`10de:24c9`, subsystem
+`1458:40cd`)의 성공을 보고합니다. 첨부 패치는 텍스트로 검토했으며 SHA-256은
+`eb6bce2587dd0ed1145829267802aebdc4e4287f8448dfccd36313b82c458a8f`입니다.
+공통 LOCAL 후보는 GA104 `b74000a1`, `2000` MiB, nvgop `60015`로 한정합니다.
+이미지 `26e00`, Stop `678`, `.text` `2106f`바이트의 SHA-256은
+`645a2f416940211e09023838ac03f4b45453f95f457eab2de49628d57e9deb95`입니다.
+메인보드별 프로필·펌웨어 템플릿을 추가하지 않으며, 다른 GA104 GPU의 전용 핀도 유지합니다.
+
+기여자는 재시작 기반의 완전한 캡처 2개·불완전한 캡처 2개와 USB 거래 1회 후 Windows·화면
+복귀를 보고했습니다. 실험에 사용한 임시 LOCAL 허용 범위 변경은 첨부에 없으며, 고정 프로필과
+바이너리가 같다는 설명은 기여자의 보고입니다. 비공개 PROM·드라이버 원본을 독립적으로
+해시하거나 실기기 거래를 재현하지 않았습니다. 현재 소스의 생성·재현 검사는 합성 입력을
+사용하며, 반복 성공·완전 종료 후 동작·다른 3060 Ti·내부 경로를 입증하지 않습니다.
+새 LOCAL 사용에는 별도의 완전 종료 캡처, 장비별 정확한 핀과 현재 필수 host 검사 22개가
+필요합니다. 과거 검사 결과로 이를 대체할 수 없습니다.
+
 [이슈 #113](https://github.com/impacifist/Windows-GPU-UNLOCK/issues/113)은
 Gigabyte B460M D2VX SI BIOS FE / i5-10400F / Zotac RTX 3070 8GB에서 한 번의
 headless USB 언락, clean FLR·정리, Windows 화면 복귀를 보고합니다. 시험 소스는

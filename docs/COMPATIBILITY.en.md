@@ -194,6 +194,26 @@ Those tests remain blocked rather than accepting an inferred firmware layout.
 
 ## Reported local-profile success
 
+[Issue #105](https://github.com/impacifist/Windows-GPU-UNLOCK/issues/105) reports a
+Gigabyte RTX 3060 Ti LHR (`10de:24c9`, subsystem `1458:40cd`) on X870 EAGLE WIFI7
+BIOS F11 / Ryzen 9 9950X. The source patch was reviewed as text (SHA-256
+`eb6bce2587dd0ed1145829267802aebdc4e4287f8448dfccd36313b82c458a8f`). Its firmware
+constants admit a narrow common LOCAL candidate: GA104 `b74000a1`, `2000` MiB,
+nvgop `60015`, image `26e00`, Stop `678`, `.text` `2106f` bytes with SHA-256
+`645a2f416940211e09023838ac03f4b45453f95f457eab2de49628d57e9deb95`.
+No additional motherboard profile or firmware template is installed. Other GA104
+SKUs retain their own PCI-specific driver pins.
+
+The contributor reports two complete restart-based captures, two incomplete
+captures and one clean USB transaction with Windows/display recovery. Their
+temporary LOCAL envelope change is absent from the attachment; binary equivalence
+to its fixed profile is contributor-reported. This review did not independently
+hash their private PROM/driver bytes or reproduce the physical transaction.
+Current-source generation/replay uses synthetic inputs; it does not establish
+repeatability, full-shutdown behavior, other 3060 Ti variants or the internal route.
+New LOCAL use still requires separate full-shutdown captures, exact per-machine
+pins and all 22 current host jobs. Existing historical test results cannot replace them.
+
 [Issue #113](https://github.com/impacifist/Windows-GPU-UNLOCK/issues/113) reports one
 headless USB unlock, clean FLR/cleanup and Windows display recovery on a Gigabyte
 B460M D2VX SI BIOS FE / i5-10400F / Zotac RTX 3070 8GB. The tested source is based on

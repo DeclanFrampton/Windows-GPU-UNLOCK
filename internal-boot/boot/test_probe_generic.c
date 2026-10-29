@@ -233,7 +233,7 @@ int main(void) {
     Check(!S.RegReads && !S.PromReads,"bad inventory permits no deep reads");
     Check(!Logged("capture-complete=1"),"bad inventory cannot claim a complete capture");
   }
-  const UINT32 reviewedIds[]={0x220310deU,0x248710deU,0x250410deU,0x248410deU};
+  const UINT32 reviewedIds[]={0x220310deU,0x248710deU,0x250410deU,0x248410deU,0x24c910deU};
   for(UINTN i=0;i<sizeof(reviewedIds)/sizeof(reviewedIds[0]);i++) {
     GenericSetup(G_OK);TestId=reviewedIds[i];
     Check(GuCaptureGraphOnVolume(&Table,&LogFile,&RootFile)==EFI_SUCCESS,"reviewed GA10x capture identity succeeds");

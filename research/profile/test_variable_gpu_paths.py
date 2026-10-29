@@ -44,7 +44,7 @@ def main():
     parser.add_argument('--clang',default='clang')
     parser.add_argument('--topology',choices=('aggregate','nonaggregate','no-edid'),default='aggregate')
     parser.add_argument('--generated-profile',action='store_true')
-    parser.add_argument('--gpu',choices=('3090','3070'),default='3090')
+    parser.add_argument('--gpu',choices=('3090','3070','3060ti'),default='3090')
     parser.add_argument('--children',nargs='+',type=int,choices=(1,2,3,4),default=(1,2))
     parser.add_argument('--segment',type=lambda value:int(value,0),default=0)
     parser.add_argument('--output',type=Path,required=True)
@@ -59,12 +59,14 @@ def main():
     image_data=load('variable_path_images','test_compatibility.py')
     refusals=load('variable_path_refusals','test_make_profile.py')
     envelope=copy.deepcopy(json.loads((HERE/'proven.json').read_text()))
+    nv_size,nv_text=(0x26e00,0x2106f) if args.gpu=='3060ti' else (0x2be40,0x24426)
+    nv_version='60015' if args.gpu=='3060ti' else '60009'
     for driver in envelope['nvgop']+[driver for chip in envelope['chips'] for driver in chip['nvgop']]+[
             driver for chip in envelope['chips'] for pins in chip.get('pci_nvgop',{}).values() for driver in pins]:
-        if driver['version']=='60009':driver['text_sha256']=hashlib.sha256(bytes(0x24426)).hexdigest()
+        if driver['version']==nv_version:driver['text_sha256']=hashlib.sha256(bytes(nv_text)).hexdigest()
     (out/'platform-config.h').write_text('#define GU_INTERNAL_PARTITION_INITIALIZER {0}\n#define GU_WINDOWS_PARTITION_INITIALIZER {0}\n')
     images=[]
-    for name,size in (('edid.bin',0x9000),('nvgop.bin',0x2be40),('prom.bin',1048576)):
+    for name,size in (('edid.bin',0x9000),('nvgop.bin',nv_size),('prom.bin',1048576)):
         image=out/name;image.write_bytes(bytes(size));images.append(str(image))
     flags=[args.clang,'-std=c11','-O1','-Wall','-Wextra','-Werror','-fshort-wchar','-D_CRT_SECURE_NO_WARNINGS',
         '-DGU_PROFILE_LOCAL','-DGU_HEADLESS_RESEARCH','-DGU_SINGLE_RTX_CONSOLE','-DGU_FULL_UNLOCK',
@@ -78,6 +80,7 @@ def main():
     summaries=[]
     aggregate=args.topology=='aggregate';no_edid=args.topology=='no-edid'
     card={'board':0x248410de,'chip':0xb74000a1,'memory':0x2000} if args.gpu=='3070' else {}
+    if args.gpu=='3060ti':card={'board':0x24c910de,'chip':0xb74000a1,'memory':0x2000}
     board=card.get('board',0x220410de)
     for hops,hid,children in itertools.product((1,2,3,8,16),(3,8),args.children):
         case=out/f'hops{hops}-root{hid}-children{children}';case.mkdir()
@@ -98,7 +101,7 @@ def main():
             GU_TARGET_SEGMENT=f'0x{args.segment:x}U',
             GU_ROOT_PORT_DEVICE=str(layout['pci_nodes'][0][0])+'U',
             GU_ROOT_PORT_FUNCTION=str(layout['pci_nodes'][0][1])+'U',
-            GU_NVGOP_TEXT_BYTES='0x24426U',GU_NVGOP_TEXT_SHA256='"'+hashlib.sha256(bytes(0x24426)).hexdigest()+'"')
+            GU_NVGOP_TEXT_BYTES=f'0x{nv_text:x}U',GU_NVGOP_TEXT_SHA256='"'+hashlib.sha256(bytes(nv_text)).hexdigest()+'"')
         if not no_edid:
             defines.update(GU_EDID_TEXT_BYTES='0x800U',GU_EDID_TEXT_SHA256='"'+hashlib.sha256(bytes(0x800)).hexdigest()+'"')
         header=case/'profile-local.h'
@@ -111,7 +114,7 @@ def main():
                 text,hits=re.subn(pattern,lambda m:m[1]+f'img dump index={index:02x}\n',text,flags=re.M|re.S)
                 if hits!=1:raise RuntimeError('Missing synthetic image binding')
             for index in range(envelope['min_captures']):(case/f'DIAG{index:02d}.TXT').write_text(text)
-            (case/'IMG00.BIN').write_bytes(image_data.driver_image(0x2be40,0x280,0x24426))
+            (case/'IMG00.BIN').write_bytes(image_data.driver_image(nv_size,0x280,nv_text))
             if not no_edid:(case/'IMG01.BIN').write_bytes(image_data.driver_image(0x9000,0x1000,0x800))
             (case/'PROM.BIN').write_bytes(bytes(1048576))
             log=io.StringIO()
