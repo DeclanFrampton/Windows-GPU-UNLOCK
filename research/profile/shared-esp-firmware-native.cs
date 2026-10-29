@@ -38,7 +38,10 @@ namespace SharedEspFirmware {
    byte[] data=new byte[count];Array.Copy(buffer,data,count);return new Value{Data=data,Attributes=attributes};
   }
   public static void Write(string name,byte[] data,uint attributes){
-   if(!SetFirmwareEnvironmentVariableExW(name,Global,data,data==null?0:(uint)data.Length,data==null?0:attributes))throw new Win32Exception(Marshal.GetLastWin32Error(),"Cannot write firmware variable "+name);
+   if(!SetFirmwareEnvironmentVariableExW(name,Global,data,data==null?0:(uint)data.Length,data==null?0:attributes)){
+    int error=Marshal.GetLastWin32Error();
+    throw new Win32Exception(error,"Cannot write firmware variable "+name+" (Windows error "+error+"): "+new Win32Exception(error).Message);
+   }
   }
  }
 }
