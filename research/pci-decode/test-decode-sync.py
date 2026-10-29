@@ -22,13 +22,13 @@ def main():
     flags = [args.clang, '-std=c11', '-O1', '-Wall', '-Wextra', '-Werror', '-D_CRT_SECURE_NO_WARNINGS',
              '-I', str(ROOT / 'deps/edk2/MdePkg/Include'), '-I', str(ROOT / 'deps/edk2/MdePkg/Include/X64'), '-I', str(HERE)]
     commands = [
-        [*flags, str(HERE / 'test_decode_sync.c'), str(HERE / 'decode-sync.c'), '-o', str(executable)],
+        [*flags, str(HERE / 'test_decode_sync.c'), str(HERE / 'decode-sync.c'), str(HERE / 'snapshot.c'), '-o', str(executable)],
         [str(executable)],
-        [*flags, str(HERE / 'test_efi_adapter.c'), str(HERE / 'efi-adapter.c'), str(HERE / 'decode-sync.c'),
+        [*flags, str(HERE / 'test_efi_adapter.c'), str(HERE / 'efi-adapter.c'), str(HERE / 'decode-sync.c'), str(HERE / 'snapshot.c'),
          '-o', str(output / 'efi-adapter-host.exe')],
         [str(output / 'efi-adapter-host.exe')],
         [*flags, str(HERE / 'test_efi_capture.c'), str(HERE / 'efi-capture.c'), str(HERE / 'efi-adapter.c'),
-         str(HERE / 'decode-sync.c'), '-o', str(output / 'efi-capture-host.exe')],
+         str(HERE / 'decode-sync.c'), str(HERE / 'snapshot.c'), '-o', str(output / 'efi-capture-host.exe')],
         [str(output / 'efi-capture-host.exe')],
     ]
     results = []
@@ -52,7 +52,9 @@ def main():
             'ignore-final-log-failure': [('if(o.Log(o.Context,"decode-verify-full-snapshot")!=TRUE)return Finish(t,GU_DS_LOG_FAILED);',
                                          '(void)o.Log(o.Context,"decode-verify-full-snapshot");')],
         }
-        mutation_specs = [(name, 'decode-sync.c', 'test_decode_sync.c', [], replacements)
+        readonly_names={'ignore-parent-bus-cycles','ignore-late-parent-drift','compare-only-first-config-dword'}
+        mutation_specs = [(name, 'snapshot.c' if name in readonly_names else 'decode-sync.c', 'test_decode_sync.c',
+                           [str(HERE / ('decode-sync.c' if name in readonly_names else 'snapshot.c'))], replacements)
                           for name, replacements in changes.items()]
         adapter_changes = {
             'overwrite-real-not-started-error': [('if(!c->OwnershipObserved || c->OwnershipStatus==EFI_SUCCESS)',
@@ -71,7 +73,7 @@ def main():
             'same-sentinel-in-both-scans': [('pass?0x5a5a5a5aU:0xa5a5a5a5U', '0xa5a5a5a5U')],
             'allow-adapter-reinitialization': [('if(c->InitUsed!=FALSE)return EFI_ALREADY_STARTED;', '')],
         }
-        mutation_specs += [(name, 'efi-adapter.c', 'test_efi_adapter.c', [str(HERE / 'decode-sync.c')], replacements)
+        mutation_specs += [(name, 'efi-adapter.c', 'test_efi_adapter.c', [str(HERE / 'decode-sync.c'),str(HERE / 'snapshot.c')], replacements)
                            for name, replacements in adapter_changes.items()]
         capture_changes = {
             'ignore-capture-gpu-pin': [('  if(!index && (out->Config[0]!=w->Target.PciId || out->Config[11]!=w->Target.Subsystem || out->Config[4]!=w->Target.Bar0))return EFI_NOT_READY;','')],
@@ -81,7 +83,7 @@ def main():
                 'for(UINTN i=w->Bound?w->Bound-1:0;i<w->Bound;i++)')],
         }
         mutation_specs += [(name, 'efi-capture.c', 'test_efi_capture.c',
-            [str(HERE / 'decode-sync.c'),str(HERE / 'efi-adapter.c')], replacements)
+            [str(HERE / 'decode-sync.c'),str(HERE / 'snapshot.c'),str(HERE / 'efi-adapter.c')], replacements)
             for name, replacements in capture_changes.items()]
         for name, source_file, test_file, support, replacements in mutation_specs:
             broken = (HERE / source_file).read_text()

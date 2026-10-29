@@ -14,6 +14,9 @@ static void Hook(void) {
     unsigned calls=M->Calls;
     Check(GuDsEfiCapture(&Capture,&M->Boot,&Target)==EFI_ALREADY_STARTED,"same capture context cannot reenter or reset");
     Check(M->Calls==calls,"reentry invokes no service");
+    GU_DS_CAPTURE fresh={0};
+    Check(GuDsEfiCapture(&fresh,&M->Boot,&Target)==EFI_ALREADY_STARTED && !fresh.Used,
+      "a fresh context cannot reenter the per-image capture workspace");
   }
   if(FreezeTarget && !Frozen){Frozen=TRUE;Target.PciId^=1;Target.Path[8]^=1;Target.Bus^=1;}
 }

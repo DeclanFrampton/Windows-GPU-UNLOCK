@@ -12,6 +12,11 @@ typedef struct {
   UINTN Count,Bound;
   GU_DS_EFI_DEVICE Devices[1+GU_DS_EFI_MAX_PARENTS];
 } WORK;
+/* Bounded per-image scratch avoids firmware stack probing. This is a reentry
+ * guard, not a multiprocessor lock; callers still serialize operations. */
+static WORK ActiveWork;
+static GU_DS_SNAPSHOT ActiveSnapshots[2];
+static BOOLEAN ActiveBusy;
 static EFI_GUID PciGuid=EFI_PCI_IO_PROTOCOL_GUID,PathGuid=EFI_DEVICE_PATH_PROTOCOL_GUID;
 static BOOLEAN Same(const VOID *a,const VOID *b,UINTN n) {
   const UINT8 *x=a,*y=b;for(UINTN i=0;i<n;i++)if(x[i]!=y[i])return FALSE;return TRUE;
@@ -73,38 +78,40 @@ EFI_STATUS GuDsEfiCapture(GU_DS_CAPTURE *c,EFI_BOOT_SERVICES *boot,const GU_DS_C
   if(!c || (boot && Overlap(c,sizeof(*c),boot,sizeof(*boot))) ||
      (target && Overlap(c,sizeof(*c),target,sizeof(*target))) ||
      (boot && target && Overlap(boot,sizeof(*boot),target,sizeof(*target))))return EFI_INVALID_PARAMETER;
-  if(c->Used!=FALSE)return EFI_ALREADY_STARTED;
+  if(c->Used!=FALSE || ActiveBusy!=FALSE)return EFI_ALREADY_STARTED;
+  ActiveBusy=TRUE;
   c->Used=TRUE;c->Busy=TRUE;c->Ready=FALSE;c->Count=0;
   for(UINTN i=0;i<1+GU_DS_EFI_MAX_PARENTS;i++)c->Bindings[i]=(GU_DS_EFI_BINDING){0};
   c->Snapshot=(GU_DS_SNAPSHOT){0};c->Status=EFI_INVALID_PARAMETER;
-  EFI_STATUS s=EFI_INVALID_PARAMETER;WORK w={0};GU_DS_SNAPSHOT snapshots[2]={{0}};UINTN parents=0;
+  EFI_STATUS s=EFI_INVALID_PARAMETER;WORK *w=&ActiveWork;GU_DS_SNAPSHOT *snapshots=ActiveSnapshots;UINTN parents=0;
+  *w=(WORK){0};snapshots[0]=(GU_DS_SNAPSHOT){0};snapshots[1]=(GU_DS_SNAPSHOT){0};
   if(!boot || !target || !boot->HandleProtocol || !boot->LocateDevicePath)goto done;
-  w.Boot=boot;w.Handle=boot->HandleProtocol;w.Locate=boot->LocateDevicePath;w.Target=*target;
-  if(!w.Target.Handle || w.Target.Segment>0xffffU || !w.Target.Bus || w.Target.Bus>255 ||
-     (w.Target.PciId&0xffffU)!=0x10de || !w.Target.Subsystem || w.Target.Subsystem==0xffffffffU ||
-     !w.Target.Bar0 || (w.Target.Bar0&0xffffffU) || !GuDsControllerParents(w.Target.Path,w.Target.PathBytes,&parents))goto done;
-  w.Count=parents+1;
-  for(UINTN i=0;i<w.Count;i++) {
-    GU_DS_EFI_BINDING *p=&w.Devices[i].Pin;
-    UINTN body=i?12+6*i:w.Target.PathBytes-4;
-    for(UINTN j=0;j<body;j++)p->Path[j]=w.Target.Path[j];
+  w->Boot=boot;w->Handle=boot->HandleProtocol;w->Locate=boot->LocateDevicePath;w->Target=*target;
+  if(!w->Target.Handle || w->Target.Segment>0xffffU || !w->Target.Bus || w->Target.Bus>255 ||
+     (w->Target.PciId&0xffffU)!=0x10de || !w->Target.Subsystem || w->Target.Subsystem==0xffffffffU ||
+     !w->Target.Bar0 || (w->Target.Bar0&0xffffffU) || !GuDsControllerParents(w->Target.Path,w->Target.PathBytes,&parents))goto done;
+  w->Count=parents+1;
+  for(UINTN i=0;i<w->Count;i++) {
+    GU_DS_EFI_BINDING *p=&w->Devices[i].Pin;
+    UINTN body=i?12+6*i:w->Target.PathBytes-4;
+    for(UINTN j=0;j<body;j++)p->Path[j]=w->Target.Path[j];
     p->Path[body]=0x7f;p->Path[body+1]=0xff;p->Path[body+2]=4;p->Path[body+3]=0;p->PathBytes=body+4;
   }
   s=EFI_NOT_READY;
   for(UINTN pass=0;pass<2;pass++) {
     GU_DS_SNAPSHOT *v=&snapshots[pass];v->ParentCount=parents;
-    for(UINTN i=0;i<w.Count;i++)if(ReadOne(&w,i,pass==0,i?&v->Parents[i-1]:&v->Gpu)!=EFI_SUCCESS)goto done;
+    for(UINTN i=0;i<w->Count;i++)if(ReadOne(w,i,pass==0,i?&v->Parents[i-1]:&v->Gpu)!=EFI_SUCCESS)goto done;
     v->Complete=TRUE;
-    if(!Caps(&w) || !GuDecodeSnapshotValid(v))goto done;
+    if(!Caps(w) || !GuDecodeSnapshotValid(v))goto done;
   }
-  if(!Caps(&w) || !GuDecodeSnapshotMatches(&snapshots[1],&snapshots[0],FALSE))goto done;
-  for(UINTN i=0;i<w.Count;i++)c->Bindings[i]=w.Devices[i].Pin;
-  c->Snapshot=snapshots[1];c->Count=w.Count;c->Ready=TRUE;s=EFI_SUCCESS;
+  if(!Caps(w) || !GuDecodeSnapshotMatches(&snapshots[1],&snapshots[0],FALSE))goto done;
+  for(UINTN i=0;i<w->Count;i++)c->Bindings[i]=w->Devices[i].Pin;
+  c->Snapshot=snapshots[1];c->Count=w->Count;c->Ready=TRUE;s=EFI_SUCCESS;
 done:
   /* Nothing partial is published, even if a callback touched public outputs. */
   if(s!=EFI_SUCCESS) {
     c->Snapshot=(GU_DS_SNAPSHOT){0};c->Count=0;c->Ready=FALSE;
     for(UINTN i=0;i<1+GU_DS_EFI_MAX_PARENTS;i++)c->Bindings[i]=(GU_DS_EFI_BINDING){0};
   }
-  c->Used=TRUE;c->Busy=FALSE;c->Status=s;return s;
+  c->Used=TRUE;c->Busy=FALSE;c->Status=s;ActiveBusy=FALSE;return s;
 }

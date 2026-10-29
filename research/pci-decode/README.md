@@ -150,6 +150,12 @@ read-only probes, LOCAL admission and build-evidence rules remain unchanged.
 
 ## Current-boot baseline collector
 
+Pure snapshot data/predicates now live in `snapshot.{h,c}` and EFI binding data in
+`efi-binding.h`. The collector depends only on that read-only layer. The actuator
+core and ownership adapter remain separate source units; a diagnostic must not
+link them just to obtain snapshot helpers. This split preserves the existing
+predicate bodies and ID/command admission without widening either envelope.
+
 `efi-capture.c` supplies read-only baseline acquisition for the research adapter.
 The caller supplies an exact GPU handle, segment/bus, PCI/subsystem IDs, BAR0 and
 bounded controller-path bytes. The collector follows each immediate parent prefix
@@ -187,6 +193,34 @@ an unlock. The returned binding array and snapshot can feed GuDsEfiInitialize on
 after its independent held-claim/lifetime/serialization requirements are met.
 The composition test does this against RAM EFIAPI mocks; no firmware code executes.
 The production pre-NVIDIA-Stop integration issue described above is unchanged.
+
+The collector uses bounded private per-image scratch rather than large automatic
+WORK/snapshot arrays. A guard rejects callback reentry even through a fresh context
+before that scratch can be overwritten. It is not a multiprocessor lock; callers
+must still serialize operations. Results are copied into the caller's context and
+do not retain pointers to the scratch arrays.
+
+Before connecting this code to a shipped diagnostic, validate its actual EFI link,
+not only COFF compilation. Run this from an ordinary host shell:
+
+```powershell
+python -I research/pci-decode/test-readonly-image.py --clang C:\TOOLS\LLVM20\bin\clang.exe --lld-link C:\TOOLS\LLVM20\bin\lld-link.exe --stack-mutation --output research/pci-decode/build/your-new-readonly-link
+```
+
+This builds a synthetic, invalid-target entry point with only the collector,
+snapshot predicates and RAM runtime. It checks the real PE/map, refuses actuator
+symbols, records compiler stack usage and requires each frame to stay within
+2 KiB. The optional negative restores the old automatic arrays: it must compile,
+then fail the freestanding link specifically for `__chkstk`, with a frame above
+4 KiB. Do not hide that failure with a stack-probe stub or by disabling probing.
+The tested clang 20 build reports 248 bytes maximum versus 13,960 bytes in the
+negative. These are build observations, not physical firmware stack guarantees.
+No image is executed, staged or an authorized package.
+
+The generic diagnostic is not connected yet. Its integration must also bind the
+new external read-only source hashes into build/resume/evidence manifests, use
+distinct parent-record syntax and preserve the final target check before MMIO.
+An optional collector failure cannot justify calling a changed/NULL PCI method.
 
 Capture fixtures cover all parent depths, both root types, UID/segment boundaries,
 stable wrong GPU pins, bad bus chains, interface replacement between scans, missing

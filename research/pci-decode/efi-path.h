@@ -1,6 +1,6 @@
 /* GPL-2.0-only. Bounded controller paths shared by the research libraries. */
 #pragma once
-#include "efi-adapter.h"
+#include "efi-binding.h"
 #include "../../internal-boot/unlock/gpu-path.h"
 
 static inline BOOLEAN GuDsControllerParents(const UINT8 *path,UINTN bytes,UINTN *parents) {

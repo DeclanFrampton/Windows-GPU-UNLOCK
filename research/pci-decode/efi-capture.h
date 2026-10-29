@@ -1,6 +1,6 @@
 /* GPL-2.0-only. Research-only current-boot read collector; no entry point. */
 #pragma once
-#include "efi-adapter.h"
+#include "efi-binding.h"
 
 typedef struct {
   EFI_HANDLE Handle;

@@ -1,24 +1,9 @@
 /* GPL-2.0-only. Research library only; no EFI entry point or shipped build. */
 #pragma once
 #include "decode-sync.h"
-#include <Protocol/PciIo.h>
-#include <Protocol/DevicePath.h>
-
-#define GU_DS_EFI_MAX_PATH 112U
-#define GU_DS_EFI_MAX_PARENTS 15U
+#include "efi-binding.h"
 #define GU_DS_EFI_MAX_OPENERS 64U
-typedef struct {
-  EFI_HANDLE Handle;
-  EFI_PCI_IO_PROTOCOL *Io;
-  UINTN PathBytes;
-  UINT8 Path[GU_DS_EFI_MAX_PATH];
-} GU_DS_EFI_BINDING;
-typedef struct {
-  GU_DS_EFI_BINDING Pin;
-  EFI_PCI_IO_PROTOCOL_GET_LOCATION Location;
-  EFI_PCI_IO_PROTOCOL_CONFIG Read;
-  EFI_PCI_IO_PROTOCOL_ATTRIBUTES Attributes;
-} GU_DS_EFI_DEVICE;
+
 /* One zero-initialized context. Treat initialized fields as private/immutable.
  * Caller retains the exclusive claim, input storage and interface lifetimes,
  * serializes the operation, and separately authorizes any future physical use.
