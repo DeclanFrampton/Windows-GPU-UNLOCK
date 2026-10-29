@@ -1,6 +1,6 @@
 # EVGA profile publication status
 
-[한국어](PUBLICATION-STATUS.ko.md)
+[í•œêµ­ì–´](PUBLICATION-STATUS.ko.md)
 
 The attended exact-machine unlock is demonstrated. This PR is available for review; the reusable USB-free unlock profile is not complete.
 
@@ -10,8 +10,8 @@ The revised temporary firmware-option cleanup completed on the contributor machi
 
 Before calling the reusable profile complete:
 
-- Confirm ordinary Limine and Windows boot after cleanup, including whether USB was removed.
-- Confirm the supplied performance run followed the unlock without an intervening reboot; otherwise obtain a controlled same-boot comparison after a separately qualified attempt.
+- Completed: contributor confirmed both Linux and Windows boot normally after cleanup with USB removed.
+- Completed: contributor confirmed the supplied benchmark was after SULK01 and before any further reboot. This is operator-confirmed timing.
 - Implement cross-volume attempt progression using authenticated reviewed evidence without resetting reservations or allowing replay.
 - Integrate a USB-free unlock launch and its one-shot gating, collection and cleanup; qualify the full path on the exact machine.
 - Add focused regression coverage for the new cleanup execution path, native deletion arguments and partial failures. Existing 18 mocks do not cover the new execution path.
