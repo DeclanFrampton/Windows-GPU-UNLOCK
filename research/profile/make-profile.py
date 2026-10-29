@@ -13,8 +13,15 @@ prepare-console.c / full-release.c check at boot:
 
   OutAgent  opens SimpleTextOut BY_DRIVER on the RTX GOP handle
   GfxAgent  opens GOP           BY_DRIVER on the RTX GOP handle
-  EdidAgent opens EdidDiscovered BY_DRIVER on the RTX GOP handle (AMI mouse/EDID file)
+  EdidAgent opens EdidDiscovered BY_DRIVER on the RTX GOP handle (AMI mouse/EDID file);
+            optional: when no handle has an active EdidDiscovered opener the profile sets
+            GU_NO_EDID_DRIVER and the release skips the EDID stage
   NvAgent   opens PciIo         BY_DRIVER on the RTX PCI handle (nvgop-ga1xx)
+
+For a recognized AMI aggregate console, Combo owns the physical GOP and its
+pathless aggregate child; OutAgent/GfxAgent own that aggregate instead. One or
+two NVIDIA display children and an EDID driver are required. Topology-specific
+capture replay remains mandatory before any write build.
 
 Anything outside research/profile/proven.json, or any disagreement between
 captures, is refused: there is no override. Widening the envelope is a
@@ -24,6 +31,7 @@ Usage: python -I make-profile.py CAPTURE_DIR FWSEC_LOCATE_EXE
 """
 import argparse
 import hashlib
+import importlib.util
 import json
 import re
 import struct
@@ -34,14 +42,26 @@ from pathlib import Path
 
 GENERATOR_VERSION = 1
 REPO = Path(__file__).resolve().parents[2]
+_graph_spec = importlib.util.spec_from_file_location('profile_capture_graph', Path(__file__).with_name('capture_graph.py'))
+_graph = importlib.util.module_from_spec(_graph_spec)
+_graph_spec.loader.exec_module(_graph)
+_path_spec = importlib.util.spec_from_file_location('profile_gpu_path', Path(__file__).with_name('gpu_path.py'))
+_path = importlib.util.module_from_spec(_path_spec)
+_path_spec.loader.exec_module(_path)
 TEXT_OUT = '387477c2-69c7-11d2-8e39-00a0c969723b'
+TEXT_IN = '387477c1-69c7-11d2-8e39-00a0c969723b'
 GOP = '9042a9de-23dc-4a38-96fb-7aded080516a'
 EDID_DISCOVERED = '1c0c34f6-d380-41fa-a049-8ad06c1a66aa'
 PCI_IO = '4cf5b200-68b8-4ca5-9eec-b23e3f50029a'
+PATH = '09576e91-6d3f-11d2-8e39-00a0c969723b'
+BY_CHILD_CONTROLLER = 0x8
+# EFI_PCI_IO_ATTRIBUTE_IO / _MEMORY / _BUS_MASTER (PciIo.h)
+PCI_ATTRIBUTE_IO, PCI_ATTRIBUTE_MEMORY, PCI_ATTRIBUTE_BUS_MASTER = 0x100, 0x200, 0x400
 BY_DRIVER = 0x10
 OUT_FILE = '628a497d-2bf6-4264-8741-069dbd3399d6'
 GFX_FILE = '43e7abdd-e352-4cfb-a230-4cdc1d350e5c'
 MOUSE_FILE = 'c7a7030c-c3d8-45ee-bed9-5d9e76762953'
+COMBO_FILE = '55987e62-1df6-41d1-9062-334fcac3e54d'
 NVGOP_NAME = 'nvgop-ga1xx'
 # full-release.c Profile(): hashed code ranges start at these RVAs.
 EDID_TEXT_RVA = 0x1000
@@ -61,6 +81,28 @@ class Refused(ValueError):
 
 def fail(message):
     raise Refused(message)
+
+
+def card_nvgop(chip, board):
+    """Keep shared chip code from admitting firmware proven only on another SKU."""
+    if 'pci_nvgop' not in chip:
+        if chip.get('chip') == 'b74000a1':
+            fail('invalid per-card nvgop pins: GA104 requires PCI-specific driver evidence')
+        return chip['nvgop']
+    mapping = chip['pci_nvgop']
+    try:
+        if not isinstance(mapping, dict) or set(mapping) != set(chip['pci_memory']):
+            fail('invalid per-card nvgop pins: every PCI identity must be covered exactly')
+        allowed = {(entry['version'], entry['text_sha256']) for entry in chip['nvgop']}
+        for entries in mapping.values():
+            if not isinstance(entries, list) or not entries or any(not isinstance(entry, dict) for entry in entries):
+                fail('invalid per-card nvgop pins: expected nonempty driver lists')
+            pairs = [(entry['version'], entry['text_sha256']) for entry in entries]
+            if len(set(pairs)) != len(pairs) or any(pair not in allowed for pair in pairs):
+                fail('invalid per-card nvgop pins: driver must be unique and chip-reviewed')
+        return mapping[f'{board:08x}']
+    except (KeyError, TypeError):
+        fail('invalid per-card nvgop pins')
 
 
 def node_file(nodes):
@@ -102,38 +144,48 @@ def parse_bindings(lines):
 
 
 def parse_handles(text):
-    blocks = {}
-    for m in re.finditer(r'^handle id=0x([0-9a-f]+)\n(.*?)(?=^handle id=|^capture-complete=|\Z)', text, re.M | re.S):
-        h = int(m[1], 16)
-        if h in blocks:
-            fail(f'duplicate handle record {h:#x}')
-        edges, protocols, protocol = [], set(), None
-        for line in m[2].splitlines():
-            if line.startswith('protocol guid='):
-                protocol = line.removeprefix('protocol guid=')
-                protocols.add(protocol)
-            e = re.fullmatch(r'open agent=0x([0-9a-f]+) controller=0x([0-9a-f]+) attributes=0x([0-9a-f]+) count=0x([0-9a-f]+)', line)
-            if e:
-                edges.append((protocol, int(e[1], 16), int(e[2], 16), int(e[3], 16), int(e[4], 16)))
-        blocks[h] = {'raw': m[2], 'edges': edges, 'protocols': protocols}
-    return blocks
+    try:
+        return _graph.parse_handles(text)
+    except ValueError as error:
+        fail(str(error))
 
 
 def path_of(block):
-    rows = re.findall(r'^path-node raw=([0-9a-f]+)$', block, re.M)
-    return b''.join(bytes.fromhex(r) for r in rows) if rows else None
+    rows = [line for line in block.splitlines() if line.startswith('path-node')]
+    if not rows:
+        return None
+    nodes = []
+    for line in rows:
+        row = re.fullmatch(r'path-node raw=([0-9a-f]+)', line)
+        if not row or len(row[1]) % 2:
+            fail('Malformed device path record')
+        node = bytes.fromhex(row[1])
+        if len(node) < 4 or int.from_bytes(node[2:4], 'little') != len(node):
+            fail('Malformed device path node')
+        nodes.append(node)
+    if nodes[-1] != b'\x7f\xff\x04\x00' or any(node[0] == 127 for node in nodes[:-1]):
+        fail('Incomplete or ambiguous device path termination')
+    return b''.join(nodes)
 
 
 def pci_config(block):
-    m = re.search(r'^pci config-dwords=([^\n]+)$', block, re.M)
-    return [int(w, 16) for w in m[1].split()] if m else None
+    rows = re.findall(r'^pci config-dwords=.*$', block, re.M)
+    statuses = re.findall(r'^pci config-status=.*$', block, re.M)
+    if not rows and not statuses:
+        return None
+    if len(rows) != 1 or statuses != ['pci config-status=0x0000000000000000']:
+        fail('Incomplete or ambiguous graph PCI configuration')
+    words = rows[0].split('=', 1)[1].split()
+    if len(words) != 16 or any(not re.fullmatch(r'[0-9a-f]{1,8}', word) for word in words):
+        fail('Graph PCI configuration requires 16 DWORDs')
+    return [int(word, 16) for word in words]
 
 
 def sole_driver(blocks, handle, protocol):
-    agents = [a for p, a, c, attrs, n in blocks[handle]['edges'] if p == protocol and attrs == BY_DRIVER and c == handle]
-    if len(agents) != 1:
-        fail(f'expected one BY_DRIVER opener of {protocol} on {handle:#x}, found {len(agents)}')
-    return agents[0]
+    owners = [(a, c, n) for p, a, c, attrs, n in blocks[handle]['edges'] if p == protocol and attrs == BY_DRIVER]
+    if len(owners) != 1 or owners[0][1] != handle or owners[0][2] != 1:
+        fail(f'expected one count-1 BY_DRIVER opener of {protocol} on {handle:#x}, found {len(owners)}')
+    return owners[0][0]
 
 
 def binding_for(bindings, agent):
@@ -144,6 +196,102 @@ def binding_for(bindings, agent):
     if 'base' not in b or 'size' not in b or not b['base'] <= b['stop'] < b['base'] + b['size']:
         fail(f'binding {agent:#x} stop is outside its image')
     return b
+
+
+def gpu_display_path(path):
+    try:
+        return _path.decode_gpu_display_path(path)
+    except ValueError as error:
+        fail(str(error))
+
+
+def aggregate_roles(text, blocks, pci, primary, bindings):
+    """Inspect the existing AMI aggregate ownership model.
+
+    Returns capture-local handles only. They must never become profile constants.
+    Write eligibility still requires the full capture-bound host replay.
+    """
+    def active(handle):
+        return [edge for edge in blocks[handle]['edges'] if edge[3] not in (1, 2, 4)]
+
+    others = [h for h, block in blocks.items() if GOP in block['protocols'] and h != primary]
+    if not others:
+        return None
+    if len(others) != 1:
+        fail('aggregate console requires exactly one additional GOP')
+    agg = others[0]
+    raw = blocks[agg]['raw']
+    framebuffers = re.findall(r'^gop framebuffer=0x([0-9a-f]+) bytes=0x([0-9a-f]+) .*$', raw, re.M)
+    if PATH in blocks[agg]['protocols'] or path_of(raw) is not None or len(framebuffers) != 1 or \
+            any(int(value, 16) for value in framebuffers[0]):
+        fail('aggregate GOP must be pathless with one zero framebuffer record')
+    consoles = re.findall(r'^console out=0x([0-9a-f]+) error=0x([0-9a-f]+) input=0x([0-9a-f]+)$', text, re.M)
+    if len(consoles) != 1:
+        fail('aggregate console requires exactly one console handle snapshot')
+    console, error, input_handle = (int(value, 16) for value in consoles[0])
+    if any(handle not in blocks for handle in (console, error, input_handle)) or \
+            TEXT_OUT not in blocks[console]['protocols'] or TEXT_OUT not in blocks[error]['protocols'] or \
+            TEXT_IN not in blocks[input_handle]['protocols']:
+        fail('aggregate console handles must resolve to recorded text interfaces')
+    nv = sole_driver(blocks, pci, PCI_IO)
+    combo = sole_driver(blocks, primary, GOP)
+    edid = sole_driver(blocks, primary, EDID_DISCOVERED)
+    gfx = sole_driver(blocks, agg, GOP)
+    out = sole_driver(blocks, agg, TEXT_OUT)
+    roles = {'nvgop': nv, 'combo': combo, 'edid': edid, 'gfx': gfx, 'out': out}
+    if len(set(roles.values())) != len(roles):
+        fail('aggregate driver roles must be distinct')
+    expected_primary = {(GOP, combo, primary, BY_DRIVER, 1),
+                        (GOP, combo, agg, BY_CHILD_CONTROLLER, 1),
+                        (EDID_DISCOVERED, edid, primary, BY_DRIVER, 1)}
+    expected_agg = {(GOP, gfx, agg, BY_DRIVER, 1), (TEXT_OUT, out, agg, BY_DRIVER, 1),
+                    (TEXT_OUT, out, console, BY_CHILD_CONTROLLER, 1)}
+    if set(active(primary)) != expected_primary or set(active(agg)) != expected_agg:
+        fail('aggregate console has an unexpected owner or missing driver connection')
+    children = []
+    for protocol, agent, controller, attributes, count in active(pci):
+        if agent != nv or count != 1:
+            fail('aggregate GPU has a foreign or repeated owner')
+        if protocol == PATH and attributes == BY_CHILD_CONTROLLER:
+            children.append(controller)
+        elif attributes != BY_DRIVER or controller != pci:
+            fail('aggregate GPU ownership is outside the reviewed model')
+    if not 1 <= len(children) <= 2 or len(set(children)) != len(children) or primary not in children:
+        fail('aggregate console requires one or two unique NVIDIA display children')
+    primary_path = path_of(blocks[primary]['raw'])
+    primary_layout = gpu_display_path(primary_path)
+    controller_bytes = primary_layout['controller_bytes']
+    paths = []
+    for child in children:
+        if child not in blocks or child in (pci, agg, console, error, input_handle):
+            fail('aggregate display child is missing or aliases a console handle')
+        child_path = path_of(blocks[child]['raw'])
+        child_layout = gpu_display_path(child_path)
+        if child_layout['controller_bytes'] != controller_bytes or \
+                child_path[:controller_bytes] != primary_path[:controller_bytes]:
+            fail('aggregate display child has a different or incomplete PCI route')
+        paths.append(child_path)
+        if child != primary and (GOP in blocks[child]['protocols'] or TEXT_OUT in blocks[child]['protocols'] or
+                active(child) != [(EDID_DISCOVERED, edid, child, BY_DRIVER, 1)]):
+            fail('aggregate sibling requires only the same EDID driver')
+    if len(set(paths)) != len(paths):
+        fail('aggregate display child paths must be unique')
+    for handle in blocks:
+        if handle not in (pci, primary, agg) and any(edge[1] in (nv, combo) for edge in active(handle)):
+            fail('aggregate NVIDIA or combo driver owns an unrelated handle')
+    expected_files = {'nvgop': ('name', NVGOP_NAME), 'combo': ('guid', COMBO_FILE),
+                      'edid': ('guid', MOUSE_FILE), 'gfx': ('guid', GFX_FILE), 'out': ('guid', OUT_FILE)}
+    for role, agent in roles.items():
+        driver = binding_for(bindings, agent)
+        if driver['file'] != expected_files[role] or driver.get('code-type') != (5 if role == 'edid' else 3):
+            fail('aggregate driver identity is outside the reviewed model')
+        if role in ('edid', 'nvgop') and driver['image'] != driver['handle']:
+            fail('aggregate runtime driver image/binding identity is inconsistent')
+        if role == 'edid' and driver.get('version') != 1:
+            fail('aggregate EDID driver version is outside the reviewed model')
+    return {'aggregate': agg, 'primary': primary, 'console': console, 'roles': roles,
+            'children': [primary] + sorted((child for child in children if child != primary),
+                                          key=lambda child: path_of(blocks[child]['raw']))}
 
 
 def pe_sections(image):
@@ -284,8 +432,17 @@ def analyze(diag, image_dir, envelope):
     if text.count('\nprobe-target ') != 1 or not single_probe_summary(text):
         fail(f'{diag.name}: need exactly one NVIDIA display controller (single-RTX topology only)')
     target = re.search(r'^probe-target seg=0x([0-9a-f]+) bus=0x([0-9a-f]+) dev=0x([0-9a-f]+) fun=0x([0-9a-f]+)$', text, re.M)
-    if not target or [int(x, 16) for x in target.groups()] != [0, 1, 0, 0]:
-        fail(f'{diag.name}: the RTX must be 0000:01:00.0 (checks.c GuCheckConfig)')
+    if not target:
+        fail(f'{diag.name}: no probe-target record')
+    segment, target_bus, device, function = (int(x, 16) for x in target.groups())
+    # Pin the observed segment and bus across captures and every runtime lookup.
+    # Device/function zero remains a GPU endpoint constraint.
+    if not 0 <= segment <= 0xffff:
+        fail(f'{diag.name}: the RTX must use a 16-bit PCI segment')
+    if device or function:
+        fail(f'{diag.name}: the RTX must be at device 0, function 0 (checks.c GuCheckConfig)')
+    if not 1 <= target_bus <= 0xff:
+        fail(f'{diag.name}: bus {target_bus:#x} is not a discrete slot; the RTX must be on a nonzero bus')
     rows = re.findall(r'^cfg dwords=([0-9a-f ]+)$', text, re.M)
     words = rows[0].split() if len(rows) == 1 else []
     if len(words) != 64:
@@ -301,6 +458,23 @@ def analyze(diag, image_dir, envelope):
     bar0 = cfg[4]
     if bar0 & 0xf or bar0 & 0xffffff or not bar0:
         fail(f'BAR0 {bar0:#x} is not a 16 MiB aligned 32-bit non-prefetchable window')
+    # full-release.c CapturePermit: the PciIo attribute cache must equal the raw IO/MEM command
+    # bits, with no bus mastering, or the release stops after the console was already detached.
+    rows = [line for line in text.splitlines() if line.startswith('pci-attributes')]
+    if not rows:
+        fail(f'{diag.name}: no PciIo attribute record; capture again with the current probe')
+    if len(rows) != 1:
+        fail(f'{diag.name}: ambiguous PciIo attribute records')
+    record = re.fullmatch(r'pci-attributes status=0x([0-9a-f]{16}) value=0x([0-9a-f]{16})', rows[0])
+    if not record:
+        fail(f'{diag.name}: malformed PciIo attribute record')
+    attr_status, attributes = (int(v, 16) for v in record.groups())
+    if attr_status:
+        fail(f'{diag.name}: reading the PciIo attributes failed with status {attr_status:#x}')
+    expected_attributes = (PCI_ATTRIBUTE_IO if cfg[1] & 1 else 0) | (PCI_ATTRIBUTE_MEMORY if cfg[1] & 2 else 0)
+    if attributes & (PCI_ATTRIBUTE_IO | PCI_ATTRIBUTE_MEMORY | PCI_ATTRIBUTE_BUS_MASTER) != expected_attributes:
+        fail(f'{diag.name}: PciIo attributes {attributes:#x} disagree with the PCI command register '
+             f'(expected IO/MEM/BME bits {expected_attributes:#x}); full-release.c CapturePermit would stop the release')
 
     mmio, _ = probe_mmio(text)
     if any(o not in mmio for o in COLD):
@@ -311,6 +485,11 @@ def analyze(diag, image_dir, envelope):
         fail(f'chip {chip:#010x} has no hardware-proven profile')
     if memory not in [int(m, 16) for m in proven[0]['memory']]:
         fail(f'{proven[0]["family"]} with {memory:#x} MiB is not hardware-proven')
+    # PCI identity, exact chip revision and memory must be one reviewed tuple,
+    # never an independent cross product of the envelope's device/family lists.
+    allowed_memory = proven[0].get('pci_memory', {}).get(f'{board:08x}', [])
+    if f'{memory:x}' not in allowed_memory:
+        fail('PCI identity/chip/memory combination is not hardware-proven')
     # full-release.c ColdRead: power-on state; the unlock never runs from anything else.
     if (g1, g2, g3, wpr2, plm) != (0x8b8f, 0x3ff, 0x10, 0, 0xffffff8f) or ss1 > 15 or \
             ss0 in (0xffffffff, 0x88888888) or ss0 & 0xffff0000 == 0xbadf0000:
@@ -328,11 +507,22 @@ def analyze(diag, image_dir, envelope):
     rtx_pci = nvidia[0]
     if pci_config(blocks[rtx_pci]['raw'])[11] != subsystem:
         fail('graph and probe disagree on the RTX subsystem')
+    locations = re.findall(r'^pci location-status=.*$', blocks[rtx_pci]['raw'], re.M)
+    location = re.fullmatch(r'pci location-status=0x([0-9a-f]{1,16}) segment=0x([0-9a-f]{1,16}) bus=0x([0-9a-f]{1,16}) device=0x([0-9a-f]{1,16}) function=0x([0-9a-f]{1,16})', locations[0]) if len(locations) == 1 else None
+    if not location or [int(value, 16) for value in location.groups()] != [0, segment, target_bus, device, function]:
+        fail('graph and probe disagree on the RTX PCI location')
     other = [h for h, b in blocks.items() if (c := pci_config(b['raw'])) and c[0] & 0xffff != 0x10de and c[2] >> 24 == 3]
-    if len(other) != 1:
-        fail(f'expected one non-NVIDIA display controller (integrated GPU), found {len(other)}; '
-             'the reviewed single-RTX console replay has no design without one')
-    igpu = pci_config(blocks[other[0]]['raw'])[0]
+    # The single-RTX console path never uses a second display adapter: prepare-console.c refuses
+    # any AMD GOP in this topology, so an installed iGPU is optional. Two or more are unreviewed.
+    if len(other) > 1:
+        fail(f'expected at most one non-NVIDIA display controller (integrated GPU), found {len(other)}')
+    igpu = pci_config(blocks[other[0]]['raw'])[0] if other else None
+    all_gops = [h for h, b in blocks.items() if GOP in b['protocols']]
+    if igpu is None:
+        # The RTX must remain the only physical GOP. One additional candidate is
+        # allowed only when its complete aggregate ownership graph is recognized.
+        if not 1 <= len(all_gops) <= 2:
+            fail(f'without an integrated GPU the RTX must own the only GOP in the graph, found {len(all_gops)}')
     pci_path = path_of(blocks[rtx_pci]['raw'])
     if not pci_path:
         fail('RTX PCI handle has no device path')
@@ -342,36 +532,82 @@ def analyze(diag, image_dir, envelope):
         fail(f'expected one RTX GOP child, found {len(gops)}')
     rtx = gops[0]
     rtx_path = path_of(blocks[rtx]['raw'])
-    # ACPI PNP0A03 UID 0 / Pci(root port) / Pci(0,0) / ACPI ADR / End: 36 bytes.
-    if len(rtx_path) != 36 or rtx_path[0:12] != bytes.fromhex('02010c00d041030a00000000') or \
-            rtx_path[12:16] != b'\x01\x01\x06\x00' or rtx_path[18:24] != bytes.fromhex('010106000000') or \
-            rtx_path[24:28] != b'\x02\x03\x08\x00' or rtx_path[32:36] != b'\x7f\xff\x04\x00':
-        fail('RTX GOP path is not PciRoot(0)/root port/Pci(0,0)/ADR; other topologies are unreviewed')
-    root_function, root_device = rtx_path[16], rtx_path[17]
+    # The complete captured ancestry is pinned, not a motherboard/root-port
+    # name. The runtime independently validates PCI identity and parent offset.
+    path_layout = gpu_display_path(rtx_path)
+    if pci_path != rtx_path[:path_layout['controller_bytes']]:
+        fail('RTX PCI controller path is not the complete GPU ancestry')
+    # Keep legacy first-hop macros for consumers that still name them. LOCAL
+    # route matching uses the full byte array, including root HID/UID and hops.
+    root_device, root_function = path_layout['pci_nodes'][0]
     fb = re.search(r'^gop framebuffer=0x([0-9a-f]+) ', blocks[rtx]['raw'], re.M)
     if not fb:
         fail('RTX GOP has no framebuffer record')
+    topology = aggregate_roles(text, blocks, rtx_pci, rtx, bindings) if len(all_gops) > 1 else None
     # Non-aggregate console: ConOut names the RTX GOP itself, not a splitter or a second device.
-    conout = re.search(r'^variable name=ConOut .*\n((?:(?!variable name=).*\n)*)', text, re.M)
-    rows = re.findall(r'^path-node raw=([0-9a-f]+)$', conout[1], re.M) if conout else []
-    if b''.join(bytes.fromhex(r) for r in rows) != rtx_path:
-        fail('ConOut is not exactly the RTX GOP path; aggregate or multi-device consoles are not generated')
+    # Aggregate uses the same table/interfaces/ownership contract as the runtime;
+    # NVRAM ConOut is not used by prepare/release and is not guessed here.
+    if topology is None:
+        conout = re.search(r'^variable name=ConOut .*\n((?:(?!variable name=).*\n)*)', text, re.M)
+        rows = re.findall(r'^path-node raw=([0-9a-f]+)$', conout[1], re.M) if conout else []
+        if b''.join(bytes.fromhex(r) for r in rows) != rtx_path:
+            fail('ConOut is not exactly the RTX GOP path; multi-device consoles are not generated')
 
+    # The AMI EDID/mouse driver is optional: some firmware (seen on MSI/AMI boards) binds none.
+    # Then no driver may own EdidDiscovered anywhere in the graph, and every display child of the
+    # RTX must still carry the interface itself, as full-release.c FullConsumers requires.
+    edid_owners = [a for p, a, c, attrs, n in blocks[rtx]['edges'] if p == EDID_DISCOVERED and attrs == BY_DRIVER and c == rtx]
+    if len(edid_owners) > 1:
+        fail(f'edid: expected at most one BY_DRIVER opener of {EDID_DISCOVERED} on {rtx:#x}, found {len(edid_owners)}')
+    no_edid_driver = not edid_owners
+    if no_edid_driver:
+        live_edid = [h for h, b in blocks.items()
+                     if any(p == EDID_DISCOVERED and attrs not in (1, 2, 4) for p, a, c, attrs, n in b['edges'])]
+        if live_edid:
+            fail(f'no BY_DRIVER EDID owner on the RTX GOP, yet {len(live_edid)} handle(s) have an active EdidDiscovered opener')
+    nv_agent = sole_driver(blocks, rtx_pci, PCI_IO)
+    child_edges = [(a, c, n) for p, a, c, attrs, n in blocks[rtx_pci]['edges'] if p == PATH and attrs == BY_CHILD_CONTROLLER]
+    children = [c for a, c, n in child_edges]
+    if not 1 <= len(children) <= 2 or len(set(children)) != len(children) or \
+            any(a != nv_agent or n != 1 for a, c, n in child_edges):
+        fail('console topology requires one or two unique NVIDIA-owned display children')
+    if rtx not in children or any(c not in blocks for c in children):
+        fail('console display children must include the RTX GOP and exist in the graph')
+    if no_edid_driver and any(EDID_DISCOVERED not in blocks[c]['protocols'] for c in children):
+        fail('without an EDID driver every RTX display child must carry the EdidDiscovered interface')
+    child_paths = [path_of(blocks[c]['raw']) for c in children]
+    try:
+        child_layouts = [gpu_display_path(path) for path in child_paths]
+    except Refused:
+        fail('console display children require unique complete paths under the target PCI controller')
+    if any(layout['controller_bytes'] != path_layout['controller_bytes'] or
+           path[:layout['controller_bytes']] != pci_path for path, layout in zip(child_paths, child_layouts)) or \
+            len(set(child_paths)) != len(child_paths):
+        fail('console display children require unique complete paths under the target PCI controller')
+    # Firmware handle numbers and enumeration order can change between cold boots.
+    # Compare physical child paths instead, keeping the primary GOP first.
+    child_paths = [rtx_path.hex()] + sorted(path.hex() for path in child_paths if path != rtx_path)
+    console_source = topology['aggregate'] if topology else rtx
     roles = {
-        'out': binding_for(bindings, sole_driver(blocks, rtx, TEXT_OUT)),
-        'gfx': binding_for(bindings, sole_driver(blocks, rtx, GOP)),
-        'edid': binding_for(bindings, sole_driver(blocks, rtx, EDID_DISCOVERED)),
+        'out': binding_for(bindings, sole_driver(blocks, console_source, TEXT_OUT)),
+        'gfx': binding_for(bindings, sole_driver(blocks, console_source, GOP)),
         'nvgop': binding_for(bindings, sole_driver(blocks, rtx_pci, PCI_IO)),
     }
-    expect = {'out': ('guid', OUT_FILE), 'gfx': ('guid', GFX_FILE), 'edid': ('guid', MOUSE_FILE), 'nvgop': ('name', NVGOP_NAME)}
+    expect = {'out': ('guid', OUT_FILE), 'gfx': ('guid', GFX_FILE), 'nvgop': ('name', NVGOP_NAME)}
+    if not no_edid_driver:
+        roles['edid'] = binding_for(bindings, sole_driver(blocks, rtx, EDID_DISCOVERED))
+        expect['edid'] = ('guid', MOUSE_FILE)
+    if topology:
+        roles['combo'] = binding_for(bindings, topology['roles']['combo'])
+        expect['combo'] = ('guid', COMBO_FILE)
     for role, rec in roles.items():
         if rec['file'] != expect[role]:
             fail(f'{role}: image file {rec["file"]} is not the reviewed AMI/NVIDIA driver {expect[role]}')
-    for role in ('out', 'gfx'):
+    for role in ('out', 'gfx', *(['combo'] if topology else [])):
         if roles[role]['code-type'] != EFI_BOOT_SERVICES_CODE:
             fail(f'{role}: not boot-services code')
-    edid, nv = roles['edid'], roles['nvgop']
-    if edid['image'] != edid['handle'] or edid['version'] != 1 or edid['code-type'] != EFI_RUNTIME_SERVICES_CODE:
+    edid, nv = roles.get('edid'), roles['nvgop']
+    if edid and (edid['image'] != edid['handle'] or edid['version'] != 1 or edid['code-type'] != EFI_RUNTIME_SERVICES_CODE):
         fail('EDID driver does not match full-release.c Profile(mouse) shape')
     if nv['image'] != nv['handle'] or nv['code-type'] != EFI_BOOT_SERVICES_CODE:
         fail('nvgop driver does not match full-release.c Profile() shape')
@@ -380,6 +616,12 @@ def analyze(diag, image_dir, envelope):
     defines = [
         ('GU_BOARD_ID', f'0x{board:08x}U'),
         ('GU_BOARD_SUBSYSTEM', f'0x{subsystem:08x}U'),
+        ('GU_TARGET_SEGMENT', f'0x{segment:x}U'),
+        ('GU_TARGET_BUS', f'0x{target_bus:x}U'),
+        ('GU_NO_EDID_DRIVER', '1' if no_edid_driver else '0'),
+        ('GU_LOCAL_CONSOLE_AGGREGATE', '1' if topology else '0'),
+        ('GU_LOCAL_CHILD_COUNT', str(len(children))),
+    ] + [
         ('GU_BAR0_BASE', f'0x{bar0:08x}ULL'),
         ('GU_BAR0_END', f'0x{bar0 + 0xffffff:08x}ULL'),
         ('GU_DEVICE_MEMORY_SIZE', f'0x{memory:x}U'),
@@ -394,30 +636,37 @@ def analyze(diag, image_dir, envelope):
         ('GU_CONSOLE_GFX_SIZE', f'0x{roles["gfx"]["size"]:x}U'),
         ('GU_CONSOLE_GFX_STOP', f'0x{off(roles["gfx"]):x}U'),
         ('GU_CONSOLE_GFX_VERSION', f'0x{roles["gfx"]["version"]:x}U'),
-        ('GU_EDID_IMAGE_SIZE', f'0x{edid["size"]:x}U'),
-        ('GU_EDID_STOP', f'0x{off(edid):x}U'),
+    ] + ([('GU_EDID_IMAGE_SIZE', f'0x{edid["size"]:x}U'), ('GU_EDID_STOP', f'0x{off(edid):x}U')] if edid else []) + [
         ('GU_NVGOP_VERSION', f'0x{nv["version"]:x}U'),
         ('GU_NVGOP_IMAGE_SIZE', f'0x{nv["size"]:x}U'),
         ('GU_NVGOP_STOP', f'0x{off(nv):x}U'),
     ]
+    if topology:
+        combo = roles['combo']
+        defines += [('GU_COMBO_SIZE', f'0x{combo["size"]:x}U'),
+                    ('GU_COMBO_STOP', f'0x{off(combo):x}U'),
+                    ('GU_COMBO_VERSION', f'0x{combo["version"]:x}U')]
     result = {
         'capture': diag.name, 'capture_sha256': hashlib.sha256(raw).hexdigest(),
-        'config': words, 'prom_sha256': prom[1], 'igpu_id': f'{igpu:08x}', 'rtx_fb': f'0x{fb[1]}',
+        'config': words, 'prom_sha256': prom[1], 'igpu_id': None if igpu is None else f'{igpu:08x}', 'rtx_fb': f'0x{fb[1]}',
+        'no_edid_driver': no_edid_driver, 'segment': segment,
+        'aggregate': topology is not None, 'child_count': len(children), 'child_paths': child_paths,
         'cold_line': f'cold state: chip={gu_hex(chip)} plm={gu_hex(plm)} gfw={gu_hex(g1)}/{gu_hex(g2)}/{gu_hex(g3)} '
                      f'WPR2_HI={gu_hex(wpr2)} SS0={gu_hex(ss0)} SS1={gu_hex(ss1)}',
         'observed_line': f'cold observed: chip={gu_hex(chip)} memory={gu_hex(memory)} SS0={gu_hex(ss0)} SS1={gu_hex(ss1)}',
         'defines': defines,
     }
     if image_dir is not None:
-        edid_code = code_hash(image_dir, edid, EDID_TEXT_RVA)
+        edid_code = code_hash(image_dir, edid, EDID_TEXT_RVA) if edid else None
         nv_code = code_hash(image_dir, nv, NVGOP_TEXT_RVA)
-        known = [g for g in envelope['nvgop'] if int(g['version'], 16) == nv['version'] and g['text_sha256'] == nv_code['sha256']]
+        global_codes = {(g['version'], g['text_sha256']) for g in envelope['nvgop']}
+        known = [g for g in card_nvgop(proven[0], board) if (g['version'], g['text_sha256']) in global_codes and
+                 int(g['version'], 16) == nv['version'] and g['text_sha256'] == nv_code['sha256']]
         if len(known) != 1:
             fail(f'nvgop {nv["version"]:#x} with .text {nv_code["sha256"][:16]}... has not released cleanly on proven hardware')
         result['code'] = {'edid': edid_code, 'nvgop': nv_code}
-        defines += [
-            ('GU_EDID_TEXT_BYTES', f'0x{edid_code["bytes"]:x}U'),
-            ('GU_EDID_TEXT_SHA256', f'"{edid_code["sha256"]}"'),
+        defines += ([('GU_EDID_TEXT_BYTES', f'0x{edid_code["bytes"]:x}U'),
+                     ('GU_EDID_TEXT_SHA256', f'"{edid_code["sha256"]}"')] if edid_code else []) + [
             ('GU_NVGOP_TEXT_BYTES', f'0x{nv_code["bytes"]:x}U'),
             ('GU_NVGOP_TEXT_SHA256', f'"{nv_code["sha256"]}"'),
         ]
@@ -446,10 +695,16 @@ def generate(capture_dir, locator, envelope):
     latest = analyze(diags[-1], capture_dir, envelope)
     for earlier in diags[:-1]:
         other = analyze(earlier, None, envelope)
+        if other['no_edid_driver'] != latest['no_edid_driver']:
+            fail(f'{earlier.name} and {diags[-1].name} disagree on whether an EDID driver is bound; firmware drivers must not vary between boots')
         mine = dict(latest['defines'])
         for name, value in other['defines']:
             if mine[name] != value:
                 fail(f'{earlier.name} and {diags[-1].name} disagree on {name}; values must not vary between boots')
+        if other['igpu_id'] != latest['igpu_id']:
+            fail(f'{earlier.name} and {diags[-1].name} disagree on the integrated GPU; the display adapters must not vary between boots')
+        if other['child_paths'] != latest['child_paths']:
+            fail(f'{earlier.name} and {diags[-1].name} disagree on the display child paths; console topology must not vary between boots')
         if other['config'] != latest['config']:
             fail(f'{earlier.name} and {diags[-1].name} disagree on the RTX PCI config space')
     prom_path = capture_dir / 'PROM.BIN'
@@ -487,7 +742,9 @@ def generate(capture_dir, locator, envelope):
     report = {
         'Format': 1, 'GeneratorVersion': GENERATOR_VERSION, 'ProfileName': name,
         'HeaderSha256': hashlib.sha256(text.encode()).hexdigest(), 'PromSha256': latest['prom_sha256'],
-        'Captures': sources, 'Replay': {'Capture': latest['capture'], 'RtxId': board, 'IgpuId': latest['igpu_id'], 'RtxFramebuffer': latest['rtx_fb']},
+        'Captures': sources, 'Replay': {'Capture': latest['capture'], 'RtxId': board, 'IgpuId': latest['igpu_id'], 'RtxFramebuffer': latest['rtx_fb'],
+                   'NoEdidDriver': latest['no_edid_driver'], 'Aggregate': latest['aggregate'], 'ChildCount': latest['child_count'],
+                   'Segment': latest['segment']},
         'Fwsec': fw, 'Code': latest['code'], 'HardwareTested': False,
         'Fixtures': {k: hashlib.sha256(v).hexdigest() for k, v in fixtures.items()},
     }

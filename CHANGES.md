@@ -1,5 +1,159 @@
 # Changes
 
+## Unreleased — connect reviewed RTX 3060 families to local capture and replay
+
+- Add bounded generic read-only capture for the exact `248710de` and `250410de`
+  RTX 3060 12GB identities. Preserve target pinning, BAR and MEM/BME restrictions.
+- Couple each admitted PCI identity to its exact chip revision, VRAM and reviewed
+  nvgop version/code hash. Preserve existing GA102 combinations; new 3060 tuples
+  require the recorded `60010` code.
+- Require full driver-release replay for every generated profile, including
+  EDID-present firmware. Older EDID-present evidence must be regenerated.
+  Generalize the host model's image sizes, stops, version and display-child count.
+- Extend synthetic admission and release matrices across GA102/GA104/GA106.
+  Aggregate LOCAL generation remains unsupported. These changes add experimental
+  per-machine candidates, not another hardware success or a universal support claim.
+
+## Unreleased — preserve valid late PCIe capability layouts
+
+- Match PCI configuration save bounds to the existing parser: aligned PCIe v1
+  capabilities may start as late as `0xec`, while v2 may start as late as `0xc4`.
+  Reject invalid offsets and unknown versions before device access.
+- Exercise production save, FLR and restore with RAM-only PCI services across
+  six layouts, IO/MEM command states and failure scenarios. Keep reset wait,
+  one-reset-only, status-write restrictions and containment checks.
+- Include layout regressions in the host test runner and extend captured-config
+  model tests to both layout boundaries. These are synthetic host tests, not
+  full firmware transactions or new hardware compatibility evidence.
+
+## Unreleased — discover the diagnostic target bus and replay captured PCI layouts
+
+- Automatically discover the single NVIDIA diagnostic target's nonzero PCI bus.
+  Pin its handle, interface, identity and BDF across callbacks and final revalidation;
+  target loss or drift invalidates the capture. Keep existing GPU/BAR/read restrictions.
+- Preserve optional explicit `-TargetBus` constraints through probe builds and resumed
+  new-machine captures; reject a different or ambiguous target before archive/copy/build.
+- Validate real captured PCI capability offsets and IO/MEM state in host tests.
+  Retain historical capability-layout and malformed-input regressions separately.
+  Add synthetic capture-model, bus-boundary and mocked build/resume regressions.
+- Accept exact JSON Int32/Int64 schema and exit-code values on Windows PowerShell
+  and PowerShell 7, while continuing to reject strings, floats, booleans and nulls.
+- This improves discovery and host portability; it adds no hardware validation or
+  new GPU admission. No transaction implementation, real EFI execution or GPU test is included.
+
+## Unreleased — separate GPU family traits, firmware templates and machine pins
+
+- Centralize exact GA102/GA104/GA106 chip revisions and current PCI-ID/VRAM
+  admission rules. Fixed profiles select a family; legacy LOCAL headers retain
+  captured literal values and the existing GA102 admission combinations.
+- Factor identical console/EDID/nvgop fingerprint tuples into independent fixed
+  firmware templates. LOCAL inherits none; identity-only probes gain no write traits.
+- Preserve the shared transaction/layout implementation and all exact subsystem,
+  PROM, BAR, path, topology and runtime safety checks. No new hardware support,
+  GPU register-map admission or automatic LOCAL generation is added.
+- Include the new headers in required provenance inputs and diagnostic manifests.
+  Add compile-only family/card/firmware boundary regressions and EN/KO architecture docs.
+
+## Unreleased — RTX 3080 display-routing observations
+
+- Integrate PR #39's contributor research and bounded read-only Windows
+  QueryDisplayConfig/DXGI collector. Preserve the original unlock, probe and
+  inventory collector paths.
+- Display routing observed in Windows does not establish pre-boot GOP ownership
+  or unlock support. The device-ID match flag refers to this recorded research
+  machine, not generic compatibility. The collector is compiled, not executed,
+  during maintainer integration checks; no new hardware evidence is added.
+
+## Unreleased — B660M / Colorful RTX 3090 Ti internal profile
+
+- Integrate PR #77's exact GA102 profile on the existing BIOS 4003 aggregate
+  console path; preserve all runtime release/ownership/firmware checks.
+- Keep the profile internal-only at the wrapper selector: the contributor reports
+  one internal-ESP cold boot and no USB run. No new USB staging identity is admitted.
+- Update EN/KO GPU support and exact configuration guides. Hardware evidence is
+  contributor-reported; current host/build checks are not a maintainer hardware run.
+- Full private-fixture transaction replay is not available for this profile until
+  its captured FWSEC image pin and private inputs are supplied; no layout is inferred.
+
+## Unreleased — offline compatibility reports and comparison
+
+- Add a Python-only, read-only checker for existing probe captures. Reuse the
+  generator's structural, driver-code and PROM checks without profile generation,
+  FWSEC execution, host-test evidence changes or hardware operations.
+- Explain candidate, missing-data, out-of-scope and invalid-data results in English
+  or Korean. Automatic local-profile scope is separate from exact fixed profiles;
+  a candidate is not hardware verification or write-build eligibility.
+- Format-2 JSON reports include typed model/topology observations for issue review,
+  preserving unknown values and graph completeness. Exclude private paths, serials,
+  memory addresses, PROM/capture hashes and firmware contents. Upload nothing.
+- Add bounded, schema-validated comparison of two checker reports, distinguishing
+  different observations from unavailable data and deferring across checker/policy
+  versions. No report can authorize an unlock or cause a command to be executed.
+- Connect the optional report to the existing compatibility issue form and EN/KO
+  guides. Windows inventory and manually entered model reports remain welcome.
+
+## Unreleased — local profiles: per-machine PCI bus, optional iGPU, optional EDID driver; MSI B550M / RTX 3090 evidence
+
+- `GU_TARGET_BUS` (default `1U`) replaces the literal bus `1` in `GuCheckConfig`, `GuTargetConfig`,
+  `full-release.c` and `prepare-console.c`. A non-default value compiles only with
+  `GU_PROFILE_LOCAL`. For all five reviewed profiles, headless and manual builds, the objects of
+  `full-release.c`, `prepare-console.c`, `checks.c`, `port.c` and `diagnostic.c` match the
+  current main baseline byte for byte except for COFF creation timestamps.
+- `make-profile.py` accepts any nonzero bus at segment 0, device 0, function 0 and writes
+  `GU_TARGET_BUS`. It no longer requires an integrated GPU: none or one is accepted; with none the
+  RTX must own the only GOP in the graph, and a capture set that gains or loses an iGPU between
+  boots is refused. It accepts a graph in which no handle has an active `EdidDiscovered` opener and
+  then writes `GU_NO_EDID_DRIVER 1` and no `GU_EDID_*` constants.
+- `GU_NO_EDID_DRIVER` (local profiles on the non-aggregate headless build only; other builds refuse
+  it at compile time): the release skips the EDID stage and stops only the NVIDIA GOP driver after
+  the console detach. Any live driver on a display child stops the release before that stop. Such
+  a profile's evidence gains a 20th job, a replay of the whole `GuReleaseGop` on its own graph,
+  driver image, PROM and PCI config (`test_headless_full.c`). `make-console-fixture.py` takes
+  `--no-igpu` and `--no-edid-driver`.
+- `proven.json` admits nvgop `0x60009` (`.text` `d045cee2...`), released cleanly three times on
+  the machine in [evidence/b550m-3090-usb](evidence/b550m-3090-usb/README.md): MSI B550M PRO-VDH
+  WIFI, Ryzen 7 5700X (no iGPU), MSI RTX 3090 at `0000:2b:00.0`, no EDID driver, headless USB.
+  Locked to unlocked at n=4096: FP16 64.3 to 110.9, BF16 66.2 to 115.9 TFLOPS, FP32 unchanged.
+- Preserve the merged strict probe-record parser, callback drift tests and PROM allocation-return
+  checks. Benchmark selection stays at bus `01`; its unfinished bus option is not restored.
+- Admission and fixture generation share strict graph completeness checks; target probe/graph BDFs
+  must agree. No-EDID children require unique complete paths, replayed from their recorded bytes.
+- Bind the no-EDID report flag and required release replay to one exact boolean header define.
+  Reject missing/ambiguous defines, malformed observations and header/report disagreement.
+- Capture-free generator and release regressions cover bus/iGPU/EDID variants and one/two children,
+  IO off/on and both admitted VRAM sizes. These tests are not additional hardware evidence.
+
+## Unreleased — probe: non-01 PCI bus and PciIo attribute record
+
+- The generic probe takes its deep-read bus from `GU_PROBE_BUS` (`research/profile/build-probe.ps1
+  -TargetBus`, default 1). The default keeps the same deep-read BDF check; a non-default bus compiles
+  only into the read-only diagnostic build. Many AM4/B550 boards put the CPU x16 slot on another
+  bus (for example `0x2b`), where the probe could only inventory the card.
+- The checked probe records the PciIo attribute cache once, with `EfiPciIoAttributeOperationGet`,
+  before its final raw-state recheck (`pci-attributes status= value=`). `make-profile.py` requires
+  that record and refuses a capture whose IO/MEM/BME attribute bits differ from the PCI command
+  register: `full-release.c` `CapturePermit` would stop the release there, after the console was
+  already detached. Captures from an older probe must be taken again.
+- Benchmark selection is unchanged: the native benchmark still requires bus `01`.
+- Refuse malformed or ambiguous PciIo attribute records, including a damaged record beside a valid one.
+- Host tests: the generic probe suite also runs at bus `0x2b`; a non-default bus is refused outside
+  the diagnostic build; the attributes mock fails on any operation other than Get. Attribute
+  callbacks that change MEM/BME/configuration/BDF/interface prevent all dependent reads; a
+  failed Get with a plausible partial value retains its failure status. No reviewed
+  profile, release path or generator admission rule other than the attribute record changes.
+
+## Unreleased — recheck PROM read state after allocation
+
+- Recheck the exact PCI interface, identity, all 64 configuration DWORDs and MEM1/BME0
+  after PROM buffer allocation, before dependent reads. Preserve both IO-enabled and
+  IO-disabled reference configurations. A later buffer-free error no longer replaces
+  an earlier read/hash/configuration error.
+- Extracted the shared safety idea from PR #53 without its MSI profile, proposed
+  attribute policy or the #49 support expansion. No hardware support is added.
+- `internal-boot/boot/test-prom-boundary.ps1` uses synthetic RAM and the real SHA-256
+  implementation for all five reference profiles, manual and headless configurations.
+  Tests cover service-return drift, partial reads and combined read/cleanup failures.
+
 ## Unreleased — harden GA106 observation and integrate the fifth profile
 
 - Preserve current GA104/GA102 profiles, LOCAL gates, ownership checks and TF32 tools
