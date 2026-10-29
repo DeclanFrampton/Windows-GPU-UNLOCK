@@ -10,6 +10,10 @@
  */
 #pragma once
 
+#ifdef GU_TARGET_SEGMENT
+#error Target segment must come from the selected profile, not a compiler override
+#endif
+
 #if defined(GU_GPU_FAMILY) || defined(GU_FIRMWARE_PROFILE)
 #error GPU family and firmware must be derived from the selected machine profile
 #endif
@@ -242,7 +246,19 @@
 #endif
 #endif
 
-/* PCI bus of the RTX (segment 0, device 0, function 0). Every reviewed profile sits at
+/* Existing headers and every reviewed profile retain segment zero. A LOCAL
+ * header may pin another representable segment after its complete validation. */
+#ifndef GU_TARGET_SEGMENT
+#define GU_TARGET_SEGMENT 0U
+#endif
+#if GU_TARGET_SEGMENT < 0 || GU_TARGET_SEGMENT > 0xffffU
+#error GU_TARGET_SEGMENT must be in 0..65535
+#endif
+#if GU_TARGET_SEGMENT != 0U && !defined(GU_PROFILE_LOCAL)
+#error A non-default target segment is only for a generated local profile
+#endif
+
+/* PCI bus of the RTX (device 0, function 0). Every reviewed profile sits at
  * 01:00.0. Only a generated local profile (profile-local.h defines it first) may differ,
  * after its own captures and host tests pass; reviewed profiles keep 1. */
 #ifndef GU_TARGET_BUS

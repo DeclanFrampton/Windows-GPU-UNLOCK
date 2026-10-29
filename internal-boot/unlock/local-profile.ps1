@@ -44,6 +44,14 @@ function Get-LocalProfile([string]$Repo) {
   throw 'profile-local.h requires one exact GU_NO_EDID_DRIVER 0/1; regenerate the local profile'
  }
  $noEdidDriver=$edidRows[0].Value.EndsWith(' 1')
+ $segmentRows=@([regex]::Matches($text,'(?m)^[ \t]*#[ \t]*define[ \t]+GU_TARGET_SEGMENT\b[^\r\n]*'))
+ $legacySegment=($segmentRows.Count -eq 0)
+ $segment=0
+ if($text -match '(?m)^[ \t]*#[ \t]*undef[ \t]+GU_TARGET_SEGMENT\b' -or
+    (!$legacySegment -and ($segmentRows.Count -ne 1 -or $segmentRows[0].Value -cnotmatch '^#define GU_TARGET_SEGMENT 0x[0-9a-f]{1,4}U$'))){
+  throw 'Local target segment requires one exact generated 16-bit hexadecimal value without overrides'
+ }
+ if(!$legacySegment){$segment=[Convert]::ToInt32(($segmentRows[0].Value -replace '^#define GU_TARGET_SEGMENT 0x','' -replace 'U$',''),16)}
  $aggregateRows=@([regex]::Matches($text,'(?m)^[ \t]*#[ \t]*define[ \t]+GU_LOCAL_CONSOLE_AGGREGATE\b[^\r\n]*'))
  $childRows=@([regex]::Matches($text,'(?m)^[ \t]*#[ \t]*define[ \t]+GU_LOCAL_CHILD_COUNT\b[^\r\n]*'))
  if($text -match '(?m)^[ \t]*#[ \t]*undef[ \t]+GU_LOCAL_(CONSOLE_AGGREGATE|CHILD_COUNT)\b' -or
@@ -67,6 +75,7 @@ function Get-LocalProfile([string]$Repo) {
   Memory=('0x'+(Value 'GU_DEVICE_MEMORY_SIZE' '0x([0-9a-f]+)U'));HeadlessOnly=$true;UsbOnly=$true
   HeaderSha256=(Get-GuSha256 $header)
   NoEdidDriver=$noEdidDriver
+  Segment=$segment;LegacySegment=$legacySegment
   ConsoleAggregate=$consoleAggregate;ChildCount=$childCount;LegacyTopology=$legacyTopology
  }
 }
@@ -164,6 +173,11 @@ function Get-LocalProfileReport([string]$Repo,$Hardware) {
   throw 'Generated profile report NoEdidDriver must be boolean and match the header'
  }
  $topologyKeys=@($report.Replay.PSObject.Properties.Name)
+ if(!$Hardware.LegacySegment -or $topologyKeys -contains 'Segment') {
+  if(!(Test-GuExactInteger $report.Replay.Segment $Hardware.Segment)){
+   throw 'Generated profile report segment must be an integer and match the header exactly'
+  }
+ }
  if(!$Hardware.LegacyTopology -or $topologyKeys -contains 'Aggregate' -or $topologyKeys -contains 'ChildCount') {
   if($report.Replay.Aggregate -isnot [bool] -or $report.Replay.Aggregate -ne $Hardware.ConsoleAggregate -or
      !(Test-GuExactInteger $report.Replay.ChildCount $Hardware.ChildCount)){

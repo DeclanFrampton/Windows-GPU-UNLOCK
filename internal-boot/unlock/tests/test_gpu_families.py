@@ -31,6 +31,7 @@ class FamilyTests(unittest.TestCase):
                           f'_Static_assert(GU_GPU_FAMILY == {family}, "family");\n'
                           f'_Static_assert(GU_CHIP_ID == {chip}, "exact revision");\n'
                           f'_Static_assert(GU_DEVICE_MEMORY_SIZE == {memory}, "card VRAM");\n')
+                source += '_Static_assert(GU_TARGET_SEGMENT == 0, "reviewed segment stays zero");\n'
                 done = compile_source(source, ['-DGU_PROFILE_' + profile])
                 self.assertEqual(done.returncode, 0, done.stderr)
 
@@ -138,6 +139,30 @@ class FamilyTests(unittest.TestCase):
                         ['-DGU_PROFILE_PROBE_H610M_3060', '-DGU_FIRMWARE_PROFILE=4']):
             with self.subTest(defines=defines):
                 self.assertNotEqual(compile_source('#include "firmware-profile.h"\n', defines).returncode, 0)
+
+    def test_local_segment_bounds_and_legacy_default_cannot_be_overridden(self):
+        base=('#define GU_LOCAL_PROFILE_GENERATOR 1\n#define GU_CHIP_ID 0xb72000a1U\n'
+              '#define GU_BOARD_ID 0x220410deU\n#define GU_DEVICE_MEMORY_SIZE 0x6000U\n'
+              '#define GU_NO_EDID_DRIVER 0\n')
+        for segment in (None,0,1,0xffff,-1,0x10000):
+            with self.subTest(segment=segment),tempfile.TemporaryDirectory() as directory:
+                folder=Path(directory);local=folder/'profile-local.h'
+                local.write_text(base+('' if segment is None else f'#define GU_TARGET_SEGMENT {segment}\n'))
+                overlay=folder/'overlay.json'
+                overlay.write_text(json.dumps({'version':0,'roots':[{'type':'file','name':str(ROOT/'profile-local.h'),
+                    'external-contents':str(local),'use-external-name':False}]}))
+                flags=['-DGU_PROFILE_LOCAL','-DGU_HEADLESS_RESEARCH','-DGU_FULL_UNLOCK']
+                source='#include "machine-profile.h"\n'
+                if segment is None or 0<=segment<=0xffff:
+                    source+=f'_Static_assert(GU_TARGET_SEGMENT == {segment or 0}, "captured segment");\n'
+                done=compile_source(source,flags,['-ivfsoverlay',str(overlay)])
+                if segment is None or 0<=segment<=0xffff:self.assertEqual(done.returncode,0,done.stderr)
+                else:self.assertNotEqual(done.returncode,0)
+        for profile in ('GU_PROFILE_B650M_3090FE','GU_PROFILE_LOCAL'):
+            for segment in (0,1,0xffff):
+                with self.subTest(profile=profile,override=segment):
+                    done=compile_source('#include "machine-profile.h"\n',['-D'+profile,f'-DGU_TARGET_SEGMENT={segment}'])
+                    self.assertNotEqual(done.returncode,0)
 
 
 if __name__ == '__main__':

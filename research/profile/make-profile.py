@@ -413,10 +413,12 @@ def analyze(diag, image_dir, envelope):
     if not target:
         fail(f'{diag.name}: no probe-target record')
     segment, target_bus, device, function = (int(x, 16) for x in target.groups())
-    # The bus is a per-machine constant (GU_TARGET_BUS); segment, device and function stay fixed
-    # (checks.c GuCheckConfig). Bus 0 is the root complex itself and never a discrete slot.
-    if segment or device or function:
-        fail(f'{diag.name}: the RTX must be at segment 0, device 0, function 0 (checks.c GuCheckConfig)')
+    # Pin the observed segment and bus across captures and every runtime lookup.
+    # Device/function zero remains a GPU endpoint constraint.
+    if not 0 <= segment <= 0xffff:
+        fail(f'{diag.name}: the RTX must use a 16-bit PCI segment')
+    if device or function:
+        fail(f'{diag.name}: the RTX must be at device 0, function 0 (checks.c GuCheckConfig)')
     if not 1 <= target_bus <= 0xff:
         fail(f'{diag.name}: bus {target_bus:#x} is not a discrete slot; the RTX must be on a nonzero bus')
     rows = re.findall(r'^cfg dwords=([0-9a-f ]+)$', text, re.M)
@@ -592,6 +594,7 @@ def analyze(diag, image_dir, envelope):
     defines = [
         ('GU_BOARD_ID', f'0x{board:08x}U'),
         ('GU_BOARD_SUBSYSTEM', f'0x{subsystem:08x}U'),
+        ('GU_TARGET_SEGMENT', f'0x{segment:x}U'),
         ('GU_TARGET_BUS', f'0x{target_bus:x}U'),
         ('GU_NO_EDID_DRIVER', '1' if no_edid_driver else '0'),
         ('GU_LOCAL_CONSOLE_AGGREGATE', '1' if topology else '0'),
@@ -624,7 +627,7 @@ def analyze(diag, image_dir, envelope):
     result = {
         'capture': diag.name, 'capture_sha256': hashlib.sha256(raw).hexdigest(),
         'config': words, 'prom_sha256': prom[1], 'igpu_id': None if igpu is None else f'{igpu:08x}', 'rtx_fb': f'0x{fb[1]}',
-        'no_edid_driver': no_edid_driver,
+        'no_edid_driver': no_edid_driver, 'segment': segment,
         'aggregate': topology is not None, 'child_count': len(children), 'child_paths': child_paths,
         'cold_line': f'cold state: chip={gu_hex(chip)} plm={gu_hex(plm)} gfw={gu_hex(g1)}/{gu_hex(g2)}/{gu_hex(g3)} '
                      f'WPR2_HI={gu_hex(wpr2)} SS0={gu_hex(ss0)} SS1={gu_hex(ss1)}',
@@ -718,7 +721,8 @@ def generate(capture_dir, locator, envelope):
         'Format': 1, 'GeneratorVersion': GENERATOR_VERSION, 'ProfileName': name,
         'HeaderSha256': hashlib.sha256(text.encode()).hexdigest(), 'PromSha256': latest['prom_sha256'],
         'Captures': sources, 'Replay': {'Capture': latest['capture'], 'RtxId': board, 'IgpuId': latest['igpu_id'], 'RtxFramebuffer': latest['rtx_fb'],
-                   'NoEdidDriver': latest['no_edid_driver'], 'Aggregate': latest['aggregate'], 'ChildCount': latest['child_count']},
+                   'NoEdidDriver': latest['no_edid_driver'], 'Aggregate': latest['aggregate'], 'ChildCount': latest['child_count'],
+                   'Segment': latest['segment']},
         'Fwsec': fw, 'Code': latest['code'], 'HardwareTested': False,
         'Fixtures': {k: hashlib.sha256(v).hexdigest() for k, v in fixtures.items()},
     }

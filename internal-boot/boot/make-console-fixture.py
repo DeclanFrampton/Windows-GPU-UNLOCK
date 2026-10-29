@@ -132,6 +132,13 @@ if parent_path is None or len(parent_path)!=controller_bytes+4 or parent_path[-4
 lines.append(f'#define FX_DISPLAY_PATH_BYTES {primary_layout["path_bytes"]}')
 lines.append(f'#define FX_CONTROLLER_BYTES {controller_bytes}')
 lines.append('#define FX_PRIMARY_PATH_BYTES '+','.join(str(byte) for byte in primary_path))
+if single:
+    locations=re.findall(r'^pci location-status=0x([0-9a-f]{1,16}) segment=0x([0-9a-f]{1,16}) bus=0x([0-9a-f]{1,16}) device=0x([0-9a-f]{1,16}) function=0x([0-9a-f]{1,16})$',pci_block,re.M)
+    if len(locations)!=1 or int(locations[0][0],16):raise ValueError('Replay requires a successful PCI location observation')
+    segment,bus,device,function=(int(value,16) for value in locations[0][1:])
+    if segment>0xffff or not 1<=bus<=255 or device or function:raise ValueError('Replay PCI location is outside the target scope')
+    for name,value in zip(('SEGMENT','BUS','DEVICE','FUNCTION'),locations[0][1:]):
+        lines.append(f'#define FX_PCI_{name} 0x{int(value,16):x}ULL')
 if aggregate:
     lines.append('#define FX_CONSOLE_AGGREGATE 1')
     patterns=[(r'^gop framebuffer=0x([0-9a-f]+) bytes=0x([0-9a-f]+) mode=0x([0-9a-f]+) max-mode=0x([0-9a-f]+)$',
@@ -181,10 +188,6 @@ if aggregate:
     words=[int(word,16) for word in words]
     if words[:16]!=profile.pci_config(pci_block):
         raise ValueError('Aggregate graph and full PCI snapshots disagree')
-    locations=re.findall(r'^pci location-status=0x([0-9a-f]{1,16}) segment=0x([0-9a-f]{1,16}) bus=0x([0-9a-f]{1,16}) device=0x([0-9a-f]{1,16}) function=0x([0-9a-f]{1,16})$',pci_block,re.M)
-    if len(locations)!=1 or int(locations[0][0],16):raise ValueError('Aggregate replay requires a successful PCI location observation')
-    for name,value in zip(('SEGMENT','BUS','DEVICE','FUNCTION'),locations[0][1:]):
-        lines.append(f'#define FX_PCI_{name} 0x{int(value,16):x}ULL')
     targets=re.findall(r'^probe-target seg=0x([0-9a-f]{1,16}) bus=0x([0-9a-f]{1,16}) dev=0x([0-9a-f]{1,16}) fun=0x([0-9a-f]{1,16})$',text,re.M)
     if len(targets)!=1 or tuple(int(value,16) for value in targets[0])!=tuple(int(value,16) for value in locations[0][1:]):
         raise ValueError('Aggregate graph and probe locations disagree')

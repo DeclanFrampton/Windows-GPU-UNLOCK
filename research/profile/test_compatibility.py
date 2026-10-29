@@ -137,15 +137,53 @@ class CompatibilityTests(unittest.TestCase):
                      patch.object(checker.mp,'locate_fwsec',side_effect=AssertionError('ancestry drift must stop before PROM parsing')):
                     checker.mp.generate(self.folder,Path('not-invoked'),self.envelope)
 
-    def test_observed_nonzero_segment_does_not_enable_unlock_generation(self):
-        for segment in (1,0xffff):
+    def test_observed_segment_is_pinned_in_generated_header_and_report(self):
+        for segment in (0,1,0xffff):
             text=self.populate()
             text=text.replace('probe-target seg=0x0000 ',f'probe-target seg=0x{segment:04x} ')
             text=text.replace('pci location-status=0x0 segment=0x0 ',f'pci location-status=0x0 segment=0x{segment:x} ')
             for index in (0,1):(self.folder/f'DIAG{index:02d}.TXT').write_text(text,encoding='ascii')
-            self.assert_reason('outside_scope','topology_scope')
-            with self.assertRaisesRegex(checker.mp.Refused,'segment 0'):
+            self.assert_reason('candidate','images_pass')
+            with patch.object(checker.mp,'locate_fwsec',return_value={'image_off':0x100,'image_size':0x200}):
+                header,report,_=checker.mp.generate(self.folder,Path('not-invoked'),self.envelope)
+            self.assertIn(f'#define GU_TARGET_SEGMENT 0x{segment:x}U\n',header)
+            self.assertEqual(report['Replay']['Segment'],segment)
+            self.assertIs(type(report['Replay']['Segment']),int)
+            # Both observations move together, but only in one cold-boot capture.
+            changed=text.replace(f'probe-target seg=0x{segment:04x} ',f'probe-target seg=0x{segment^1:04x} ')
+            changed=changed.replace(f'pci location-status=0x0 segment=0x{segment:x} ',f'pci location-status=0x0 segment=0x{segment^1:x} ')
+            (self.folder/'DIAG00.TXT').write_text(changed,encoding='ascii')
+            self.assert_reason('invalid_data','captures_disagree')
+            with self.assertRaisesRegex(checker.mp.Refused,'disagree on GU_TARGET_SEGMENT'), \
+                 patch.object(checker.mp,'locate_fwsec',side_effect=AssertionError('segment drift must reject before PROM parsing')):
                 checker.mp.generate(self.folder,Path('not-invoked'),self.envelope)
+
+    def test_segment_overflow_and_graph_disagreement_are_refused(self):
+        for segment in (0x10000,0x100000001):
+            text=self.populate().replace('probe-target seg=0x0000 ',f'probe-target seg=0x{segment:x} ')
+            (self.folder/'DIAG01.TXT').write_text(text,encoding='ascii')
+            with self.assertRaisesRegex(checker.mp.Refused,'16-bit PCI segment'):
+                checker.mp.analyze(self.folder/'DIAG01.TXT',None,self.envelope)
+        text=self.populate().replace('probe-target seg=0x0000 ','probe-target seg=0x0001 ')
+        (self.folder/'DIAG01.TXT').write_text(text,encoding='ascii')
+        with self.assertRaisesRegex(checker.mp.Refused,'PCI location'):
+            checker.mp.analyze(self.folder/'DIAG01.TXT',None,self.envelope)
+
+    def test_mandatory_generator_refusals_work_on_nonzero_segments(self):
+        refusals=load('segment_generator_refusals','test_make_profile.py')
+        for no_edid in (False,True):
+            for segment in (0,0x1000,0xffff):
+                with self.subTest(no_edid=no_edid,segment=segment):
+                    text=self.populate(no_edid=no_edid)
+                    text=text.replace('probe-target seg=0x0000 ',f'probe-target seg=0x{segment:04x} ')
+                    text=text.replace('pci location-status=0x0 segment=0x0 ',f'pci location-status=0x0 segment=0x{segment:x} ')
+                    for index in (0,1):(self.folder/f'DIAG{index:02d}.TXT').write_bytes(text.encode())
+                    output=io.StringIO()
+                    with patch.object(refusals,'ENVELOPE',self.envelope),patch.object(refusals,'failures',0), \
+                         patch.object(refusals.mp,'locate_fwsec',return_value={'image_off':0x100,'image_size':0x200}), \
+                         patch.object(sys,'argv',['test_make_profile.py',str(self.folder),'not-invoked']),contextlib.redirect_stdout(output):
+                        result=refusals.main()
+                    self.assertEqual(result,0,output.getvalue())
 
     def test_missing_assets_are_not_candidate(self):
         self.populate()

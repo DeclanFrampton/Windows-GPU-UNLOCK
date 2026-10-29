@@ -435,7 +435,7 @@ static VOID setup(enum scenario mode) {
 #ifdef GU_EXPERIMENTAL_3090
   if(core_use_capture) {
     UINT32 words[64];GU_CAPS caps;memcpy(words,config,sizeof(words));
-    CHECK(GuCheckConfig(words,0,GU_TARGET_BUS,0,0,&caps));
+    CHECK(GuCheckConfig(words,GU_TARGET_SEGMENT,GU_TARGET_BUS,0,0,&caps));
     Gu.pcie_cap=caps.pcie;Gu.pcie_version=caps.pcie_version;Gu.pm_cap=caps.pm;
     Gu.msi_cap=caps.msi;Gu.msix_cap=caps.msix;
     fake.pci_attributes=(config[4]&1?EFI_PCI_IO_ATTRIBUTE_IO:0)|

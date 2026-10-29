@@ -16,7 +16,7 @@ static void setup_layout(unsigned version,unsigned at,unsigned command) {
   layout_word(at+8,0x2930);layout_word(at+10,0x1040);
   if(version==2)layout_word(at+0x28,0x4321);
   GU_CAPS caps;UINT32 snapshot[64];memcpy(snapshot,config,sizeof(snapshot));
-  assert(GuCheckConfig(snapshot,0,GU_TARGET_BUS,0,0,&caps));
+  assert(GuCheckConfig(snapshot,GU_TARGET_SEGMENT,GU_TARGET_BUS,0,0,&caps));
   Gu.pcie_cap=caps.pcie;Gu.pcie_version=caps.pcie_version;Gu.pm_cap=caps.pm;
 }
 

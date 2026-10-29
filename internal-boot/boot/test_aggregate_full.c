@@ -61,7 +61,7 @@ static EFI_LOADED_IMAGE_PROTOCOL Images[5];
 static UINT8 DriverPaths[5][32],DisplayPaths[2][GU_RTX_DISPLAY_BYTES],ControllerPath[TEST_CONTROLLER_BYTES+4];
 static UINT8 FaultDisplayPath[GU_RTX_DISPLAY_BYTES+6];
 static UINTN FaultControllerBytes;
-static BOOLEAN ParentDrift,PathFault;
+static BOOLEAN ParentDrift,PathFault,SegmentDrift;
 static UINT8 NvMemory[GU_NVGOP_IMAGE_SIZE],EdidMemory[GU_EDID_IMAGE_SIZE],
   ComboMemory[GU_COMBO_SIZE],GfxMemory[GU_CONSOLE_GFX_SIZE],OutMemory[GU_CONSOLE_TEXT_SIZE],PromMemory[1048576];
 static UINT32 Config[64];
@@ -203,8 +203,9 @@ static EFI_STATUS EFIAPI Location(EFI_PCI_IO_PROTOCOL *io,UINTN *seg,UINTN *bus,
 #ifdef GU_AGGREGATE_CAPTURE_FIXTURE
   *seg=FX_PCI_SEGMENT;*bus=FX_PCI_BUS;*dev=FX_PCI_DEVICE;*fun=FX_PCI_FUNCTION;
 #else
-  *seg=*dev=*fun=0;*bus=GU_TARGET_BUS;
+  *seg=GU_TARGET_SEGMENT;*dev=*fun=0;*bus=GU_TARGET_BUS;
 #endif
+  if(SegmentDrift)*seg^=1U;
   return EFI_SUCCESS;
 }
 static EFI_STATUS EFIAPI Read(EFI_PCI_IO_PROTOCOL *io,EFI_PCI_IO_PROTOCOL_WIDTH width,UINT32 at,UINTN count,VOID *out) {
@@ -296,7 +297,7 @@ static EFI_STATUS Log(VOID *context,const char *event,EFI_STATUS status) {
 static void Setup(void) {
   memset(&Boot,0,sizeof(Boot));memset(&Table,0,sizeof(Table));memset(&Io,0,sizeof(Io));Live.Count=0;
   Calls=EdidCalls=NvCalls=Enables=Claims=Closes=0;GpuGone=ScenarioReached=FALSE;
-  ParentDrift=PathFault=FALSE;memset(FaultDisplayPath,0,sizeof(FaultDisplayPath));
+  ParentDrift=PathFault=SegmentDrift=FALSE;memset(FaultDisplayPath,0,sizeof(FaultDisplayPath));
   FirstError=NULL;memset(NvMemory,0,sizeof(NvMemory));memset(EdidMemory,0,sizeof(EdidMemory));
   Boot.AllocatePool=Allocate;Boot.FreePool=Free;Boot.RaiseTPL=Raise;Boot.RestoreTPL=Restore;
   Boot.LocateHandleBuffer=Locate;Boot.ProtocolsPerHandle=Protocols;Boot.OpenProtocolInformation=Opens;
@@ -380,7 +381,7 @@ int main(int argc,char **argv) {
 #else
   Check(argc==1 || argc==4,"optional EDID, NVIDIA and PROM images");
 #endif
-  for(Mode=0;Mode<23;Mode++) {
+  for(Mode=0;Mode<24;Mode++) {
     Setup();
     if(argc==4) {
       LoadExact(argv[1],EdidMemory,sizeof(EdidMemory));LoadExact(argv[2],NvMemory,sizeof(NvMemory));
@@ -397,6 +398,7 @@ int main(int argc,char **argv) {
       if(Mode==19)ParentDrift=TRUE;
       if(Mode==20 || Mode==21)ChangePathLength(Mode==21);
       if(Mode==22)DisplayPaths[0][16]^=1;
+      if(Mode==23)SegmentDrift=TRUE;
     }
     status=GuReleaseGop(&Table,H(APP),Log,NULL);
     if(!Mode || Mode==6) {
@@ -422,6 +424,6 @@ int main(int argc,char **argv) {
          !strcmp(FirstError,Mode==15?"nvidia-code-profile":"ami-runtime-code-profile"),"corrupt code rejected at exact fingerprint gate");
     }
   }
-  printf("PASS aggregate full prepare/release: %u checks, %u display children, 23 scenarios; RAM-only\n",Checks,TEST_CHILDREN);
+  printf("PASS aggregate full prepare/release: %u checks, %u display children, 24 scenarios; RAM-only\n",Checks,TEST_CHILDREN);
   return 0;
 }

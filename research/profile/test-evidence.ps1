@@ -214,6 +214,54 @@ $baseline=$normalBaseline
 Put 'internal-boot/unlock/profile-local.h' $header
 Put 'research/profile/local/profile.json' ($report|ConvertTo-Json -Depth 8)
 Check 'release replay job on a profile that has an EDID driver' {param($e) $e.Results|Add-Member NoteProperty 'release replay, no EDID driver (real graph)' @{Exit=0;Expected=0}}
+# A matching header/report is required even if evidence hashes were recomputed.
+foreach($segment in @(0,1,65535)) {
+ $segmentHeader=$header+("`n#define GU_TARGET_SEGMENT 0x{0:x}U`n" -f $segment)
+ Put 'internal-boot/unlock/profile-local.h' $segmentHeader
+ $segmentHw=Get-LocalProfile $sandbox
+ if($segmentHw.LegacySegment -or $segmentHw.Segment -ne $segment){throw 'Segment changed during header parsing'};$checks++
+ $segmentReport=[ordered]@{Format=1;ProfileName=$hw.Name;HeaderSha256=$segmentHw.HeaderSha256;PromSha256=$prom;HardwareTested=$false;Fixtures=$fixtures;Replay=[ordered]@{NoEdidDriver=$false;Segment=$segment}}
+ Put 'research/profile/local/profile.json' ($segmentReport|ConvertTo-Json -Depth 8)
+ $e=$normalBaseline|ConvertFrom-Json
+ $e.HeaderSha256=$segmentHw.HeaderSha256
+ $e.ProfileReportSha256=Get-GuSha256 (Join-Path $sandbox 'research/profile/local/profile.json')
+ $baseline=$e|ConvertTo-Json -Depth 10
+ Check 'matching segment evidence' {} $true
+ foreach($token in @('null','true','false','"0"','"1"','0.0','1.0','65535.0','1e0','-1','65536','2147483648',(''+($segment -bxor 1)))) {
+  $text=$segmentReport|ConvertTo-Json -Depth 8
+  Put 'research/profile/local/profile.json' ([regex]::Replace($text,'"Segment":\s*[0-9]+\b',('"Segment": '+$token)))
+  Check ('invalid segment token '+$token) {param($e) $e.ProfileReportSha256=Get-GuSha256 (Join-Path $sandbox 'research/profile/local/profile.json')}
+ }
+ $segmentReport.Replay.Remove('Segment')
+ Put 'research/profile/local/profile.json' ($segmentReport|ConvertTo-Json -Depth 8)
+ Check 'new segment header requires report segment' {param($e) $e.ProfileReportSha256=Get-GuSha256 (Join-Path $sandbox 'research/profile/local/profile.json')}
+}
+foreach($suffix in @(
+ '#define GU_TARGET_SEGMENT 0x10000U',
+ '#define GU_TARGET_SEGMENT -1',
+ '#define GU_TARGET_SEGMENT 1',
+ '#define GU_TARGET_SEGMENT (0x1U)',
+ '#define GU_TARGET_SEGMENT 0xFFFFU',
+ "#define GU_TARGET_SEGMENT 0x1U`n#define GU_TARGET_SEGMENT 0x1U",
+ "#define GU_TARGET_SEGMENT 0x1U`n#undef GU_TARGET_SEGMENT",
+ '#undef GU_TARGET_SEGMENT')) {
+ Put 'internal-boot/unlock/profile-local.h' ($header+"`n"+$suffix+"`n")
+ $accepted=$true;try{$null=Get-LocalProfile $sandbox}catch{$accepted=$false}
+ if($accepted){throw 'Malformed or overridden segment header accepted'};$checks++
+}
+Put 'internal-boot/unlock/profile-local.h' $header
+$legacyHw=Get-LocalProfile $sandbox
+if(!$legacyHw.LegacySegment -or $legacyHw.Segment -ne 0){throw 'Legacy profile must default to segment zero'};$checks++
+$report.Replay.Segment=0
+Put 'research/profile/local/profile.json' ($report|ConvertTo-Json -Depth 8)
+$null=Get-LocalProfileReport $sandbox $legacyHw;$checks++
+$report.Replay.Segment=1
+Put 'research/profile/local/profile.json' ($report|ConvertTo-Json -Depth 8)
+$accepted=$true;try{$null=Get-LocalProfileReport $sandbox $legacyHw}catch{$accepted=$false}
+if($accepted){throw 'Legacy segment-zero header accepted a nonzero report'};$checks++
+$report.Replay.Remove('Segment')
+$baseline=$normalBaseline
+Put 'research/profile/local/profile.json' ($report|ConvertTo-Json -Depth 8)
 Put 'research/profile/local/test-results.json' $baseline
 $package=[ordered]@{HardwareProfile=$hw.Name;LocalProfileHeaderSha256=$hw.HeaderSha256;
  LocalProfileTreeSha256=(Get-LocalInputDigest $inputs);

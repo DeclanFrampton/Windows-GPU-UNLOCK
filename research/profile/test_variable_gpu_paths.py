@@ -44,8 +44,10 @@ def main():
     parser.add_argument('--clang',default='clang')
     parser.add_argument('--topology',choices=('aggregate','nonaggregate','no-edid'),default='aggregate')
     parser.add_argument('--generated-profile',action='store_true')
+    parser.add_argument('--segment',type=lambda value:int(value,0),default=0)
     parser.add_argument('--output',type=Path,required=True)
     args=parser.parse_args();out=args.output.resolve()
+    if not 0<=args.segment<=0xffff:parser.error('Segment must be in 0..65535')
     if out.exists():parser.error('Output must be a new directory')
     out.mkdir(parents=True)
     data=load('variable_path_data','test_local_topology.py')
@@ -79,12 +81,15 @@ def main():
         layout=contract.decode_gpu_display_path(primary)
         controller=primary[:layout['controller_bytes']]
         text=legacy.replace(dump(data.PCI_PATH),dump(controller))
+        text=text.replace('probe-target seg=0x0000 ',f'probe-target seg=0x{args.segment:04x} ')
+        text=text.replace('pci location-status=0x0 segment=0x0 ',f'pci location-status=0x0 segment=0x{args.segment:x} ')
         if text==legacy:raise RuntimeError('Synthetic route substitution did not apply')
         capture=case/'DIAG00.TXT';capture.write_text(text)
         fixture=case/'fixture.h'
         defines=dict(baseline['defines'])
         actual_primary=controller+data.RTX_PATH[-12:]
         defines.update(GU_RTX_PATH_BYTES='\\\n  '+','.join(str(byte) for byte in actual_primary),
+            GU_TARGET_SEGMENT=f'0x{args.segment:x}U',
             GU_ROOT_PORT_DEVICE=str(layout['pci_nodes'][0][0])+'U',
             GU_ROOT_PORT_FUNCTION=str(layout['pci_nodes'][0][1])+'U',
             GU_NVGOP_TEXT_BYTES='0x24426U',GU_NVGOP_TEXT_SHA256='"'+hashlib.sha256(bytes(0x24426)).hexdigest()+'"')
@@ -154,10 +159,21 @@ def main():
         result=run(case/'checks.log',[str(checks),str(probe)])
         summaries.append({'case':case.name,'path_bytes':len(actual_primary),'controller_bytes':len(controller),
             'stage':'checks and path classification','result':result})
+        for stage,source,extra,sources in (
+            ('cold','test_cold_precheck.c',[],[str(ROOT/'internal-boot/boot/console-flow.c'),
+                str(ROOT/'internal-boot/unlock/checks.c'),str(ROOT/'internal-boot/unlock/sha256.c')]),
+            ('pci-layout','../unlock/tests/test_pci_layout.c',['-DGU_HOST_WRITE_TEST'],
+                [str(ROOT/'internal-boot/unlock/checks.c'),str(ROOT/'internal-boot/unlock/port.c')])):
+            exe=case/(stage+'.exe')
+            run(case/(stage+'-compile.log'),[*flags,*extra,'-ivfsoverlay',str(overlay),
+                str(ROOT/'internal-boot/boot'/source),*sources,'-o',str(exe)])
+            result=run(case/(stage+'.log'),[str(exe)])
+            summaries.append({'case':case.name,'path_bytes':len(actual_primary),'controller_bytes':len(controller),
+                'stage':stage,'result':result})
         print(case.name+': prepare and release passed; synthetic backend overlay only',flush=True)
     (out/'summary.json').write_text(json.dumps({'synthetic_only':True,'hardware_access':False,
         'profile_generated':args.generated_profile,'fwsec_locator_stubbed':args.generated_profile,
-        'synthetic_proof_envelope':True,'local_evidence_written':False,'topology':args.topology,'cases':summaries},indent=2))
+        'synthetic_proof_envelope':True,'local_evidence_written':False,'segment':args.segment,'topology':args.topology,'cases':summaries},indent=2))
 
 
 if __name__=='__main__':main()

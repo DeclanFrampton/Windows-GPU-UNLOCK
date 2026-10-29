@@ -20,7 +20,7 @@ reviewed profiles have proven on hardware. There is no override flag. Today that
 |---|---|
 | RTX 3090 / 3090 Ti `220410de` / `220310de`, or RTX 3060 12GB `248710de` / `250410de` | exact reviewed PCI-ID/chip/VRAM combinations are required |
 | GA102 `b72000a1` with `6000` / `5ff4` MiB; GA104 `b74000a1` with `248710de` + `3000` MiB; GA106 `b76000a1` with `250410de` + `3000` MiB | these are coupled tuples, not independent choices; class/revision remains `030000a1` |
-| exactly one NVIDIA display controller, at segment 0, device 0, function 0 on a nonzero PCI bus (reviewed profiles: bus `01`) | PCI identity and the captured bus remain independently verified |
+| exactly one NVIDIA display controller, at a captured 16-bit PCI segment, device 0, function 0 on a nonzero PCI bus (reviewed profiles: segment `0000`, bus `01`) | PCI identity and the captured segment/bus remain independently verified; other segments are experimental |
 | ACPI PNP0A03 or PNP0A08 root, a captured root UID, 1–16 legal PCI path nodes ending at `Pci(0,0)`, one ADR and an end node | LOCAL pins the complete ancestry; display paths are bounded to 120 bytes and the PCI parent must consume exactly the controller prefix |
 | at most one integrated (non-NVIDIA) display controller; the RTX owns the only physical GOP | a recognized pathless, zero-framebuffer AMI aggregate GOP is allowed; a second physical GOP is refused |
 | non-aggregate `ConOut` is exactly the RTX GOP, or the complete reviewed AMI aggregate ownership graph is present | aggregate profiles require distinct NVIDIA/Combo/EDID/Gfx/Out roles and one or two unique NVIDIA display children |
@@ -53,13 +53,19 @@ and PCI config. Every LOCAL profile now requires a full driver-release replay, w
 the EDID driver exists or not. Only the non-aggregate headless build supports the flag; other builds
 refuse it at compile time. The generic probe automatically selects the bus of the single
 eligible NVIDIA display controller; you do not need a motherboard-specific bus option.
-LOCAL profile generation still requires segment 0, device 0, function 0 and a nonzero bus.
+LOCAL profile generation still requires device 0, function 0 and a nonzero bus.
 
 The generic read-only probe can also observe a unique reviewed NVIDIA target on
 segments `0001`–`ffff`. It pins both segment and bus through the final identity
 recheck; segment drift or multiple NVIDIA display controllers prevents deep reads.
 `-TargetBus` constrains the bus, regardless of the observed segment. This collects
-porting evidence only: LOCAL generation and unlock runtimes still require segment 0.
+porting evidence. LOCAL generation pins the segment in `GU_TARGET_SEGMENT` and
+`Replay.Segment`; both cold-boot captures and the header/report must agree. Prepare,
+release, cold reads and PCI transactions require that exact segment, including when
+another device has the same bus/device/function on a different segment. Legacy local
+headers and named profiles retain segment zero. Nonzero-segment support has synthetic
+host replay coverage, not physical compatibility evidence; it requires the same complete
+host-test evidence and per-machine physical validation as other experimental layouts.
 
 Admission and replay share a strict parser: incomplete/ambiguous handle, protocol,
 open and PCI snapshots cannot establish absence of an adapter or EDID owner. The

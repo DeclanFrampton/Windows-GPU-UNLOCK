@@ -99,6 +99,19 @@ def shift_bus(path):
     path.write_text(text[:block.start(1)] + changed + text[block.end(1):], encoding='utf-8')
 
 
+def shift_segment(path):
+    """Move both independent RTX location observations to another segment."""
+    text=path.read_bytes().decode('utf-8-sig').replace('\r\n','\n')
+    target=re.search(r'^probe-target seg=0x([0-9a-f]+)',text,re.M)
+    segment=int(target[1],16)^1
+    text=re.sub(r'^(probe-target seg=0x)[0-9a-f]+',lambda m:m[1]+f'{segment:x}',text,count=1,flags=re.M)
+    blocks=list(re.finditer(r'^handle id=0x[0-9a-f]+\n(.*?)(?=^handle id=|^capture-complete=|\Z)',text,re.M|re.S))
+    block=next(m for m in blocks if (c:=mp.pci_config(m[1])) and c[0]&0xffff==0x10de and c[2]>>24==3)
+    changed,count=re.subn(r'^(pci location-status=0x[0-9a-f]+ segment=0x)[0-9a-f]+',lambda m:m[1]+f'{segment:x}',block[1],count=1,flags=re.M)
+    if count!=1:raise AssertionError('Missing target graph PCI segment')
+    path.write_bytes((text[:block.start(1)]+changed+text[block.end(1):]).encode())
+
+
 def duplicate_igpu(path):
     """Add an explicit second adapter, without assuming two spare PCI handles."""
     text=path.read_bytes().decode('utf-8-sig').replace('\r\n','\n')
@@ -140,9 +153,13 @@ def main():
     case('second NVIDIA GPU', 'exactly one NVIDIA', lambda w, d: sub(d[-1], r'^probe targets=0001(?: cfg-incomplete=0000)?$', 'probe targets=0002 cfg-incomplete=0000'))
     case('RTX on bus 0', 'nonzero bus',
          lambda w, d: [sub(p, r'^(probe-target seg=0x[0-9a-f]+ bus=0x)[0-9a-f]+', lambda m: m[1] + '0') for p in d])
-    case('RTX on another segment', 'segment 0, device 0, function 0',
-         lambda w, d: [sub(p, r'^(probe-target seg=0x)[0-9a-f]+', lambda m: m[1] + '1') for p in d])
-    case('RTX at device 1', 'segment 0, device 0, function 0',
+    case('RTX segment overflow', '16-bit PCI segment',
+         lambda w, d: [sub(p, r'^(probe-target seg=0x)[0-9a-f]+', lambda m: m[1] + '10000') for p in d])
+    case('captures disagree on segment', 'disagree on GU_TARGET_SEGMENT',lambda w,d:shift_segment(d[-1]))
+    case('RTX on another segment in every capture', None,lambda w,d:[shift_segment(p) for p in d])
+    case('probe/graph disagree on segment', 'PCI location',
+         lambda w,d:sub(d[-1],r'^(probe-target seg=0x)([0-9a-f]+)',lambda m:m[1]+f'{int(m[2],16)^1:x}'))
+    case('RTX at device 1', 'device 0, function 0',
          lambda w, d: [sub(p, r'^(probe-target seg=0x[0-9a-f]+ bus=0x[0-9a-f]+ dev=0x)[0-9a-f]+', lambda m: m[1] + '1') for p in d])
     # The bus is a per-machine constant: moving it in every capture is a different, still valid
     # machine; moving it in one capture only is a capture that does not describe the same boot.
