@@ -1,7 +1,7 @@
 /* GPL-2.0-only. Real UEFI protocol adapter exercised only through host mocks.
  * Deliberately not wired into probes, boot images, staging or LOCAL admission. */
 #include "efi-adapter.h"
-#include "../../internal-boot/unlock/gpu-path.h"
+#include "efi-path.h"
 
 static EFI_GUID PciGuid=EFI_PCI_IO_PROTOCOL_GUID,PathGuid=EFI_DEVICE_PATH_PROTOCOL_GUID;
 static BOOLEAN Bytes(const VOID *a,const VOID *b,UINTN n) {
@@ -23,18 +23,8 @@ static BOOLEAN AllCaps(const GU_DS_EFI_CONTEXT *c) {
   return TRUE;
 }
 static BOOLEAN Controller(const GU_DS_EFI_BINDING *gpu,UINTN parents) {
-  static const UINT8 end[]={0x7f,0xff,4,0};
-  UINT8 display[GU_GPU_DISPLAY_PATH_MAX_BYTES];
-  if(gpu->PathBytes<4 || gpu->PathBytes>GU_DS_EFI_MAX_PATH ||
-     !Bytes(gpu->Path+gpu->PathBytes-4,end,4))return FALSE;
-  UINTN body=gpu->PathBytes-4,controller=0,total=0;
-  if(body+12>sizeof(display))return FALSE;
-  for(UINTN i=0;i<body;i++)display[i]=gpu->Path[i];
-  for(UINTN i=0;i<12;i++)display[body+i]=0;
-  display[body]=2;display[body+1]=3;display[body+2]=8;
-  for(UINTN i=0;i<4;i++)display[body+8+i]=end[i];
-  return GuDecodeGpuDisplayPath(display,body+12,&controller,&total) && controller==body &&
-    body==12+6*(parents+1) && total==body+12;
+  UINTN observed=0;
+  return GuDsControllerParents(gpu->Path,gpu->PathBytes,&observed) && observed==parents;
 }
 EFI_STATUS GuDsEfiInitialize(GU_DS_EFI_CONTEXT *c,EFI_BOOT_SERVICES *boot,EFI_HANDLE owner,
   const GU_DS_EFI_BINDING *bindings,UINTN count,const GU_DS_SNAPSHOT *expected,

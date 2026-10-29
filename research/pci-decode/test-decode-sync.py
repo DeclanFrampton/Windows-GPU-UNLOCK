@@ -27,9 +27,12 @@ def main():
         [*flags, str(HERE / 'test_efi_adapter.c'), str(HERE / 'efi-adapter.c'), str(HERE / 'decode-sync.c'),
          '-o', str(output / 'efi-adapter-host.exe')],
         [str(output / 'efi-adapter-host.exe')],
+        [*flags, str(HERE / 'test_efi_capture.c'), str(HERE / 'efi-capture.c'), str(HERE / 'efi-adapter.c'),
+         str(HERE / 'decode-sync.c'), '-o', str(output / 'efi-capture-host.exe')],
+        [str(output / 'efi-capture-host.exe')],
     ]
     results = []
-    for name, command in zip(('compile', 'run', 'adapter-compile', 'adapter-run'), commands):
+    for name, command in zip(('compile', 'run', 'adapter-compile', 'adapter-run','capture-compile','capture-run'), commands):
         result = subprocess.run(command, capture_output=True, text=True, cwd=ROOT, timeout=30)
         (output / f'{name}.log').write_text(result.stdout + result.stderr)
         if result.returncode:
@@ -70,6 +73,16 @@ def main():
         }
         mutation_specs += [(name, 'efi-adapter.c', 'test_efi_adapter.c', [str(HERE / 'decode-sync.c')], replacements)
                            for name, replacements in adapter_changes.items()]
+        capture_changes = {
+            'ignore-capture-gpu-pin': [('  if(!index && (out->Config[0]!=w->Target.PciId || out->Config[11]!=w->Target.Subsystem || out->Config[4]!=w->Target.Bar0))return EFI_NOT_READY;','')],
+            'omit-capture-two-scan-match': [(' || !GuDecodeSnapshotMatches(&snapshots[1],&snapshots[0],FALSE)','')],
+            'accept-capture-interface-replacement': [(' || (!first && io!=d->Pin.Io)','')],
+            'check-only-last-capture-capability': [('for(UINTN i=0;i<w->Bound;i++)',
+                'for(UINTN i=w->Bound?w->Bound-1:0;i<w->Bound;i++)')],
+        }
+        mutation_specs += [(name, 'efi-capture.c', 'test_efi_capture.c',
+            [str(HERE / 'decode-sync.c'),str(HERE / 'efi-adapter.c')], replacements)
+            for name, replacements in capture_changes.items()]
         for name, source_file, test_file, support, replacements in mutation_specs:
             broken = (HERE / source_file).read_text()
             for before, after in replacements:

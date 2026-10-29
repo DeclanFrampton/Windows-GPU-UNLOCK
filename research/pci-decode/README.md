@@ -57,7 +57,7 @@ dword of the GPU and all 16 parents, full attribute/token/location drift, and
 attempts to reuse a transaction. All protocol effects are RAM callbacks; no GPU,
 firmware, boot setting or physical media is accessed. Passing this model grants
 no hardware support, LOCAL write evidence or permission to run a correction.
-The optional mutation checks compile sixteen deliberately broken copies in the ignored
+The optional mutation checks compile twenty deliberately broken copies in the ignored
 output directory and require the host tests to reject them. A compile failure does
 not count as detecting a broken guard. Original source files remain unchanged.
 
@@ -147,3 +147,49 @@ state, atomic observation across devices or proof of real-time stability. A futu
 experiment must independently establish authorized ownership, lifetime/freshness,
 boot/display consequences, logging durability and physical validation. Existing
 read-only probes, LOCAL admission and build-evidence rules remain unchanged.
+
+## Current-boot baseline collector
+
+`efi-capture.c` supplies read-only baseline acquisition for the research adapter.
+The caller supplies an exact GPU handle, segment/bus, PCI/subsystem IDs, BAR0 and
+bounded controller-path bytes. The collector follows each immediate parent prefix
+using LocateDevicePath, verifies exact End consumption and current live path bytes,
+and reads GetLocation, all 64 PCI config dwords and Attributes Get/Supported.
+It never calls OpenProtocolInformation, Allocate/FreePool, Attributes Enable/Disable,
+config writes, MMIO, driver release, logging or boot services that launch an image.
+
+Two full scans use different config sentinels and out-of-range location/attribute
+sentinels. The first scan fixes every handle/interface/method; the second cannot
+silently adopt replacements. Both must satisfy the caller's GPU pins, the existing
+decode-core shape restrictions and exact full-snapshot equality. Whole-chain method
+checks also run after callbacks, catching a late parent changing an earlier device's
+method. `efi-path.h` shares controller validation with the existing adapter.
+
+Use one private zero-initialized `GU_DS_CAPTURE`. It is spent before any service
+callback and refuses reentry/reuse. Input/context/Boot overlap refuses without
+clearing those aliased arguments. Failures during a fresh, disjoint capture publish
+zero bindings/snapshot, Count=0 and Ready=FALSE; only success commits a complete result.
+Reuse/reentry rejection preserves the old result. Always require this call's
+EFI_SUCCESS, rather than interpreting an earlier Ready flag as a new capture. Request values are
+copied privately before callbacks; interface and backing storage lifetimes still
+belong to the caller. Protocol-returned pointers must obey the firmware API contract.
+
+The current bound remains 2–16 PCI nodes (1–15 PciIo parent bridges), PNP0A03/PNP0A08
+roots with captured UID, 16-bit segment and nonzero GPU bus. The decode-core ID scope
+remains 2204/2203/2484/2487/2504, command=2, reviewed class/BAR shape and consistent
+parent buses/attributes. In particular, production LOCAL's newer 24c9 admission
+does not automatically widen this research correction scope; it is tested as refused.
+
+Ready means a consistent observation under these rules. It proves neither absence
+of another GPU nor chip/VRAM/PROM/driver-code qualification, ownership, atomicity or
+timed stability. It does not authenticate a previously unknown device or authorize
+an unlock. The returned binding array and snapshot can feed GuDsEfiInitialize only
+after its independent held-claim/lifetime/serialization requirements are met.
+The composition test does this against RAM EFIAPI mocks; no firmware code executes.
+The production pre-NVIDIA-Stop integration issue described above is unchanged.
+
+Capture fixtures cover all parent depths, both root types, UID/segment boundaries,
+stable wrong GPU pins, bad bus chains, interface replacement between scans, missing
+parent resolution, partial output, strict status handling, mutable input, callback
+reentry and overlapping arguments. Four extra compiled mutations remove GPU pinning,
+two-scan equality, interface pinning and whole-chain capability checks and must fail.
