@@ -15,8 +15,9 @@ firmware/builds; they do not establish a generic firmware correction.
 The independent implementation here offers exactly one write capability:
 `DisableIo`. It does not adopt the contributor pre-step's initial IO-enable attempt.
 Its callback must eventually be bound to the reviewed GPU's
-`PciIo->Attributes(Disable, IO)` by a separately reviewed adapter. No such adapter
-is implemented or authorized for execution here.
+`PciIo->Attributes(Disable, IO)`. The research library adapter described below is
+implemented and tested only against RAM-backed EFIAPI mocks; it is not connected
+to any boot image and has not been authorized or tested on physical hardware.
 
 `GuDecodeSync` requires an exact baseline GPU and 1–16 caller-verified immediate
 parent bridges, including location, handle/interface tokens, all 64 config
@@ -56,6 +57,43 @@ dword of the GPU and all 16 parents, full attribute/token/location drift, and
 attempts to reuse a transaction. All protocol effects are RAM callbacks; no GPU,
 firmware, boot setting or physical media is accessed. Passing this model grants
 no hardware support, LOCAL write evidence or permission to run a correction.
-The optional mutation checks compile six deliberately broken copies in the ignored
+The optional mutation checks compile ten deliberately broken copies in the ignored
 output directory and require the host tests to reject them. A compile failure does
 not count as detecting a broken guard. Original source files remain unchanged.
+
+## Research UEFI adapter
+
+`efi-adapter.c` binds an exact caller-supplied baseline and PCI controller paths.
+Initialization validates/copies inputs without firmware calls and cannot reset a
+used context. Run freezes a private copy and spends the context before its first
+callback, including against reentry through a fresh core transaction object.
+Caller-owned policy changes cannot alter the active copy. Contexts must remain
+private, zero-initialized and serialized; callers must not reset/recreate them to retry.
+
+The GPU controller route uses the existing bounded PNP0A03/PNP0A08 parser. Two to
+sixteen PCI nodes correspond to one to fifteen immediate parent bridges. Each
+parent's path must be the exact corresponding prefix plus an End node; its PCI
+device/function must match the last node. This adapter's parent limit is smaller
+than the standalone core's sixteen-parent bound.
+
+Each snapshot uses `HandleProtocol`, `LocateDevicePath`, `GetLocation`, a full
+64-dword PCI read, and Attributes Get/Supported. It requires the pinned interface,
+exact path bytes and exact Locate consumption at the End node. Two full chain
+scans use different config initialization patterns, so successful partial reads
+cannot pass merely by leaving the same sentinel twice. Method pointers and both
+BootServices methods are pinned and rechecked, including all devices after the
+last callback. Before the sole Disable(IO), the adapter performs another full
+scan and callback-free whole-chain capability check. It does not expose generic
+Attributes, config-write, MMIO, install/uninstall, disk or boot capabilities.
+
+The mock adapter suite injects warning/error with valid output, absent output,
+partial config, path/Locate-consumption errors, changed interfaces/methods,
+early and late parent drift, Init/Run reentry, caller input changes and a failing
+write that nevertheless changes state. Mutation checks also break Locate bounds,
+the differing sentinels, whole-chain method checks and one-shot initialization.
+
+This is not ownership acquisition, GPU qualification, a snapshot of all firmware
+state, atomic observation across devices or proof of real-time stability. A future
+experiment must independently establish authorized ownership, lifetime/freshness,
+boot/display consequences, logging durability and physical validation. Existing
+read-only probes, LOCAL admission and build-evidence rules remain unchanged.

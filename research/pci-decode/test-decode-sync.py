@@ -24,19 +24,21 @@ def main():
     commands = [
         [*flags, str(HERE / 'test_decode_sync.c'), str(HERE / 'decode-sync.c'), '-o', str(executable)],
         [str(executable)],
+        [*flags, str(HERE / 'test_efi_adapter.c'), str(HERE / 'efi-adapter.c'), str(HERE / 'decode-sync.c'),
+         '-o', str(output / 'efi-adapter-host.exe')],
+        [str(output / 'efi-adapter-host.exe')],
     ]
     results = []
-    for name, command in zip(('compile', 'run'), commands):
+    for name, command in zip(('compile', 'run', 'adapter-compile', 'adapter-run'), commands):
         result = subprocess.run(command, capture_output=True, text=True, cwd=ROOT, timeout=30)
         (output / f'{name}.log').write_text(result.stdout + result.stderr)
         if result.returncode:
             raise RuntimeError(f'{name}: ' + (result.stdout + result.stderr)[-2500:])
         results.append({'stage': name, 'exit': result.returncode})
-        if name == 'run':
+        if name.endswith('run'):
             print(result.stdout.strip())
     mutations = []
     if args.mutations:
-        source = (HERE / 'decode-sync.c').read_text()
         changes = {
             'warning-as-success': [('status!=EFI_SUCCESS', 'EFI_ERROR(status)')],
             'ignore-parent-bus-cycles': [('p->Bus==g->Bus || ', ''), ('p->Bus==s->Parents[j].Bus || ', '')],
@@ -47,18 +49,29 @@ def main():
             'ignore-final-log-failure': [('if(o.Log(o.Context,"decode-verify-full-snapshot")!=TRUE)return Finish(t,GU_DS_LOG_FAILED);',
                                          '(void)o.Log(o.Context,"decode-verify-full-snapshot");')],
         }
-        for name, replacements in changes.items():
-            broken = source
+        mutation_specs = [(name, 'decode-sync.c', 'test_decode_sync.c', [], replacements)
+                          for name, replacements in changes.items()]
+        adapter_changes = {
+            'ignore-late-peer-capability-drift': [('!AllCaps(c) || ', ''), (' && AllCaps(c)', ''),
+                ('static EFI_STATUS AdapterDisable(VOID *context) {', 'static EFI_STATUS AdapterDisable(VOID *context) {\n  (void)AllCaps;')],
+            'accept-partial-locate-consumption': [(' || (UINTN)rest!=(UINTN)copy+d->Pin.PathBytes-4', '')],
+            'same-sentinel-in-both-scans': [('pass?0x5a5a5a5aU:0xa5a5a5a5U', '0xa5a5a5a5U')],
+            'allow-adapter-reinitialization': [('if(c->InitUsed!=FALSE)return EFI_ALREADY_STARTED;', '')],
+        }
+        mutation_specs += [(name, 'efi-adapter.c', 'test_efi_adapter.c', [str(HERE / 'decode-sync.c')], replacements)
+                           for name, replacements in adapter_changes.items()]
+        for name, source_file, test_file, support, replacements in mutation_specs:
+            broken = (HERE / source_file).read_text()
             for before, after in replacements:
                 if before not in broken:
                     raise RuntimeError(f'Mutation no longer matches: {name}')
                 broken = broken.replace(before, after)
             folder = output / name
             folder.mkdir()
-            mutated = folder / 'decode-sync.c'
+            mutated = folder / source_file
             mutated.write_text(broken)
             binary = folder / 'broken-host.exe'
-            compiled = subprocess.run([*flags, str(HERE / 'test_decode_sync.c'), str(mutated), '-o', str(binary)],
+            compiled = subprocess.run([*flags, str(HERE / test_file), str(mutated), *support, '-o', str(binary)],
                                       capture_output=True, text=True, cwd=ROOT, timeout=30)
             (folder / 'compile.log').write_text(compiled.stdout + compiled.stderr)
             if compiled.returncode:
@@ -71,7 +84,8 @@ def main():
         print(f'PASS {len(mutations)} compiled guard mutations detected')
     (output / 'summary.json').write_text(json.dumps({
         'research_only': True, 'hardware_access': False, 'efi_executed': False,
-        'shipped_build_wired': False, 'local_evidence_written': False, 'results': results, 'mutations': mutations,
+        'shipped_build_wired': False, 'local_evidence_written': False, 'adapter_host_only': True,
+        'results': results, 'mutations': mutations,
     }, indent=2))
 
 

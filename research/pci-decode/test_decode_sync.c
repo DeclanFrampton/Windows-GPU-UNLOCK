@@ -180,6 +180,12 @@ int main(void) {
   m.State.Parents[0].Config[6]=3U|(1U<<8)|(3U<<16);
   m.Expected=m.State;Refuse(&m,0);Check(!m.Reads && !m.Logs,"GPU bus cannot recur as an ancestor");
   Check(GuDecodeSync(NULL,NULL,NULL)==GU_DS_INVALID,"null transaction rejected");
+  Check(!GuDecodeSnapshotValid(NULL),"null snapshot predicate rejected");
+  Setup(&m,2,0);
+  Check(!GuDecodeSnapshotMatches(NULL,&m.Expected,FALSE) && !GuDecodeSnapshotMatches(&m.Expected,NULL,FALSE),"null comparison rejected");
+  Check(!GuDecodeSnapshotMatches(&m.Expected,&m.Expected,2),"nonboolean comparison mode rejected");
+  m.Expected.ParentCount=GU_DS_MAX_PARENTS+1;
+  Check(!GuDecodeSnapshotMatches(&m.Expected,&m.Expected,FALSE),"oversized comparison rejected before array reads");
   printf("PASS %u decode-sync assertions; RAM-only, research core, no EFI or hardware execution\n",Checks);
   return 0;
 }

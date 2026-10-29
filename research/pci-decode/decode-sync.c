@@ -16,7 +16,8 @@ static BOOLEAN Separate(const GU_DS_DEVICE *a,const GU_DS_DEVICE *b) {
   return !Location(a,b) && a->Handle!=b->Handle && a->Interface!=b->Interface &&
     a->Handle!=b->Interface && a->Interface!=b->Handle;
 }
-static BOOLEAN Valid(const GU_DS_SNAPSHOT *s) {
+BOOLEAN GuDecodeSnapshotValid(const GU_DS_SNAPSHOT *s) {
+  if(!s)return FALSE;
   const GU_DS_DEVICE *g=&s->Gpu;
   if(s->Complete!=TRUE || !s->ParentCount || s->ParentCount>GU_DS_MAX_PARENTS || !Bounded(g) ||
      !g->Bus || g->Device || g->Function || (g->Config[1]&0xffffU)!=2U ||
@@ -50,7 +51,8 @@ static BOOLEAN DeviceEqual(const GU_DS_DEVICE *a,const GU_DS_DEVICE *b,BOOLEAN f
   for(UINTN i=0;i<64;i++)if(a->Config[i]!=b->Config[i])return FALSE;
   return TRUE;
 }
-static BOOLEAN Equal(const GU_DS_SNAPSHOT *a,const GU_DS_SNAPSHOT *b,BOOLEAN fixed) {
+BOOLEAN GuDecodeSnapshotMatches(const GU_DS_SNAPSHOT *a,const GU_DS_SNAPSHOT *b,BOOLEAN fixed) {
+  if(!a || !b || b->ParentCount>GU_DS_MAX_PARENTS || b->Complete!=TRUE || (fixed!=TRUE && fixed!=FALSE))return FALSE;
   if(a->Complete!=TRUE || a->ParentCount!=b->ParentCount || !DeviceEqual(&a->Gpu,&b->Gpu,fixed))return FALSE;
   for(UINTN i=0;i<b->ParentCount;i++)if(!DeviceEqual(&a->Parents[i],&b->Parents[i],FALSE))return FALSE;
   return TRUE;
@@ -72,17 +74,17 @@ GU_DS_RESULT GuDecodeSync(GU_DS_TRANSACTION *t,const GU_DS_OPS *ops,const GU_DS_
   const GU_DS_OPS o=*ops;
   const GU_DS_SNAPSHOT pin=*expected;
   GU_DS_SNAPSHOT now;
-  if(!Valid(&pin))return t->Result;
+  if(!GuDecodeSnapshotValid(&pin))return t->Result;
   EFI_STATUS status=Read(&o,&now);
   if(status!=EFI_SUCCESS)return Finish(t,GU_DS_READ_FAILED);
-  if(!Equal(&now,&pin,FALSE))return Finish(t,GU_DS_DRIFT);
+  if(!GuDecodeSnapshotMatches(&now,&pin,FALSE))return Finish(t,GU_DS_DRIFT);
   BOOLEAN consistent=pin.Gpu.Attributes==GU_DS_MEMORY;
   if(o.Log(o.Context,consistent?"decode-already-consistent":"decode-disable-io-intent")!=TRUE)return Finish(t,GU_DS_LOG_FAILED);
   /* A logging callback can change hardware. No callback is allowed between this
    * fresh full comparison and the single permitted write. */
   status=Read(&o,&now);
   if(status!=EFI_SUCCESS)return Finish(t,GU_DS_READ_FAILED);
-  if(!Equal(&now,&pin,FALSE))return Finish(t,GU_DS_DRIFT);
+  if(!GuDecodeSnapshotMatches(&now,&pin,FALSE))return Finish(t,GU_DS_DRIFT);
   if(consistent)return Finish(t,GU_DS_ALREADY_CONSISTENT);
   t->Attempted=TRUE;
   t->DisableStatus=o.DisableIo(o.Context);
@@ -92,14 +94,14 @@ GU_DS_RESULT GuDecodeSync(GU_DS_TRANSACTION *t,const GU_DS_OPS *ops,const GU_DS_
   t->PostObserved=t->ObservationStatus==EFI_SUCCESS && now.Complete==TRUE;
   if(t->DisableStatus!=EFI_SUCCESS)return Finish(t,GU_DS_DISABLE_FAILED);
   if(t->ObservationStatus!=EFI_SUCCESS)return Finish(t,GU_DS_READ_FAILED);
-  if(!Equal(&now,&pin,TRUE))return Finish(t,GU_DS_DRIFT);
+  if(!GuDecodeSnapshotMatches(&now,&pin,TRUE))return Finish(t,GU_DS_DRIFT);
   /* These are logical samples, not timed stability evidence. Any future EFI
    * adapter needs its own freshness, ownership and physical validation. */
   for(UINTN i=0;i<GU_DS_FOLLOWUPS;i++) {
     if(o.Log(o.Context,"decode-verify-full-snapshot")!=TRUE)return Finish(t,GU_DS_LOG_FAILED);
     status=Read(&o,&now);
     if(status!=EFI_SUCCESS)return Finish(t,GU_DS_READ_FAILED);
-    if(!Equal(&now,&pin,TRUE))return Finish(t,GU_DS_DRIFT);
+    if(!GuDecodeSnapshotMatches(&now,&pin,TRUE))return Finish(t,GU_DS_DRIFT);
   }
   return Finish(t,GU_DS_FIXED);
 }

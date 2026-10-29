@@ -48,3 +48,7 @@ typedef struct {
 
 GU_DS_RESULT GuDecodeSync(GU_DS_TRANSACTION *Transaction, const GU_DS_OPS *Ops,
                          const GU_DS_SNAPSHOT *Expected);
+
+/* Research adapter helpers; they validate supplied values, not their provenance. */
+BOOLEAN GuDecodeSnapshotValid(const GU_DS_SNAPSHOT *Snapshot);
+BOOLEAN GuDecodeSnapshotMatches(const GU_DS_SNAPSHOT *Observed,const GU_DS_SNAPSHOT *Expected,BOOLEAN IoCleared);
