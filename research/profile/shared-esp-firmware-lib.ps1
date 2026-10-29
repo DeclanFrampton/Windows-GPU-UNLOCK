@@ -6,9 +6,10 @@ function Test-FirmwareValueEqual($A,$B){
  if($null -eq $A -or $null -eq $B){return $null -eq $A -and $null -eq $B}
  return [uint32]$A.Attributes -eq [uint32]$B.Attributes -and $A.DataBase64 -ceq $B.DataBase64
 }
-function New-SharedEspLoadOption([guid]$PartitionGuid,[uint32]$PartitionNumber,[uint64]$StartLba,[uint64]$SizeLba,[string]$Description){
+function New-SharedEspLoadOption([guid]$PartitionGuid,[uint32]$PartitionNumber,[uint64]$StartLba,[uint64]$SizeLba,[string]$Description,[string]$FilePath='\EFI\EVGA-SHARED-AUDIT-VISIBLE.EFI'){
  if($PartitionGuid -eq [guid]::Empty -or !$PartitionNumber -or !$SizeLba -or $Description.Contains([char]0)){throw 'Invalid EFI load option input'}
- $path=[Text.Encoding]::Unicode.GetBytes("\EFI\EVGA-SHARED-AUDIT-VISIBLE.EFI`0")
+ if($FilePath -cnotin @('\EFI\EVGA-SHARED-AUDIT-VISIBLE.EFI','\EFI\EVGA-SHARED-LAUNCH02.EFI')){throw 'Unsupported firmware launch path'}
+ $path=[Text.Encoding]::Unicode.GetBytes($FilePath+[char]0)
  $stream=New-Object IO.MemoryStream;$w=New-Object IO.BinaryWriter($stream)
  try {
   $w.Write([uint32]1);$w.Write([uint16](42+4+$path.Length+4));$w.Write([Text.Encoding]::Unicode.GetBytes($Description+[char]0))
