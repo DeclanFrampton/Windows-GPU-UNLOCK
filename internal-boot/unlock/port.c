@@ -53,7 +53,7 @@ VOID GuInit(EFI_BOOT_SERVICES *Bs, EFI_PCI_IO_PROTOCOL *Pci) {
 #endif
 }
 BOOLEAN GuTargetConfig(const UINT32 *C, UINTN S, UINTN B, UINTN D, UINTN F) {
-  return C && !S && B==GU_TARGET_BUS && !D && !F && C[0]==GU_BOARD_ID &&
+  return C && S==GU_TARGET_SEGMENT && B==GU_TARGET_BUS && !D && !F && C[0]==GU_BOARD_ID &&
     C[11]==GU_BOARD_SUBSYSTEM && (C[2]>>24)==3 && !((C[3]>>16)&0x7f);
 }
 BOOLEAN GuSafeToReturn(VOID) {
@@ -258,7 +258,12 @@ fail:
 }
 EFI_STATUS GuSavePci(VOID) {
   UINTN I;
-  if(Gu.saved || Gu.fault || !Gu.owned || Gu.pcie_cap<0x40 || Gu.pcie_cap>0xd4)return EFI_NOT_READY;
+  /* Match the bounded standard capability layouts accepted by GuCheckConfig:
+   * v1 occupies 0x14 bytes, v2 occupies 0x3c bytes. Reject invalid metadata
+   * before any device access, including a version with unknown register layout. */
+  if(Gu.saved || Gu.fault || !Gu.owned || Gu.pcie_cap<0x40 || (Gu.pcie_cap&3U) ||
+     (Gu.pcie_version!=1 && Gu.pcie_version!=2) ||
+     Gu.pcie_cap>(Gu.pcie_version==1?0xecU:0xc4U))return EFI_NOT_READY;
   for(I=0;I<64;I++)
     if(EFI_ERROR(GuConfigRead(EfiPciIoWidthUint32,(UINT32)I*4,&Gu.saved_config[I])))return EFI_DEVICE_ERROR;
   if(Gu.saved_config[0]!=GU_BOARD_ID || Gu.saved_config[11]!=GU_BOARD_SUBSYSTEM ||

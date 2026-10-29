@@ -26,10 +26,11 @@ GPU model.** Check the linked motherboard, BIOS and card requirements before bui
 | GPU | Current status | Details |
 |---|---|---|
 | **RTX 3060 12GB (GA104 / GA106)** | Hardware success reported; headless USB only | [GA104](docs/COMPATIBILITY.en.md#profile-4-asus-prime-b660-plus-d4--rtx-3060-12gb-headless-usb) · [GA106](docs/COMPATIBILITY.en.md#profile-5-gigabyte-h610m-h--rtx-3060-12gb-ga106-headless-usb) |
+| **RTX 3070 8GB (2484 / GA104)** | Contributor LOCAL USB success reported; experimental automatic profile | [Exact conditions](docs/COMPATIBILITY.en.md#reported-local-profile-success) |
 | **RTX 3070 Ti 8GB** | Hardware success reported; internal headless | [Supported configuration](docs/COMPATIBILITY.en.md#profile-2-asus-tuf-b660m-e-d4--rtx-3070-ti-aggregate-console) |
-| **RTX 3080** | No dedicated profile in this port; upstream project target | [Project origins](THIRD_PARTY_NOTICES.md) |
+| **RTX 3080** | No dedicated profile; Windows display-routing research available | [Research observations](research/rtx3080/README.md) · [Project origins](THIRD_PARTY_NOTICES.md) |
 | **RTX 3090 FE 24GB** | Hardware success recorded; internal headless; default profile | [Supported configuration](docs/COMPATIBILITY.en.md#profile-1-asus-tuf-b650m--rtx-3090-fe-original) |
-| **RTX 3090 Ti 24GB** | Hardware success reported; headless USB only | [Supported configuration](docs/COMPATIBILITY.en.md#profile-3-gigabyte-x870-aorus-elite-wifi7--rtx-3090-ti-headless-usb) |
+| **RTX 3090 Ti 24GB** | Hardware success reported; route depends on exact system | [X870 USB](docs/COMPATIBILITY.en.md#profile-3-gigabyte-x870-aorus-elite-wifi7--rtx-3090-ti-headless-usb) · [B660M internal](docs/COMPATIBILITY.en.md#profile-6-asus-tuf-b660m-e-d4--colorful-rtx-3090-ti-internal) |
 
 The [compatibility guide](docs/COMPATIBILITY.en.md) lists exact build profiles and
 distinguishes maintainer tests from contributor reports. Results concern their
@@ -45,7 +46,7 @@ Firmware assets and private, partition-specific EFI binaries are not bundled.
 
 | Path | Display and input | Instructions |
 |---|---|---|
-| **Internal headless** | B650M/3090 FE or B660M/3070 Ti profile; monitors on RTX; display temporarily removed; no T/U/Enter | [Internal headless guide](docs/HEADLESS.en.md) |
+| **Internal headless** | B650M/3090 FE or B660M/3070 Ti / 3090 Ti profile; monitors on RTX; display temporarily removed; no T/U/Enter | [Internal headless guide](docs/HEADLESS.en.md) |
 | **Headless USB** | Reported RTX 3060 / 3090 Ti configurations; profile-specific wrapper and child on a FAT32 USB stick | [Headless USB guide](docs/HEADLESS-USB.en.md) |
 | Internal AMD-display manual / Auto | Original B650M profile, motherboard/iGPU display preserved; manual variant requires U | [Existing internal guide](docs/INTERNAL-BOOT.en.md) |
 | Legacy USB manual | Original AMD/iGPU display profile; U once, then Boot Override to Windows without reset | [Legacy USB guide](docs/GUIDE.en.md) |
@@ -169,6 +170,10 @@ The guide also covers comparing two reports to investigate common differences.
 
 ## Implementation and boundaries
 
+The [GPU family layer](docs/GPU-FAMILIES.en.md) shares reviewed GA102/GA104/GA106
+traits and identical firmware templates, while exact card/platform pins remain
+separate. Existing profile names and support scope are unchanged.
+
 Headless is a separate compile-time profile. Exact GPU/PROM/PCI state, firmware
 driver code, ownership, cold state, immutable selectors and cleanup checks remain.
 The child logs to files only and rejects physical GOP reappearance or changed
@@ -188,12 +193,22 @@ support. New systems require [compatibility reporting](docs/CONTRIBUTING.en.md) 
 [portability validation](docs/PORTABILITY.en.md). A machine inside the hardware-proven envelope
 can build and test its own local profile with the [new-machine pipeline](docs/NEW-MACHINE.en.md).
 This experimental workflow inventories NVIDIA display devices, but deep capture is
-limited to one RTX 3090 / 3090 Ti in the reviewed PCI/BAR state. A generated local
+limited to one reviewed RTX 3090 / 3090 Ti, RTX 3060 12GB or RTX 3070 `2484` identity in the reviewed PCI/BAR state. A generated local
 profile does not add another verified machine profile. USB write builds require all
-19 host jobs (20 when the firmware binds no EDID driver) and unchanged profile,
+21 host jobs, including input policy and the topology-specific complete driver-release replay, and unchanged profile,
 fixtures and build inputs; hardware validation is still required. Within this envelope
-the bus is pinned per machine, and single-RTX systems may have no iGPU or separate
-EDID driver. Aggregate consoles and multiple NVIDIA GPUs are not generated.
+the generic probe discovers the bus automatically and the generated profile pins it per
+machine. An optional `-TargetBus` constrains discovery and resumed captures.
+LOCAL discovery also accepts captured PNP0A03/PNP0A08 root identities and up to 16 PCI
+path nodes, pinning the complete ancestry and checking the exact PCI parent. This
+experimental bridge-chain support still requires per-machine validation.
+LOCAL discovery and generation can pin a unique target on any 16-bit PCI segment.
+Prepare, release and PCI access must match that segment as well as the captured bus;
+nonzero-segment operation is experimental and still needs physical validation.
+Single-RTX systems may have no iGPU or separate EDID driver on the non-aggregate path.
+Recognized AMI aggregate consoles with one or
+two display children can generate an experimental local profile and require their own
+prepare/release replay; this does not establish another hardware success. Multiple NVIDIA GPUs are not generated.
 Staging the unlock package needs `-StageUnlock`.
 
 ## License and attribution

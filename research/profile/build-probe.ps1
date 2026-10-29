@@ -141,7 +141,10 @@ try {
  if($Ad104ConsumersTest){$defines+='-DGU_AD104_CONSUMERS_TEST'}
  if($Ad104GopTest){$defines+='-DGU_AD104_GOP_TEST'}
  if($WindowsMbr){$defines+='-DGU_DIAGNOSTIC_MBR';if(!$Ad104Msi){$defines+='-DGU_USB_MEDIA'}}
- if($TargetBus -ne 1){$defines+=('-DGU_PROBE_BUS=0x{0:x}U' -f $TargetBus)}
+ $busMode='auto'
+ if($PSBoundParameters.ContainsKey('TargetBus') -or $Ad104Msi){
+  $defines+=('-DGU_PROBE_BUS=0x{0:x}U' -f $TargetBus);$busMode='explicit'
+ } else {$defines+='-DGU_PROBE_AUTO_BUS'}
  $objects=@()
  foreach($source in $sources) {
   $obj="$out/"+[IO.Path]::GetFileNameWithoutExtension($source)+'.obj'
@@ -159,8 +162,9 @@ try {
    CanReadGpuMmio=([bool]$Ad104DecodeReadTest -or !$Ad104Metadata);CanEnableLimitedDecode=[bool]$Ad104DecodeReadTest;CanDisableLimitedDecode=[bool]$Ad104DecodeOffTest;FwsecObservationOnly=[bool]$Ad104FwsecAuditTest;FwsecRamRehearsal=[bool]$Ad104FwsecRehearsalTest;FwsecSampledSignature=[bool]$Ad104FwsecSignatureTest;FalconObservation=[bool]$Ad104FalconObserveTest;FalconMailboxOnly=([bool]$Ad104FalconMailboxTest -and !$Ad104FalconCapsTest);FalconCapabilities=[bool]$Ad104FalconCapsTest;FalconCoreState=[bool]$Ad104FalconCoreTest;FalconBcrOnly=[bool]$Ad104FalconBcrTest;EntryInputAudit=[bool]$Ad104EntryInputsTest;CanReadBcr=([bool]$Ad104FalconCoreTest -and !$Ad104EntryInputsTest);CanReadRiscvCpuCtl=([bool]$Ad104FalconCoreTest -and !$Ad104FalconBcrTest -and !$Ad104EntryInputsTest);CanRecoverKnownObservationRefusal=[bool]$Ad104FalconRefusalTest;RecoveryRegisterReads=if($Ad104FalconRefusalTest){14}else{0};RefusalPathAdditionalReads=if($Ad104FalconRefusalTest){23}else{0};CanResetGpu=$false;CanReadDmaControl=([bool]$Ad104FalconObserveTest -and !$Ad104FalconMailboxTest);AdditionalMmioReads=if($Ad104EntryInputsTest){24}elseif($Ad104FalconBcrTest){26}elseif($Ad104FalconCoreTest){28}elseif($Ad104FalconCapsTest){22}elseif($Ad104FalconMailboxTest){16}elseif($Ad104FalconObserveTest){18}else{0};CanExecuteFirmware=$false;PromCaptureBytes=if($Ad104PromFullTest){1048576}else{0};PromHeaderBytes=if($Ad104PromHeaderTest){512}else{0};InterBatchDelayUs=if($Ad104DelayedReadTest){1000000}else{0};CanDereferenceRomImage=[bool]$Ad104FirmwareRom;
   WindowsBootIdentity=if($WindowsMbr){'exact-mbr-extent-and-boot-manager-hash'}else{'gpt-partition-guid'};
   CanUnlock=$false;CanDetach=([bool]$Ad104EdidTest -or [bool]$Ad104TextTest);WritesFirmwareVariables=$false;HardwareTested=$false;Defines=$defines
+  ProbeBusMode=$busMode;TargetBus=$(if($busMode -eq 'explicit'){$TargetBus}else{$null})
   EfiSha256=(Get-FileHash -LiteralPath "$out/BOOTX64.EFI").Hash.ToLowerInvariant();BuiltUtc=[DateTime]::UtcNow.ToString('o')
-   Sources=@(($sources+$auditDeps+@('diagnostic.h','media.h','probe.h','firmware-rom.h','ad104-preflight.h','ad104-edid.h','output-observation.h','pcd-producer.h','text-display.h','gop-step.h','edid-step.h','owner-child.h','owner-parent.h','parent-branch.h','decode-read.h','prom-full.h','falcon-observe.h','falcon-refusal.h','entry-inputs.h','platform-config.h')) | ForEach-Object {[ordered]@{Path=$_;Sha256=(Get-FileHash -LiteralPath $_).Hash.ToLowerInvariant()}})
+   Sources=@(($sources+$auditDeps+@('diagnostic.h','media.h','probe.h','firmware-rom.h','ad104-preflight.h','ad104-edid.h','output-observation.h','pcd-producer.h','text-display.h','gop-step.h','edid-step.h','owner-child.h','owner-parent.h','parent-branch.h','decode-read.h','prom-full.h','falcon-observe.h','falcon-refusal.h','entry-inputs.h','platform-config.h','../unlock/machine-profile.h','../unlock/gpu-family.h','../unlock/firmware-profile.h')) | ForEach-Object {[ordered]@{Path=$_;Sha256=(Get-FileHash -LiteralPath $_).Hash.ToLowerInvariant()}})
  } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath "$out/manifest.json" -Encoding utf8
  "Built $out/BOOTX64.EFI; CanDetach=$([bool]$Ad104EdidTest -or [bool]$Ad104TextTest); hardware untested."
 } finally {Pop-Location}

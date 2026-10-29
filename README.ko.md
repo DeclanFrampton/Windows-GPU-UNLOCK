@@ -24,10 +24,11 @@ PR에 남겨주세요. [커뮤니티 룰 — English](docs/DISCORD-RULES.en.md)�
 | GPU | 현재 상태 | 상세 조건 |
 |---|---|---|
 | **RTX 3060 12GB (GA104 / GA106)** | 실기기 성공 보고 · headless USB 전용 | [GA104](docs/COMPATIBILITY.ko.md#프로필-4-asus-prime-b660-plus-d4--rtx-3060-12gbheadless-usb) · [GA106](docs/COMPATIBILITY.ko.md#프로필-5-gigabyte-h610m-h--rtx-3060-12gb-ga106headless-usb) |
+| **RTX 3070 8GB (2484 / GA104)** | 기여자 로컬 USB 성공 보고 · 실험적 자동 프로필 | [정확한 조건](docs/COMPATIBILITY.ko.md#로컬-프로필-성공-보고) |
 | **RTX 3070 Ti 8GB** | 실기기 성공 보고 · 내부 headless | [지원 구성](docs/COMPATIBILITY.ko.md#프로필-2-asus-tuf-b660m-e-d4--rtx-3070-tiaggregate-console) |
-| **RTX 3080** | 이 포트의 전용 프로필 없음 · 상위 프로젝트 대상 | [프로젝트 출처](THIRD_PARTY_NOTICES.md) |
+| **RTX 3080** | 전용 프로필 없음 · Windows 화면 연결 연구 자료 제공 | [연구 관측](research/rtx3080/README.md) · [프로젝트 출처](THIRD_PARTY_NOTICES.md) |
 | **RTX 3090 FE 24GB** | 실기기 성공 기록 · 내부 headless · 기본 프로필 | [지원 구성](docs/COMPATIBILITY.ko.md#프로필-1-asus-tuf-b650m--rtx-3090-fe최초-검증) |
-| **RTX 3090 Ti 24GB** | 실기기 성공 보고 · headless USB 전용 | [지원 구성](docs/COMPATIBILITY.ko.md#프로필-3-gigabyte-x870-aorus-elite-wifi7--rtx-3090-tiheadless-usb) |
+| **RTX 3090 Ti 24GB** | 실기기 성공 보고 · 정확한 장비별 경로 확인 | [X870 USB](docs/COMPATIBILITY.ko.md#프로필-3-gigabyte-x870-aorus-elite-wifi7--rtx-3090-tiheadless-usb) · [B660M 내부](docs/COMPATIBILITY.ko.md#프로필-6-asus-tuf-b660m-e-d4--colorful-rtx-3090-ti내부) |
 
 정확한 빌드 프로필과 유지관리자·기여자의 시험 근거는 [호환성 문서](docs/COMPATIBILITY.ko.md)에
 정리했습니다. 실기기 결과는 보고 당시의 빌드에 해당합니다. 이후 main의 보강은
@@ -42,7 +43,7 @@ EFI 바이너리는 포함하지 않습니다.
 
 | 경로 | 화면·입력 조건 | 안내 |
 |---|---|---|
-| **내부 headless** | B650M/3090 FE 또는 B660M/3070 Ti 프로필; 모니터는 RTX, 도중 화면 제거, T/U/Enter 불필요 | [내부 headless 안내](docs/HEADLESS.ko.md) |
+| **내부 headless** | B650M/3090 FE 또는 B660M/3070 Ti·3090 Ti 프로필; 모니터는 RTX, 도중 화면 제거, T/U/Enter 불필요 | [내부 headless 안내](docs/HEADLESS.ko.md) |
 | **Headless USB** | 성공 보고가 있는 RTX 3060 / 3090 Ti 구성; FAT32 USB에 프로필별 wrapper·child 배치 | [Headless USB 안내 — 영어](docs/HEADLESS-USB.en.md) |
 | 기존 내부 AMD 화면 manual / Auto | 최초 B650M 프로필, 메인보드/iGPU 화면 유지, manual은 U 필요 | [기존 내부 부팅 안내](docs/INTERNAL-BOOT.ko.md) |
 | 기존 USB manual | 최초 AMD/iGPU 화면 프로필, U 한 번, 리셋 없이 Boot Override로 Windows | [기존 USB 안내](docs/GUIDE.ko.md) |
@@ -161,6 +162,10 @@ python -I research/profile/check-compatibility.py "D:\RTX3090-UNLOCK" --lang ko
 
 ## 구현과 경계
 
+[GPU 계열 공통화](docs/GPU-FAMILIES.ko.md)로 GA102·GA104·GA106 특성과 동일한
+펌웨어 템플릿을 공유하고, 정확한 카드·플랫폼 고정값은 분리합니다.
+기존 프로필 이름과 지원 범위는 유지합니다.
+
 Headless는 별도 컴파일 프로필입니다. 정확한 GPU·PROM·PCI 상태·펌웨어 드라이버 코드·
 소유권·cold 상태·불변 selector와 정리 검사를 유지합니다. Child는 파일에만 기록하고
 물리 GOP 재등장이나 콘솔·입력 인터페이스 변경을 거부합니다. 일반 빌드의 AMD 화면
@@ -179,12 +184,22 @@ VBIOS 플래싱이나 Windows 드라이버 교체는 절차에 포함하지 않�
 [포팅 기준](docs/PORTABILITY.en.md)을 참고하세요.
 검증된 하드웨어 범위 안의 새 PC는 [로컬 프로필 생성 절차](docs/NEW-MACHINE.en.md)를
 이용할 수 있습니다. 이 실험적 절차는 NVIDIA 디스플레이 장치 정보를 수집하되,
-상세 GPU 읽기는 검토된 PCI·BAR 상태의 단일 RTX 3090 / 3090 Ti로 제한합니다.
+상세 GPU 읽기는 검토된 PCI·BAR 상태의 단일 RTX 3090 / 3090 Ti, RTX 3060 12GB 또는 RTX 3070 `2484` 식별자로 제한합니다.
 로컬 프로필 생성만으로 실기기 검증 프로필이 추가되지는 않습니다. USB 쓰기 빌드에는
-host 작업 19개(EDID 드라이버가 없으면 해제 재현을 포함한 20개) 통과와
+입력 정책 및 콘솔 구성별 전체 드라이버 해제 재현을 포함한 host 작업 21개 통과와
 프로필·시험 자료·빌드 입력 일치가 필요하며, 실기기 검증은 별도입니다.
-이 범위 안에서 PCI 버스 위치를 장비별로 고정하고, 내장 그래픽이나 별도 EDID 드라이버가
-없는 단일 RTX 구성을 처리합니다. aggregate 콘솔과 여러 NVIDIA GPU 구성은 생성하지 않습니다.
+이 범위 안에서 진단기가 PCI 버스 위치를 자동 탐지하고 생성한 프로필에 고정합니다.
+선택 옵션 `-TargetBus`를 지정하면 탐지와 기존 캡처로 재개할 때 모두 해당 버스만 허용합니다.
+로컬 탐색은 PNP0A03/PNP0A08 루트와 최대 16개 PCI 경로 노드를 처리하며, 전체 경로와
+PCI 부모 위치를 고정·재검사합니다. 이 실험적 브리지 경로 지원도 장비별 검증이 필요합니다.
+로컬 탐색과 프로필 생성은 16비트 PCI 세그먼트 어디에 있는 단일 대상을 고정할 수 있습니다.
+준비·해제·PCI 접근에서도 캡처한 세그먼트와 버스가 일치해야 합니다.
+세그먼트가 0이 아닌 구성은 실험적 지원이며 실기기 검증이 필요합니다.
+내장 그래픽이나 별도 EDID 드라이버가
+없는 단일 RTX 구성을 처리합니다(EDID 생략은 비 aggregate 경로만 가능).
+인식 가능한 AMI aggregate 콘솔도 디스플레이 자식 핸들 1~2개 구성에서 실험적 로컬
+프로필을 생성하며 별도 준비·해제 재현 시험을 요구합니다. 이는 새 실기기 성공 보고가 아닙니다.
+여러 NVIDIA GPU 구성은 아직 생성하지 않습니다.
 언락 패키지를 USB에 복사하려면 `-StageUnlock`을 명시해야 합니다.
 
 ## 라이선스와 출처
