@@ -82,19 +82,22 @@ class FamilyTests(unittest.TestCase):
                 self.assertNotEqual(done.returncode, 0)
 
     def test_legacy_local_headers_keep_all_admitted_ga102_combinations(self):
-        for board, memory, no_edid in itertools.product((0x220410de, 0x220310de), (0x6000, 0x5ff4), (0, 1)):
+        cases = list(itertools.product((0x220410de, 0x220310de), (0x6000, 0x5ff4), (0, 1)))
+        cases += [(0x220a10de, 0x3000, flag) for flag in (0, 1)]
+        for board, memory, no_edid in cases:
             with self.subTest(board=board, memory=memory, no_edid=no_edid), tempfile.TemporaryDirectory() as directory:
                 folder = Path(directory)
                 local = folder / 'profile-local.h'
+                nv_version = '60010' if board == 0x220a10de else '60009'
                 local.write_text(f'#define GU_LOCAL_PROFILE_GENERATOR 1\n#define GU_CHIP_ID 0xb72000a1U\n'
                                  f'#define GU_BOARD_ID {board}U\n#define GU_DEVICE_MEMORY_SIZE {memory}U\n'
                                  f'#define GU_TARGET_BUS 0x2bU\n#define GU_NO_EDID_DRIVER {no_edid}\n'
-                                 '#define GU_NVGOP_VERSION 0x60009U\n#define GU_NVGOP_TEXT_SHA256 "capture-specific"\n')
+                                 f'#define GU_NVGOP_VERSION 0x{nv_version}U\n#define GU_NVGOP_TEXT_SHA256 "capture-specific"\n')
                 overlay = folder / 'overlay.json'
                 overlay.write_text(json.dumps({'version': 0, 'roots': [{'type': 'file',
                     'name': str(ROOT / 'profile-local.h'), 'external-contents': str(local), 'use-external-name': False}]}))
                 source = ('#include "machine-profile.h"\n_Static_assert(GU_GPU_FAMILY == 102, "family");\n'
-                          '_Static_assert(GU_NVGOP_VERSION == 0x60009U, "captured firmware");\n'
+                          f'_Static_assert(GU_NVGOP_VERSION == 0x{nv_version}U, "captured firmware");\n'
                           '#ifdef GU_FIRMWARE_PROFILE\n#error LOCAL inherited fixed firmware\n#endif\n')
                 if no_edid:
                     source += '_Static_assert(GU_EDID_IMAGE_SIZE == 0, "no EDID");\n'

@@ -27,7 +27,7 @@ class FamilyAdmissionTests(unittest.TestCase):
                     (0x248410de, 0xb74000a1, 0x2000), (0x24c910de, 0xb74000a1, 0x2000), (0x220a10de, 0xb72000a1, 0x3000)}
         for board, chip, memory in itertools.product(
                 (0x220410de, 0x220310de, 0x248710de, 0x250410de, 0x248410de, 0x24c910de, 0x248210de, 0x220a10de, 0x221610de, 0x999910de),
-                (0xb72000a1, 0xb74000a1, 0xb76000a1, 0xb76000a2), (0x6000, 0x5ff4, 0x3000, 0x2000)):
+                (0xb72000a1, 0xb74000a1, 0xb76000a1, 0xb76000a2), (0x6000, 0x5ff4, 0x3000, 0x2800, 0x2000)):
             text = data.synthetic_capture(board=board, chip=chip, memory=memory)
             with self.subTest(board=board, chip=chip, memory=memory):
                 if (board, chip, memory) in accepted:
