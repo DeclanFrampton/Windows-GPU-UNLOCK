@@ -1,6 +1,6 @@
 # Issue label plan
 
-Refreshed for all 110 current issues after the repository transfer to `windows-GPU-UNLOCK/Windows-GPU-UNLOCK` (repository ID 1426503435). Triage invitation accepted and effective access verified. Application results are recorded separately; this plan is not evidence of completed writes.
+Refreshed for all 110 current issues after the repository transfer to `windows-GPU-UNLOCK/Windows-GPU-UNLOCK` (repository ID 1426503435). Triage invitation accepted and effective access verified. Application completed and independently verified: 110 issues, 129 label additions (52 documentation, 61 question, 14 enhancement, 2 bug; labels overlap). No planned labels missing, existing labels removed, or issue title/body/state changes. See application-result.json for the verification record.
 
 Only existing work-type labels are proposed. No support certification, issue state/body/comment changes or label removal is included. Preview with `./Apply-IssueLabels.ps1`; use `-Apply` only after reviewing this plan. It checks repository identity, permission, label availability and current issue title/body hashes before writes. Changed issues stop preflight; an API failure can leave partial additions. Rerunning skips existing labels.
 

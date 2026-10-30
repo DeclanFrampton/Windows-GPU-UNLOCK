@@ -1,0 +1,17 @@
+{
+  "repository": "windows-GPU-UNLOCK/Windows-GPU-UNLOCK",
+  "repository_id": 1426503435,
+  "verified_utc": "2026-10-30T12:54:30.575101+00:00",
+  "issues_verified": 110,
+  "label_assignments": {
+    "enhancement": 14,
+    "question": 61,
+    "documentation": 52,
+    "bug": 2
+  },
+  "labels_added": 129,
+  "missing_planned_labels": [],
+  "preexisting_labels_removed": [],
+  "titles_bodies_states_changed": [],
+  "hardware_qualification_claimed": false
+}

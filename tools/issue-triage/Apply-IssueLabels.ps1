@@ -60,4 +60,4 @@ foreach ($change in $pending) {
         if ($LASTEXITCODE -ne 0) { throw 'Label update failed. Earlier successful additions remain; rerun after resolving access.' }
     }
 }
-Write-Output 'Finished. Existing labels were preserved; no issues were closed or edited.'
+Write-Output 'Finished. Existing labels were preserved; no issue titles, bodies or states were changed.'
