@@ -143,7 +143,18 @@ function Copy-EvgaPackageFile([string]$Source,[string]$Target,[string]$Expected)
  try {$inputStream=[IO.File]::OpenRead($Source);$outputStream=[IO.File]::Open($Target,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None);$inputStream.CopyTo($outputStream);$outputStream.Flush($true)}finally{if($outputStream){$outputStream.Dispose()};if($inputStream){$inputStream.Dispose()}}
  if((Get-EvgaPackageHash $Target) -cne $Expected){throw 'Copy readback differs; preserve partial state'}
 }
-function Get-EvgaProfileNextSlot([string]$StateDirectory,$Installation){
+function Assert-EvgaReviewedEvp10Retry([string]$StateDirectory,$Attempt,$Result){
+ if($Attempt.AttemptSlot -ne 10 -or $Attempt.Run -cne 'EVP10' -or $Attempt.Layout -cne 'SharedEsp' -or $Result.AttemptSlot -ne 10 -or $Result.Success -ne $false -or $Result.Cancelled -ne $false){throw 'Not the reviewed EVP10 refusal'}
+ $cleanup=Get-Content -LiteralPath (Join-Path $StateDirectory 'reviewed-evp10-cleanup-result.json') -Raw | ConvertFrom-Json
+ if($cleanup.schema -cne 'reviewed-evp10-cleanup-v1' -or $cleanup.cleanup_completed -ne $true -or $cleanup.failed_attempt_preserved -ne $true -or $cleanup.usb_entry_preserved -ne $true -or $cleanup.boot_order_written -ne $false -or $cleanup.gpu_accessed -ne $false -or $cleanup.rearm_authorized -ne $false){throw 'Reviewed cleanup confirmation missing'}
+ $hashes=@{
+  'EVP10.TXT'='bbd5c27a727a9835f7ff886551bebf298509759e211bc3dda66c81158b96eaa5'
+  'EVP10.ARMED'='7414f7145d718a42262f68840503473f597771cda90082a09d853616daa53264'
+  'EVGA-UNLOCK10.ARMED'='c81ed25e0ed465df4a3813ac40781f6d0fb46f06fe899d4ed4fb6b4666c70aca'
+ }
+ foreach($name in $hashes.Keys){if((Get-EvgaPackageHash (Join-Path $Attempt.TargetRoot ('RTX3090-UNLOCK/'+$name))) -cne $hashes[$name]){throw 'Reviewed failed evidence changed'}}
+}
+function Get-EvgaProfileNextSlot([string]$StateDirectory,$Installation,[switch]$ReviewedEvp10Retry){
  $files=@(Get-ChildItem -LiteralPath $StateDirectory -File -Filter 'attempt-*.json')
  $slots=@()
  foreach($file in $files){if($file.Name -cnotmatch '^attempt-([0-9]{2})\.json$'){throw 'Unexpected attempt journal'};$slots+=,[int]$Matches[1]}
@@ -154,10 +165,16 @@ function Get-EvgaProfileNextSlot([string]$StateDirectory,$Installation){
   $resultPath=Join-Path $StateDirectory ('result-{0:D2}.json' -f $last)
   if(!(Test-Path -LiteralPath $resultPath)){throw 'Collect the previous attempt before rearming. If it failed/hung, report it; never reset its markers.'}
   $result=Get-Content -LiteralPath $resultPath -Raw | ConvertFrom-Json
-  if($result.Success -ne $true -or $result.CleanupCompleted -ne $true -or $result.AttemptSlot -ne $last){throw 'Prior attempt failed, was cancelled or remains incomplete; rearm refused'}
-  $proof=Assert-EvgaPackageResult $attempt.TargetRoot $last $attempt.Run
-  if($proof.LogSha256 -cne $result.LogSha256 -or $proof.GateSha256 -cne $result.GateSha256 -or $proof.GpuMarkerSha256 -cne $result.GpuMarkerSha256){throw 'Prior evidence changed after collection'}
+  if($ReviewedEvp10Retry){
+   if($last -ne 10){throw 'Reviewed retry applies only after EVP10'}
+   Assert-EvgaReviewedEvp10Retry $StateDirectory $attempt $result
+  }else{
+   if($result.Success -ne $true -or $result.CleanupCompleted -ne $true -or $result.AttemptSlot -ne $last){throw 'Prior attempt failed, was cancelled or remains incomplete; rearm refused'}
+   $proof=Assert-EvgaPackageResult $attempt.TargetRoot $last $attempt.Run
+   if($proof.LogSha256 -cne $result.LogSha256 -or $proof.GateSha256 -cne $result.GateSha256 -or $proof.GpuMarkerSha256 -cne $result.GpuMarkerSha256){throw 'Prior evidence changed after collection'}
+  }
  }
  if($last -ge 99){throw 'Attempt slots exhausted'}
+ if($ReviewedEvp10Retry -and $last -ne 10){throw 'No reviewed failed slot 10'}
  return $last+1
 }

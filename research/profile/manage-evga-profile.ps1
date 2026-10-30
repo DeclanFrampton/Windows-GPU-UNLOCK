@@ -5,9 +5,10 @@ param([ValidateSet('Install','Rearm','Collect','Cancel','Status')][string]$Actio
  [string]$StateDirectory='E:\UNLOCK\EVGA-PROFILE',
  [guid]$WindowsEspGuid='c36c3e86-02aa-4f76-af1b-96e327f9d1c1',
  [ValidatePattern('^[A-Za-z]$')][string]$Drive='D',[ValidatePattern('^[A-Za-z]$')][string]$TargetDrive='U',
- [string]$Assets,[string]$EvidenceDirectory,[string]$PackageDirectory,
+ [string]$Assets,[string]$EvidenceDirectory,[string]$PackageDirectory,[switch]$ReviewedEvp10Retry,
  [string]$Clang='C:/Program Files/LLVM/bin/clang.exe',[string]$LldLink='C:/Program Files/LLVM/bin/lld-link.exe',[string]$Python='python')
 $ErrorActionPreference='Stop'
+if($ReviewedEvp10Retry -and $Action -ne 'Rearm'){throw 'Reviewed EVP10 retry requires explicit Rearm'}
 . (Join-Path $PSScriptRoot 'shared-esp-firmware-lib.ps1')
 . (Join-Path $PSScriptRoot 'evga-package-lib.ps1')
 $repo=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
@@ -140,7 +141,11 @@ try {
   $slot=$seed+1
  }else{
   if($config.CoordinatorUniqueId -cne $uv.UniqueId -or $config.TargetUniqueId -cne $targetVolume.UniqueId -or [guid]$config.UnlockPartitionGuid -ne $unlockGuid){throw 'Installation volume identity changed'}
-  $slot=Get-EvgaProfileNextSlot $stateDir $config
+  $slot=Get-EvgaProfileNextSlot $stateDir $config -ReviewedEvp10Retry:$ReviewedEvp10Retry
+  if($ReviewedEvp10Retry){
+   $prior=Get-Content -LiteralPath (Join-Path $stateDir 'attempt-10.json') -Raw | ConvertFrom-Json
+   if($Layout -cne 'SharedEsp' -or $null -ne (& $read $prior.OptionName)){throw 'Prior reviewed option remains or layout differs'}
+  }
  }
  $run='EVP{0:D2}' -f $slot
  $reservation=Join-Path $usbCapture ('EVGA-UNLOCK-RESERVED'+$slot+'.ARMED')
