@@ -1,0 +1,19 @@
+{
+  "schema": "evga-sulk02-review-v1",
+  "archive_sha256": "b6f2d61b5cff8b0f60b633f1e53ce181595029d28245bdbfb0fb9719a445ca40",
+  "log_sha256": "38963300821c434cbffd4a076286edf07799b738d0e042378d00492246b66db4",
+  "capture_count": 2,
+  "events": {
+    "evga-unlock-slot-09": true,
+    "evga-unlock-transaction-return": true,
+    "evga-unlock-assets-released": true,
+    "evga-unlock-close-return": true,
+    "evga-text-stop-ready-windows": true
+  },
+  "operator_reported_normal_windows_boot": true,
+  "operator_reported_confirmation_screen": true,
+  "usb_absence_explicitly_confirmed": false,
+  "post_sulk02_benchmark_reviewed": false,
+  "cleanup_completed": false,
+  "cleanup_refusal": "BootOrder changed; preserve backup and stop"
+}

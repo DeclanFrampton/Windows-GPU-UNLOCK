@@ -22,7 +22,7 @@ if($Action -eq 'Collect'){
  Compress-Archive -LiteralPath $out -DestinationPath ($out+'.zip') -ErrorAction Stop
  $cleanup=$null;$cleanupError=$null
  try {$cleanup=& $registration -Action Cleanup -StateDirectory $StateDirectory | ConvertFrom-Json}catch{$cleanupError=$_.Exception.Message}
- [ordered]@{evidence_zip=($out+'.zip');cleanup=$cleanup;cleanup_error=$cleanupError;windows_return_requires_operator_report=$true;next='Send ZIP, cleanup output/error and direct/manual Windows result; preserve all receipts, reservations and backups. Do not repeat or guess firmware changes.'} | ConvertTo-Json -Depth 6
+ [ordered]@{evidence_zip=($out+'.zip');cleanup=$cleanup;cleanup_error=$cleanupError;windows_return_requires_operator_report=$true;next='This boot test is finished. Do NOT run Cancel or repeat EFI. Send this ZIP and direct/manual Windows result. For the next performance measurement run ./research/profile/benchmark-shared-esp-second.ps1 without another reboot. Report any reboot since SULK02; cleanup errors need separate review.'} | ConvertTo-Json -Depth 6
  return
 }
 # Reuse registration backup validation and exact current-state checks before arming.
