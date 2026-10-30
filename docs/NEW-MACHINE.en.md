@@ -1,9 +1,10 @@
 # Bringing up a new machine (local profile)
 
-**English** | [README](../README.md) | [Headless USB guide](HEADLESS-USB.en.md) | [Portability](PORTABILITY.en.md)
+**English** | [한국어](NEW-MACHINE.ko.md) | [README](../README.md) | [Headless USB guide](HEADLESS-USB.en.md) | [Portability](PORTABILITY.en.md)
 
-A reviewed profile in `internal-boot/unlock/machine-profile.h` exists for each
-hardware-verified machine. For any other motherboard/BIOS/card, this pipeline builds a
+The six fixed profiles in `internal-boot/unlock/machine-profile.h` cover their
+recorded machines; other successful setups may use generated LOCAL profiles.
+For any other motherboard/BIOS/card, this pipeline builds a
 **local profile** for your machine only: the same compile-time constants as a reviewed
 profile, derived from read-only captures of your own machine, never committed, and
 write-eligible only after your machine's own host tests pass against exactly those bytes.
@@ -18,8 +19,8 @@ reviewed profiles have proven on hardware. There is no override flag. Today that
 
 | Requirement | Why |
 |---|---|
-| RTX 3090 / 3090 Ti `220410de` / `220310de`, RTX 3060 12GB `248710de` / `250410de`, RTX 3060 Ti 8GB `24c910de`, or RTX 3070 8GB `248410de` | exact reviewed PCI-ID/chip/VRAM combinations are required |
-| GA102 `b72000a1` with `6000` / `5ff4` MiB; GA104 `b74000a1` with `248710de` + `3000` MiB or `248410de` / `24c910de` + `2000` MiB; GA106 `b76000a1` with `250410de` + `3000` MiB | these are coupled tuples, not independent choices; class/revision remains `030000a1` |
+| RTX 3090 / 3090 Ti `220410de` / `220310de`, RTX 3060 12GB `248710de` / `250410de`, RTX 3060 Ti 8GB `24c910de`, RTX 3070 8GB `248410de`, or RTX 3080 12GB `220a10de` | exact reviewed PCI-ID/chip/VRAM combinations are required |
+| GA102 `b72000a1` with `220410de` / `220310de` + `6000` / `5ff4` MiB or `220a10de` + `3000` MiB; GA104 `b74000a1` with `248710de` + `3000` MiB or `248410de` / `24c910de` + `2000` MiB; GA106 `b76000a1` with `250410de` + `3000` MiB | these are coupled tuples, not independent choices; class/revision remains `030000a1` |
 | exactly one NVIDIA display controller, at a captured 16-bit PCI segment, device 0, function 0 on a nonzero PCI bus (reviewed profiles: segment `0000`, bus `01`) | PCI identity and the captured segment/bus remain independently verified; other segments are experimental |
 | ACPI PNP0A03 or PNP0A08 root, a captured root UID, 1–16 legal PCI path nodes ending at `Pci(0,0)`, one ADR and an end node | LOCAL pins the complete ancestry; display paths are bounded to 120 bytes and the PCI parent must consume exactly the controller prefix |
 | at most one integrated (non-NVIDIA) display controller; the RTX owns the only physical GOP | a recognized pathless, zero-framebuffer AMI aggregate GOP is allowed; a second physical GOP is refused |
@@ -33,7 +34,8 @@ reviewed profiles have proven on hardware. There is no override flag. Today that
 
 A matching card on an AMI BIOS board, with or without an iGPU, is a candidate. Anything
 else is refused with the reason. The RTX 3060 tuples require nvgop `60010` with the exact
-reviewed `.text` hash in `proven.json`. The GA104 evidence is an aggregate B660-PLUS
+reviewed `.text` hash in `proven.json`. The RTX 3080 12GB `220a` tuple also
+requires this `60010` code; [issue #73 evidence and limitations](../evidence/b550-3080-12gb-local/README.md). The GA104 evidence is an aggregate B660-PLUS
 machine. LOCAL aggregate and non-aggregate combinations still need their own replay
 and physical validation; generation is not another success report. The GA106
 evidence is one non-aggregate H610M success. Other boards and current builds still

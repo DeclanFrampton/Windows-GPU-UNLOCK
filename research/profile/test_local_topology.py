@@ -100,7 +100,7 @@ def synthetic_capture(*, bus=0x2b, igpu=False, no_edid=True, children=2, command
         lines.append('pci-bar0-resource raw='+resource.hex())
     cold = [chip, 0xffffff8f, 0x8b8f, 0x3ff, 0x10, 0, 0x03000062, 6, memory]
     lines += [f'mmio off=0x{at:08x} status=0x0000000000000000 value=0x{value:08x}' for at, value in zip(mp.COLD, cold)]
-    nv_size,nv_stop,nv_version=(0x26ae0,0x678,0x60010) if board in (0x220310de,0x248710de,0x250410de) else (0x2be40,0x698,0x60009)
+    nv_size,nv_stop,nv_version=(0x26ae0,0x678,0x60010) if board in (0x220310de,0x248710de,0x250410de,0x220a10de) else (0x2be40,0x698,0x60009)
     if board==0x24c910de:nv_size,nv_stop,nv_version=0x26e00,0x678,0x60015
     out_size,out_stop,gfx_size,gfx_stop=(0x6a40,0x104c,0x3bc0,0xb2c) if aggregate else (0x60c0,0x1290,0x39e0,0xa3c)
     bindings = [(4, 10, 0x400000, out_size, out_stop, 0x10, 3, mp.OUT_FILE),

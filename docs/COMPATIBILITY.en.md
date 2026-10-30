@@ -2,6 +2,8 @@
 
 **English** | [한국어](COMPATIBILITY.ko.md)
 
+**2026-10-29 issue audit:** [reported setups and profile decisions](CONFIRMED-SETUPS.en.md) · [all 105 issues](ISSUE-AUDIT.en.md). The six fixed profiles below are not the full list of reported LOCAL successes.
+
 The current source contains six exact-machine profiles with recorded hardware
 results: three internal headless configurations and three headless USB configurations.
 The original B650M run was performed by the maintainer; B660M, X870 and B660-PLUS evidence
@@ -139,8 +141,8 @@ sibling, with both monitors connected as captured. Other RTX 3060 variants are n
 
 Use `research/headless/build-usb.ps1 -HardwareProfile b660plus-3060` and the
 [USB guide](HEADLESS-USB.en.md). Internal ESP installers do not support this profile;
-its write-build gate rejects non-USB builds. It does not widen generic deep capture
-or the GA102-only local-profile generator.
+its write-build gate rejects non-USB builds. It does not make the fixed profile portable. The separate LOCAL generator now
+admits reviewed GA102/GA104/GA106 tuples and derives per-machine pins from captures.
 
 The contributor reports two full-shutdown USB boots with display restoration and
 direct Windows start. On original revision `60ae7e4`, the same-machine locked →
@@ -162,7 +164,8 @@ This differs from Profile 4's GA104 chip and aggregate console.
 
 Build with `research/headless/build-usb.ps1 -HardwareProfile h610m-3060`. Only the
 [headless USB route](HEADLESS-USB.en.md) is shipped; internal write builds are rejected.
-The profile does not widen generic discovery or the GA102 local-profile generator.
+The fixed profile does not make generic discovery or LOCAL admission unconditional;
+the separate generator checks reviewed PCI/chip/memory and driver tuples.
 
 The contributor reports one clean transaction, direct Windows entry and both displays
 restored. An earlier boot without the RTX GOP was refused before release. Matched
