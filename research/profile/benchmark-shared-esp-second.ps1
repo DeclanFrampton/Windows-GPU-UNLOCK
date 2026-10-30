@@ -1,5 +1,5 @@
 # Run the existing reviewed benchmark and package its output. No firmware cleanup or reboot.
-param([string]$BenchmarkDirectory=(Join-Path $PSScriptRoot '../../benchmark'))
+param([string]$BenchmarkDirectory=(Join-Path $PSScriptRoot '../../benchmark'),[ValidatePattern('^(SULK02|EVP[0-9]{2})$')][string]$RunLabel='SULK02')
 $ErrorActionPreference='Stop'
 $root=[IO.Path]::GetFullPath($BenchmarkDirectory)
 $exe=Join-Path $root 'bin/compute-benchmark-3090.exe'
@@ -18,6 +18,6 @@ foreach($name in @('build-manifest.json','runtime-verification.json')){
  try {$inputStream=[IO.File]::OpenRead($source);$outputStream=[IO.File]::Open($target,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None);$inputStream.CopyTo($outputStream);$outputStream.Flush($true)}finally{if($outputStream){$outputStream.Dispose()};if($inputStream){$inputStream.Dispose()}}
  if((Get-FileHash -LiteralPath $source).Hash -ine (Get-FileHash -LiteralPath $target).Hash){throw 'Provenance copy differs; preserve output'}
 }
-$zip=$run+'-SULK02-benchmark.zip'
+$zip=$run+'-'+$RunLabel+'-benchmark.zip'
 Compress-Archive -LiteralPath $run -DestinationPath $zip -ErrorAction Stop
-[ordered]@{benchmark_zip=$zip;firmware_changed=$false;next='Send this ZIP. Do not run Cancel, rerun EFI or reboot for this step. Report if Windows has rebooted since SULK02.'} | ConvertTo-Json
+[ordered]@{benchmark_zip=$zip;firmware_changed=$false;next=('Send this ZIP. Do not run Cancel, rerun EFI or reboot for this step. Report if Windows has rebooted since '+$RunLabel+'.')} | ConvertTo-Json

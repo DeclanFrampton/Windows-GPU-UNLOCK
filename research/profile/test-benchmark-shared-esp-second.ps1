@@ -1,4 +1,5 @@
 # Package orchestration only; synthetic runner and executable hash. No GPU or firmware access.
+param([string]$RunLabel='SULK02')
 $ErrorActionPreference='Stop'
 $fixture=Join-Path $PSScriptRoot ('build/benchmark-package-'+[guid]::NewGuid().ToString('N'))
 [void][IO.Directory]::CreateDirectory((Join-Path $fixture 'bin'))
@@ -18,7 +19,8 @@ function Get-FileHash {param([string]$LiteralPath)
  Microsoft.PowerShell.Utility\Get-FileHash -LiteralPath $LiteralPath
 }
 $entry=Join-Path $PSScriptRoot 'benchmark-shared-esp-second.ps1'
-$result=& $entry -BenchmarkDirectory $fixture | ConvertFrom-Json
+$result=& $entry -BenchmarkDirectory $fixture -RunLabel $RunLabel | ConvertFrom-Json
+if(!$result.benchmark_zip.EndsWith(('-'+$RunLabel+'-benchmark.zip'))){throw 'Incorrect run label'}
 if(!(Test-Path -LiteralPath $result.benchmark_zip) -or $result.firmware_changed){throw 'Package did not finish'}
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $zip=[IO.Compression.ZipFile]::OpenRead($result.benchmark_zip)
