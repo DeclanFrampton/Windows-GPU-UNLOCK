@@ -12,8 +12,10 @@
   },
   "operator_reported_normal_windows_boot": true,
   "operator_reported_confirmation_screen": true,
-  "usb_absence_explicitly_confirmed": false,
-  "post_sulk02_benchmark_reviewed": false,
+  "usb_absence_explicitly_confirmed": true,
+  "post_sulk02_benchmark_reviewed": true,
   "cleanup_completed": false,
-  "cleanup_refusal": "BootOrder changed; preserve backup and stop"
+  "cleanup_refusal": "BootOrder changed; preserve backup and stop",
+  "operator_confirmed_shift_g": true,
+  "operator_confirmed_no_reboot_before_benchmark": true
 }

@@ -2,18 +2,27 @@
 
 [한국어](SULK02-RESULT.ko.md)
 
-The uploaded SULK02 log records slot 9, successful transaction return, asset release, close, Windows-ready and two complete captures. Movian reports normal Windows boot and the expected confirmation screen. [Sanitized checks and hashes](sulk02-result.json). Explicit USB-absence confirmation and the same-session benchmark are still needed before claiming the complete USB-free performance result.
+The uploaded SULK02 log records slot 9, successful transaction return, asset release, close, Windows-ready and two complete captures. Movian reports normal Windows boot and the expected confirmation screen, and explicitly confirms USB was absent, Shift+G was used and no reboot occurred before the benchmark. [Sanitized checks and hashes](sulk02-result.json).
+
+The completed benchmark passes the offline completion, protocol, timing and identity checks. Its recorded artifact/runtime/settings context equals the baseline. [Sanitized benchmark review](sulk02-benchmark.json).
+
+| Mode | Baseline TFLOPS | SULK02 TFLOPS | Change |
+| --- | ---: | ---: | ---: |
+| FP32 pedantic | 26.379272 | 26.489006 | +0.42% |
+| FP16 tensor | 64.527754 | 123.248599 | +91.00% |
+| BF16 tensor | 64.558792 | 123.361880 | +91.08% |
+| TF32 tensor | 32.982266 | 64.159053 | +94.53% |
+
+This supports attended USB-free unlock on the reviewed machine. Session timing and USB absence are operator-reported, not independent attestation. Manual tuning was not freshly reconfirmed; the recorded settings match. These GEMM results do not establish all-workload gains, complete numerical correctness or long-term stability. The reusable profile is not finished while cleanup remains blocked.
 
 Collection created the evidence ZIP, but cleanup refused with `BootOrder changed; preserve backup and stop`. Cleanup has not completed. The current order and reason for the change have not been inspected; do not assume the earlier audit's cause applies here. Preserve the private backup and temporary firmware entry. Do not retry cleanup or EFI.
 
-**Next: benchmark. Do not run Cancel.** Cancel was an alternative for before boot, not a required step afterward. Update the branch, close GPU workloads, keep settings unchanged, and run this one command from the repository root:
+**Next: inspect the changed boot entries. Do not run Cancel or repeat the benchmark/EFI.** Update the branch and run this one command in administrator PowerShell from the repository root:
 
 ```powershell
-./research/profile/benchmark-shared-esp-second.ps1
+./research/profile/inspect-shared-esp-firmware-diff.ps1
 ```
 
-This uses the original executable pinned to the reviewed baseline, runs the existing three-trial/four-mode benchmark and creates one ZIP including result provenance. It does not rebuild, change firmware/settings, clean up or reboot. Increased GPU load/heat or a driver/application crash is possible. On error, send the error; do not rebuild or automatically retry.
+Send the JSON or error. The command defaults to the existing `E:\UNLOCK\ESP-SECOND02` backup and reads current firmware variables only. It does not clean up, change settings, execute GPU work or reboot. A RAM-native fixture verified added/missing-entry reporting and zero firmware writes. Actual changed entries remain unknown until this output arrives.
 
-Send the ZIP path printed at the end, confirm whether USB was unplugged during the SULK02 boot, and report any reboot since that test. Do not reboot before this measurement. If a reboot already happened, report it; the current-state benchmark can still be collected but cannot be called same-session SULK02 evidence.
-
-Local packaging checks passed with a synthetic runner: ZIP/provenance creation, changed-executable refusal and stale-result refusal. No GPU workload or native firmware API was run locally. Firmware cleanup will be handled separately after inspecting the changed state.
+Local benchmark packaging checks previously passed with a synthetic runner. The performance data above came from the contributor, not local hardware execution. Firmware cleanup will be handled separately after inspecting the changed state.

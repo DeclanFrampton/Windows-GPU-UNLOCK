@@ -1,10 +1,14 @@
-# Read-only firmware comparison for a refused ESP-ONCE01 cleanup.
-param([Parameter(Mandatory)][string]$StateDirectory)
+# Read-only firmware comparison; defaults to the current SULK02 recovery backup.
+param([string]$StateDirectory='E:\UNLOCK\ESP-SECOND02')
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'shared-esp-firmware-lib.ps1')
 $backup=Join-Path ([IO.Path]::GetFullPath($StateDirectory)) 'firmware-backup.json'
 $s=Get-Content -LiteralPath $backup -Raw | ConvertFrom-Json
-if($s.Schema -ne 'shared-esp-audit-once-v1' -or $s.OptionName -notmatch '^Boot7E[0-9A-F]{2}$'){throw 'Unexpected backup schema or option'}
+if($s.Schema -notin @('shared-esp-audit-once-v1','shared-esp-second-register-v1') -or $s.OptionName -cnotmatch '^Boot7E[0-9A-F]{2}$' -or $s.OptionName -cne ('Boot{0:X4}' -f [int]$s.OptionNumber)){throw 'Unexpected backup schema or option'}
+if($s.Schema -eq 'shared-esp-second-register-v1'){
+ $decoded=Read-SharedEspLoadOption $s.Option
+ if($decoded.Path -cne '\EFI\EVGA-SHARED-LAUNCH02.EFI' -or $decoded.PartitionGuid -ne [guid]'c36c3e86-02aa-4f76-af1b-96e327f9d1c1'){throw 'Unexpected SULK02 recovery option'}
+}
 if(-not ('SharedEspFirmware.Native' -as [type])){Add-Type -Path (Join-Path $PSScriptRoot 'shared-esp-firmware-native.cs')}
 function DescribeOption($v){
  if($null -eq $v){return $null}
