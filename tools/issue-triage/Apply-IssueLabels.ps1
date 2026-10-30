@@ -2,7 +2,7 @@
 [CmdletBinding(SupportsShouldProcess)]
 param([switch]$Apply)
 $ErrorActionPreference = 'Stop'
-$repository = 'impacifist/Windows-GPU-UNLOCK'
+$repository = 'windows-GPU-UNLOCK/Windows-GPU-UNLOCK'
 $plan = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'issue-label-plan.json') -Raw | ConvertFrom-Json
 if ($plan.repository -cne $repository) { throw 'Unexpected target repository' }
 $allowed = @('documentation','enhancement','question','bug')
@@ -28,6 +28,7 @@ function Invoke-GhJson([string[]]$Arguments) {
     return (($output -join "`n") | ConvertFrom-Json)
 }
 $repo = Invoke-GhJson @('api', "repos/$repository")
+if ($repo.id -ne 1426503435) { throw 'Repository identity changed; nothing applied' }
 if (!$repo.permissions.triage -and !$repo.permissions.push -and !$repo.permissions.maintain -and !$repo.permissions.admin) {
     throw 'This account lacks repository triage permission. Nothing applied.'
 }
