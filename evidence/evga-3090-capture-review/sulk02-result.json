@@ -14,8 +14,26 @@
   "operator_reported_confirmation_screen": true,
   "usb_absence_explicitly_confirmed": true,
   "post_sulk02_benchmark_reviewed": true,
-  "cleanup_completed": false,
-  "cleanup_refusal": "BootOrder changed; preserve backup and stop",
+  "cleanup_completed": true,
+  "cleanup_refusal": null,
   "operator_confirmed_shift_g": true,
-  "operator_confirmed_no_reboot_before_benchmark": true
+  "operator_confirmed_no_reboot_before_benchmark": true,
+  "cleanup_operator_output": {
+    "temporary_option_present": false,
+    "boot_next_clear": true,
+    "boot_order_written": false,
+    "firmware_writes": 1,
+    "preserved_entries": [
+      "Boot0000",
+      "Boot0008",
+      "Boot000C",
+      "Boot000D"
+    ],
+    "already_absent_entries": [
+      "Boot000E",
+      "Boot000F",
+      "Boot0010"
+    ]
+  },
+  "post_cleanup_normal_restart_confirmed": false
 }

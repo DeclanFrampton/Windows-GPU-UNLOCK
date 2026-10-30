@@ -31,7 +31,8 @@ try {
   for($p=0;$p -lt $oldOrder.Length;$p+=2){if([BitConverter]::ToUInt16($oldOrder,$p) -eq $state.OptionNumber){throw 'Recovery option appears in original BootOrder; refuse deletion'}}
   if($Action -eq 'Cleanup' -and $PSCmdlet.ShouldProcess($state.OptionName,'Remove only the exact temporary SULK02 option and any exact owned pending BootNext; retain backup')){Remove-OwnedSharedEspFirmware $state $read $write}
   Assert-SharedEspFirmwareSnapshot $state $read
-  [ordered]@{action=$Action;boot_order_unchanged=$true;temporary_option_present=($null -ne (& $read $state.OptionName));temporary_option_matches=(Test-FirmwareValueEqual (& $read $state.OptionName) $state.Option);boot_next=(& $read 'BootNext');backup=$backup;gpu_transaction=$false} | ConvertTo-Json -Depth 4
+  $pendingNext=$null;$observedNext=& $read 'BootNext';if($null -ne $observedNext){$pendingNext=$observedNext}
+  [ordered]@{action=$Action;boot_order_unchanged=$true;temporary_option_present=($null -ne (& $read $state.OptionName));temporary_option_matches=(Test-FirmwareValueEqual (& $read $state.OptionName) $state.Option);boot_next=$pendingNext;backup=$backup;gpu_transaction=$false} | ConvertTo-Json -Depth 4
   return
  }
  if(Test-Path -LiteralPath $statePath){throw 'State directory already exists. Use Status/Cleanup; do not overwrite the recovery backup'}
@@ -83,5 +84,6 @@ try {
  }
  $registered=$false
  if($PSCmdlet.ShouldProcess('UEFI firmware variables','Back up state and register the pinned SULK02 launcher only; no BootNext, receipt, unlock or reboot')){Register-SharedEspFirmwareOption $state $read $write $save;$registered=$true}
- [ordered]@{action='Register';registered=$registered;option=$state.OptionName;boot_next=(& $read 'BootNext');boot_order_written=$false;limine_first_verified=$true;windows_entry_verified=$true;backup=$backup;attempt_armed=$false;boot_authorized=$false;automatic_reboot=$false;next='Send output; preserve backup and do not select the temporary entry. Arming and one-shot boot remain separate.'} | ConvertTo-Json -Depth 4
+ $pendingNext=$null;$observedNext=& $read 'BootNext';if($null -ne $observedNext){$pendingNext=$observedNext}
+ [ordered]@{action='Register';registered=$registered;option=$state.OptionName;boot_next=$pendingNext;boot_order_written=$false;limine_first_verified=$true;windows_entry_verified=$true;backup=$backup;attempt_armed=$false;boot_authorized=$false;automatic_reboot=$false;next='Send output; preserve backup and do not select the temporary entry. Arming and one-shot boot remain separate.'} | ConvertTo-Json -Depth 4
 }finally{$privilege.Dispose()}

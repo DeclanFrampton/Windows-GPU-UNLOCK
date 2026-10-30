@@ -13,16 +13,8 @@ The completed benchmark passes the offline completion, protocol, timing and iden
 | BF16 tensor | 64.558792 | 123.361880 | +91.08% |
 | TF32 tensor | 32.982266 | 64.159053 | +94.53% |
 
-This supports attended USB-free unlock on the reviewed machine. Session timing and USB absence are operator-reported, not independent attestation. Manual tuning was not freshly reconfirmed; the recorded settings match. These GEMM results do not establish all-workload gains, complete numerical correctness or long-term stability. The reusable profile is not finished while cleanup remains blocked.
+This supports attended USB-free unlock on the reviewed machine. Session timing and USB absence are operator-reported, not independent attestation. Manual tuning was not freshly reconfirmed; the recorded settings match. These GEMM results do not establish all-workload gains, complete numerical correctness or long-term stability. Cleanup is now complete; reusable packaging and the final ordinary-restart confirmation remain separate work.
 
-Collection created the evidence ZIP, but cleanup refused with `BootOrder changed; preserve backup and stop`. Cleanup has not completed. The subsequent comparison identifies the exact contraction: the four Limine/Windows/USB entries match, while generic fallback entries 000E/000F/0010 are absent. The cause is unknown. Preserve the private backup and temporary firmware entry. Do not retry the original strict cleanup or EFI; use the scoped command below.
+Collection initially refused cleanup after generic fallback entries 000E/000F/0010 disappeared. The four primary/current entries remained equal to backup and the cause is unknown. The targeted cleanup subsequently completed on the contributor machine: Boot7E00 absent, BootNext clear, one deletion, no BootOrder write. The original backup and all evidence were retained. Do not rerun cleanup or EFI.
 
-**Next: [finish exact-owned cleanup](SULK02-CLEANUP.en.md).** Update the branch and run this one command in administrator PowerShell from the repository root:
-
-```powershell
-./research/profile/cleanup-shared-esp-second.ps1
-```
-
-Send the JSON or error. This writes a new local snapshot and deletes only the reviewed Boot7E00 entry. It preserves the current order and all evidence; no reboot or GPU work. Read the linked procedure for the firmware-write risk, stop conditions and recovery limits. The actual cleanup result remains pending.
-
-Local benchmark packaging checks previously passed with a synthetic runner. The performance data above came from the contributor, not local hardware execution. Firmware cleanup will be handled separately after inspecting the changed state.
+**Next: [one normal restart confirmation](FINAL-NORMAL-BOOT.en.md).** This runs the same read-only firmware check before and after an ordinary restart; it does not launch the unlock. The script records only a local Windows-boot-time baseline and performs no firmware writes. Local simulations passed in PowerShell 7 and Windows PowerShell 5.1; the real post-cleanup normal restart remains pending.

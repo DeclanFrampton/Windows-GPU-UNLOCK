@@ -22,3 +22,7 @@ Local checks on 2026-10-29: preparation-wrapper fixtures and real firmware-entry
 ## SULK02 verified result, 2026-10-30
 
 The contributor confirmed USB absent, Shift+G execution and no reboot before the uploaded benchmark. The SULK02 log records a successful transaction and two complete captures; benchmark validation passes with recorded baseline context equality. FP16/BF16 tensor medians increased about 91%, TF32 about 94.53%, and FP32 control about 0.42%. This demonstrates the attended USB-free path on the reviewed machine with operator-confirmed timing/USB absence. Cleanup remains blocked by changed BootOrder; the new read-only comparison is the next step. This supersedes earlier statements here that the SULK02 hardware run and benchmark were pending. See [current result](SULK02-RESULT.en.md).
+
+## Cleanup completed, 2026-10-30
+
+Contributor-confirmed cleanup removed only Boot7E00, left BootNext clear and preserved the four current entries without writing BootOrder. The earlier cleanup blocker is resolved. The remaining live check for this cleaned-up attended path is an ordinary restart, not another unlock. [One-command procedure](FINAL-NORMAL-BOOT.en.md). Reusable installer/profile packaging and maintainer review remain separate publication work.
