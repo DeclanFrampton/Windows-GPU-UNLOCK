@@ -16,6 +16,10 @@
   },
   "operator_reported_direct_windows_return": true,
   "operator_reported_collection_cleanup_completed": true,
-  "full_shutdown_and_usb_absence_reconfirmation_pending": true,
-  "maintainer_approval_pending": true
+  "full_shutdown_and_usb_absence_reconfirmation_pending": false,
+  "maintainer_approval_pending": true,
+  "operator_confirmed_full_shutdown": true,
+  "operator_confirmed_usb_absent": true,
+  "final_handoff_archive_sha256": "f112c781dc6c8878ed5425a7295388cf04fe05a32d2e96a62716d8ceb3d58221",
+  "final_handoff_verified": true
 }

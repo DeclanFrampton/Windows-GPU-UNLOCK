@@ -1,5 +1,9 @@
 # 재사용 SharedEsp 프로필 검증 완료
 
+**최종 전달 확인, 2026-10-30:** 기여자는 EVP12에서 Shift+종료와 계속 USB 부재를 확인했습니다. 반환 ZIP SHA256 `f112c781dc6c8878ed5425a7295388cf04fe05a32d2e96a62716d8ceb3d58221`에는 의도한 요약/프로필/안내 파일 일곱 개만 있습니다. 로그/영수증/런타임 마커/패키지 해시는 원래 EVP12와 일치하며 임시 항목 부재와 빈 BootNext를 확인했습니다. 이번 검증 순서에 추가 시험은 없으며 관리자 승인은 대기 중입니다.
+
+향후 참석형 사용 시 원래 USB를 D:로 연결하여 `./research/profile/manage-evga-profile.ps1 -Action Rearm`을 실행합니다. 준비 성공 후 USB 제거, 작업 저장, Shift+종료와 전원 켜기를 수행하고 검사 통과 뒤 새로운 Shift+G를 누릅니다. Windows에서는 같은 컨트롤러의 `-Action Collect`를 실행합니다. 거부/오류 시 상태를 보존하고 보고하며 마커 삭제, 과거 재시도 플래그나 소비 EFI 반복을 하지 마세요. 검토된 성공 실행의 별도 정리가 필요할 때만 `-Action Cleanup`을 사용합니다. 검증된 흐름은 Secure Boot 비활성 상태입니다. 이는 향후 사용 안내이며 지금 다시 실행하라는 요청이 아닙니다.
+
 [English](EVP12-RESULT.en.md)
 
 EVP12는 실패 예외 없는 기본 Rearm, 새 슬롯/영수증, 참석형 트랜잭션 성공, 직접 Windows 복귀, 수집 및 정리를 입증합니다. 반환한 로그/영수증/런타임 마커 해시가 보고값과 일치합니다. 완료 캡처 두 개, FLR 전 SS0=88888888/SS1=8, result=0, fault=0, retained=0, maps=0, FLR=1 및 성공 close/자산 해제/Windows 준비가 기록되었습니다. 수집은 CleanupCompleted=true이며 증거/정리 오류가 없습니다.

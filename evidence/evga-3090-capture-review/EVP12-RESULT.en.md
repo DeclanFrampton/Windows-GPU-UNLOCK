@@ -1,5 +1,9 @@
 # Reusable SharedEsp profile acceptance complete
 
+**Final handoff verified, 2026-10-30:** the contributor confirmed Shift+Shut down and continuous USB absence for EVP12. Returned acceptance ZIP SHA256 `f112c781dc6c8878ed5425a7295388cf04fe05a32d2e96a62716d8ceb3d58221` contains exactly the seven intended summary/profile/instruction files. Receipt log/gate/runtime-marker/package hashes match the original EVP12 upload; the exporter confirms temporary option absent and BootNext clear. No contributor test remains for this acceptance sequence. Maintainer approval remains pending.
+
+For future attended use, connect the original USB as D: for reservation, run `./research/profile/manage-evga-profile.ps1 -Action Rearm`, then after successful preparation remove storage USBs, save work, Shift+Shut down and power on. Press fresh Shift+G only after guards, then run the same controller with `-Action Collect` in Windows. On refusal/error preserve state and report; do not delete markers, use the historical retry flag or repeat a consumed EFI. Run `-Action Cleanup` only if a reviewed successful run needs separate cleanup. Secure Boot remains disabled for this qualified workflow. This is future-use guidance, not a request to run again now.
+
 [한국어](EVP12-RESULT.ko.md)
 
 EVP12 demonstrates default `Rearm` without a reviewed-failure exception, a fresh slot/receipt, successful attended transaction, direct Windows return, collection and cleanup. The returned log/receipt/runtime marker match the reported hashes. Two complete captures, pre-FLR SS0=88888888/SS1=8, result=0, fault=0, retained=0, maps=0 and FLR=1 are recorded, followed by successful close, asset release and Windows-ready. The collection reports CleanupCompleted=true with no evidence or cleanup error.
