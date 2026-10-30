@@ -221,5 +221,5 @@ try {
   Register-SharedEspFirmwareOption $attempt $read $write $save
   Select-RegisteredSharedSecond $attempt $read $write {} $verify
  }
- [ordered]@{prepared=$true;profile=$m.ProfileId;slot=$slot;run=$run;package_zip=($PackageDirectory+'.zip');requires_fresh_shift_g=$true;boot_next_selected=($Layout -ne 'Usb');boot_order_written=$false;automatic_reboot=$false;next=$(if($Layout -eq 'Usb'){'Boot this USB once; press fresh Shift+G only after guards. After Windows run this command with -Action Collect.'}else{'Safely remove storage USBs and restart normally once; press fresh Shift+G only after guards. After Windows run this command with -Action Collect.'})} | ConvertTo-Json
+ [ordered]@{prepared=$true;profile=$m.ProfileId;slot=$slot;run=$run;package_zip=($PackageDirectory+'.zip');requires_fresh_shift_g=$true;full_shutdown_required=$true;boot_next_selected=($Layout -ne 'Usb');boot_order_written=$false;automatic_reboot=$false;next=$(if($Layout -eq 'Usb'){'Save work, full shutdown with Shift+Shut down, power on and boot this USB once; fresh Shift+G only after guards. After Windows run this command with -Action Collect.'}else{'Remove storage USBs, save work, full shutdown with Shift+Shut down, then power on; fresh Shift+G only after guards. After Windows run this command with -Action Collect.'})} | ConvertTo-Json
 }finally{$scope.Dispose()}
