@@ -19,3 +19,7 @@ No additional hardware test is requested for this completed SULK02 sequence. Pre
 ## Remaining software/publication work
 
 A reusable installer/rearm interface is not complete. The current development commands are tied to reviewed slots, fixed SULK02 filenames, exact hashes and one machine. A later attempt needs a separately qualified fresh slot and build; it must not reuse SULK02. Permanent/unattended unlock, persistence across ordinary reboots, other firmware configurations and other GPUs have not been established by this evidence. Complete reusable packaging and maintainer review before calling this a general production profile. The 4070Ti research remains separate.
+
+## Reusable packaging implemented — 2026-10-30
+
+The earlier incomplete-packaging statement is superseded: reusable SharedEsp, Usb and SeparateEsp profiles, installer, collection and rearm are implemented and locally validated. See [instructions](REUSABLE-PROFILE.en.md) and [technical review](REUSABLE-PROFILE-REVIEW.en.md). New-package hardware acceptance and maintainer approval remain pending; this is an exact-machine attended development profile.
