@@ -35,5 +35,15 @@
       "Boot0010"
     ]
   },
-  "post_cleanup_normal_restart_confirmed": false
+  "post_cleanup_normal_restart_confirmed": true,
+  "normal_restart_operator_output": {
+    "boot_current": "Boot0000",
+    "temporary_option_absent": true,
+    "boot_next_clear": true,
+    "primary_entries_unchanged": true,
+    "firmware_written": false,
+    "gpu_accessed": false
+  },
+  "attended_sulk02_evidence_complete": true,
+  "unattended_or_reusable_installer_proven": false
 }

@@ -1,28 +1,21 @@
 # EVGA profile publication status
 
-[í•œêµ­ì–´](PUBLICATION-STATUS.ko.md)
+[한국어](PUBLICATION-STATUS.ko.md)
 
-The attended exact-machine unlock is demonstrated. This PR is available for review; the reusable USB-free unlock profile is not complete.
+## Attended SULK02 evidence complete — 2026-10-30
 
-On 2026-10-29 the contributor reproduced all seven reconciliation checks: reviewed SULK01 hash, slot 8, transaction return, asset release, Windows-ready, two complete captures and exact original USB reservation. The reservation and execution evidence remain on their respective volumes. No history has been reset. Slot 9 payloads are staged; the contributor registered Boot7E00 with BootNext clear and the attempt unarmed. The new run script prepares receipt/reservation and BootNext-last selection; live execution is pending.
+The reviewed EVGA RTX 3090/Z790 system has completed the attended USB-free sequence: firmware launch, fresh Shift+G unlock, normal Windows return, same-session benchmark, temporary-entry cleanup and a later ordinary restart through Boot0000. The temporary option remains absent, BootNext is clear and the primary Limine/Windows entries are unchanged.
 
-The revised temporary firmware-option cleanup completed on the contributor machine and a later read showed the option absent and BootNext clear. The original boot entries remained equal to backup. This does not prove general firmware recovery or explain the earlier failure.
+The transaction log records slot 9, successful return, released assets and two complete captures. Benchmark completion/protocol/timing checks pass and the recorded baseline context matches: FP16 +91.00%, BF16 +91.08%, TF32 +94.53%, FP32 control +0.42%. USB absence, no intervening benchmark reboot and normal Windows behavior are contributor-confirmed. [Evidence summary](sulk02-result.json) · [Benchmark review](sulk02-benchmark.json) · [Full result](SULK02-RESULT.en.md).
 
-Before calling the reusable profile complete:
+Cleanup deleted only Boot7E00 with saved attributes 7 and did not write BootOrder. Three generic fallback entries had disappeared beforehand; their cause remains unknown and they were not restored. The later normal-boot script made no firmware writes or GPU accesses. Successful recovery on this run does not guarantee recovery elsewhere.
 
-- Completed: contributor confirmed both Linux and Windows boot normally after cleanup with USB removed.
-- Completed: contributor confirmed the supplied benchmark was after SULK01 and before any further reboot. This is operator-confirmed timing.
-- Implemented for the reviewed slot 8 to 9 transition: cross-volume evidence checks, create-new reservation/receipt and replay refusal. Live arming is pending; general progression is not yet published.
-- Integrated the next USB-free boot test, one-shot arming, evidence ZIP collection and exact-owned cleanup in run-shared-esp-second.ps1. Qualify the full hardware path before publication; see [the next run](SHARED-ESP-SECOND-RUN.en.md).
-- Local coverage now includes the real SULK02 wrapper with a RAM-native fake, deletion attributes 7, cleanup/refusal, preserved ZIPs, BootNext-last order and partial failures. Native mocks do not establish actual firmware semantics or recovery.
-- Reconcile superseded guide text, provide matching English/Korean final instructions, and complete maintainer review.
+## What is ready for review
 
-Local checks on 2026-10-29: preparation-wrapper fixtures and real firmware-entry fixtures passed with native firmware/storage mocked. Contributor package build passed PE checks and 24 host cases. These checks do not establish USB-free hardware unlocking.
+The exact-machine attended implementation, evidence, benchmark comparison, one-shot receipt/reservation workflow, diagnostic/refusal handling, collection and scoped cleanup are available for maintainer review. Local mocks cover the relevant script paths and fail-closed behavior; normal-boot fixtures pass in PowerShell 7 and Windows PowerShell 5.1. These are separate from live contributor evidence.
 
-## SULK02 verified result, 2026-10-30
+No additional hardware test is requested for this completed SULK02 sequence. Preserve the original USB reservations, ESP receipts/logs, staged payloads and private firmware backups. Do not delete gates or rerun the consumed slot.
 
-The contributor confirmed USB absent, Shift+G execution and no reboot before the uploaded benchmark. The SULK02 log records a successful transaction and two complete captures; benchmark validation passes with recorded baseline context equality. FP16/BF16 tensor medians increased about 91%, TF32 about 94.53%, and FP32 control about 0.42%. This demonstrates the attended USB-free path on the reviewed machine with operator-confirmed timing/USB absence. Cleanup remains blocked by changed BootOrder; the new read-only comparison is the next step. This supersedes earlier statements here that the SULK02 hardware run and benchmark were pending. See [current result](SULK02-RESULT.en.md).
+## Remaining software/publication work
 
-## Cleanup completed, 2026-10-30
-
-Contributor-confirmed cleanup removed only Boot7E00, left BootNext clear and preserved the four current entries without writing BootOrder. The earlier cleanup blocker is resolved. The remaining live check for this cleaned-up attended path is an ordinary restart, not another unlock. [One-command procedure](FINAL-NORMAL-BOOT.en.md). Reusable installer/profile packaging and maintainer review remain separate publication work.
+A reusable installer/rearm interface is not complete. The current development commands are tied to reviewed slots, fixed SULK02 filenames, exact hashes and one machine. A later attempt needs a separately qualified fresh slot and build; it must not reuse SULK02. Permanent/unattended unlock, persistence across ordinary reboots, other firmware configurations and other GPUs have not been established by this evidence. Complete reusable packaging and maintainer review before calling this a general production profile. The 4070Ti research remains separate.

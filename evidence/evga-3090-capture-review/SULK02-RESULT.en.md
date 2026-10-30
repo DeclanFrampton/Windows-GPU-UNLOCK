@@ -18,3 +18,5 @@ This supports attended USB-free unlock on the reviewed machine. Session timing a
 Collection initially refused cleanup after generic fallback entries 000E/000F/0010 disappeared. The four primary/current entries remained equal to backup and the cause is unknown. The targeted cleanup subsequently completed on the contributor machine: Boot7E00 absent, BootNext clear, one deletion, no BootOrder write. The original backup and all evidence were retained. Do not rerun cleanup or EFI.
 
 **Next: [one normal restart confirmation](FINAL-NORMAL-BOOT.en.md).** This runs the same read-only firmware check before and after an ordinary restart; it does not launch the unlock. The script records only a local Windows-boot-time baseline and performs no firmware writes. Local simulations passed in PowerShell 7 and Windows PowerShell 5.1; the real post-cleanup normal restart remains pending.
+
+**Final outcome:** the post-cleanup ordinary restart passed through Boot0000 with the temporary entry absent and BootNext clear. The attended evidence sequence is complete. [Current publication scope](PUBLICATION-STATUS.en.md); no more test commands are needed for this sequence.
