@@ -1,7 +1,9 @@
 /* Synthetic one-shot entry gate only; hardware/release functions are stubs. */
 #define GU_DIAGNOSTIC_ONLY
 #define GU_EVGA_STOP_ONLY
+#ifndef GU_EVGA_PACKAGE
 #define GU_EVGA_SHARED_ESP_ADMISSION
+#endif
 #define GU_EVGA_UNLOCK
 #define GU_EVGA_PROBE_RESOURCES
 #include "shared-esp-unlock.c"

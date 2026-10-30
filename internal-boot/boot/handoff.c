@@ -15,14 +15,14 @@
 #ifdef GU_EVGA_PROBE_RESOURCES
 #include "evga-resources.h"
 #endif
-#if !defined(GU_DIAGNOSTIC_ONLY) || (!defined(GU_USB_MEDIA) && !defined(GU_EVGA_SHARED_ESP_ADMISSION)) || defined(GU_DIAGNOSTIC_PROBE) || defined(GU_FULL_UNLOCK) || defined(GU_CONSOLE_PREPARE)
+#if !defined(GU_DIAGNOSTIC_ONLY) || (!defined(GU_USB_MEDIA) && !defined(GU_EVGA_SHARED_ESP_ADMISSION) && !defined(GU_EVGA_PACKAGE)) || defined(GU_DIAGNOSTIC_PROBE) || defined(GU_FULL_UNLOCK) || defined(GU_CONSOLE_PREPARE)
 #error EVGA text Stop must be a separate USB image with no GPU probe or unlock
 #endif
 #if defined(GU_EVGA_SHARED_ESP_ADMISSION) && (defined(GU_USB_MEDIA) || (defined(GU_EVGA_UNLOCK) && !defined(GU_SHARED_ESP_UNLOCK)))
 #error Shared ESP unlock requires its explicit isolated mode; USB remains forbidden
 #endif
 #endif
-#ifdef GU_SHARED_ESP_UNLOCK
+#if defined(GU_SHARED_ESP_UNLOCK) && !defined(GU_EVGA_PACKAGE)
 #if !defined(GU_EVGA_UNLOCK) || !defined(GU_EVGA_SHARED_ESP_ADMISSION) || !defined(GU_EVGA_STOP_ONLY) || defined(GU_USB_MEDIA) || defined(GU_SHARED_ESP_QUAL)
 #error Shared ESP unlock is the exact standalone transaction build only
 #endif
@@ -150,7 +150,9 @@ static EFI_STATUS OpenLog(VOID) {
 #if defined(GU_SHARED_ESP_INTEGRATION) || defined(GU_SHARED_ESP_QUAL) || defined(GU_SHARED_ESP_UNLOCK)
   {
 #ifdef GU_SHARED_ESP_UNLOCK
-#ifdef GU_SHARED_ESP_SECOND
+#ifdef GU_EVGA_PACKAGE
+    CHAR16 name[]=GU_PACKAGE_LOG;
+#elif defined(GU_SHARED_ESP_SECOND)
     CHAR16 name[]=L"\\RTX3090-UNLOCK\\SULK02.TXT";
 #else
     CHAR16 name[]=L"\\RTX3090-UNLOCK\\SULK01.TXT";

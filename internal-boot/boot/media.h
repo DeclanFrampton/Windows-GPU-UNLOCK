@@ -3,7 +3,9 @@
 #include <Uefi.h>
 #include <Protocol/DevicePath.h>
 
-#if defined(GU_SHARED_ESP_UNLOCK) || defined(GU_SHARED_ESP_UNLOCK_CONFIG)
+#if defined(GU_EVGA_PACKAGE)
+/* Partition and receipt constants are force-included from the per-attempt build header. */
+#elif defined(GU_SHARED_ESP_UNLOCK) || defined(GU_SHARED_ESP_UNLOCK_CONFIG)
 #include "build/shared-esp-unlock/platform-config.h"
 #elif defined(GU_SHARED_ESP_QUAL)
 #include "build/shared-esp-qualification/platform-config.h"
