@@ -33,7 +33,15 @@ class ReviewTests(unittest.TestCase):
 
     def test_duplicate_rejected(self):
         with self.assertRaisesRegex(ValueError, 'Ambiguous duplicate'):
-            module.review(archive([('a/inspection.json', '{}'), ('b/inspection.json', '{}')]))
+            module.review(archive([('a/inspection.json', '{}'), ('b/inspection.json', '{"run":"EVP10"}')]))
+
+    def test_real_refusal_shape(self):
+        log = 'EVGA admission cold: chip=0xb72000a1 ss0=0 ss1=0 memory=0\nx6000 fault=0\nevga-unlock-transaction-return status=0x800000000000000f'
+        data = archive([('inspection.json', '{"run":"EVP10"}'), ('EVP10.TXT', log), ('same/EVP10.TXT', log)])
+        result = module.review(data)
+        self.assertEqual(result['transaction_return_statuses'], ['0x800000000000000f'])
+        self.assertEqual(result['entry_ss1_observations'], ['0'])
+        self.assertFalse(result['entry_ss1_matches_current_profile'])
 
     def test_expansion_limit(self):
         old = module.LIMIT

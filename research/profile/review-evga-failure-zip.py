@@ -29,7 +29,7 @@ def review(data):
                 if name == 'results.zip' and depth == 0:
                     scan(payload, 1)
                 elif name in ('inspection.json', 'package.json', 'result.json') or re.fullmatch(r'EVP\d{2}\.(TXT|ARMED)', name):
-                    if name in files:
+                    if name in files and files[name] != payload:
                         raise ValueError('Ambiguous duplicate: ' + name)
                     files[name] = payload
     scan(data)
@@ -40,6 +40,8 @@ def review(data):
     log = files.get(run + '.TXT', b'').decode('utf-8-sig', errors='replace')
     gate = files.get(run + '.ARMED', b'')
     entries = inspection.get('current_entries', [])
+    returns = re.findall(r'evga-unlock-transaction-return status=(0x[0-9a-fA-F]+)', log)
+    ss1 = re.findall(r'EVGA admission cold:[^\r\n]*\bss1=(0x[0-9a-fA-F]+|[0-9]+)', log)
     return {
         'test': 'offline-evga-failure-review-v1',
         'run': run,
@@ -49,6 +51,9 @@ def review(data):
         'gate_prefix': gate.split(b'\0', 1)[0][:100].decode('ascii', errors='replace').strip(),
         'capture_count': log.count('capture-complete=1'),
         'transaction_return_recorded': 'evga-unlock-transaction-return' in log,
+        'transaction_return_statuses': returns,
+        'entry_ss1_observations': ss1,
+        'entry_ss1_matches_current_profile': bool(ss1) and all(int(v, 0) == 7 for v in ss1),
         'log_tail': log.splitlines()[-35:],
         'additional_boot_entries': [e for e in entries if not e.get('previously_in_order')],
         'changed_existing_entries': [e for e in entries if e.get('previously_in_order') and not e.get('unchanged')],
