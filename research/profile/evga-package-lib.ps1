@@ -64,13 +64,23 @@ function Get-EvgaOptionDescription($Value){
  if($end+1 -ge $data.Length){return ''}
  [Text.Encoding]::Unicode.GetString($data,6,$end-6)
 }
+function Test-EvgaReviewedUsbOrderRemoval([string]$Name,[uint32]$Attributes,[string]$Digest,[bool]$Present,[bool]$Equal){
+ return $Name -ceq 'Boot000D' -and $Attributes -eq 7 -and $Digest -ceq 'ac1eb792d44382686770c715aacae3681d572ab8f61cc7e6dc9d71fa0fab94ee' -and (!$Present -or $Equal)
+}
 function Get-EvgaPreservedCleanupSnapshot($Before,[scriptblock]$Read){
  $now=Get-EvgaFirmwareSnapshot $Read
  $names=@($now.BootEntries | ForEach-Object {$_.Name});$kept=@()
  $fallback=@('UEFI:CD/DVD Drive','UEFI:Removable Device','UEFI:Network Device')
  foreach($entry in $Before.BootEntries){
   $value=& $Read $entry.Name
-  if($null -eq $value -and $entry.Name -notin $names -and (Get-EvgaOptionDescription $entry.Value) -cin $fallback){continue}
+  if($entry.Name -notin $names){
+   if($null -eq $value -and (Get-EvgaOptionDescription $entry.Value) -cin $fallback){continue}
+   # Exact reviewed removable entry absent after the USB-free EVP11 boot.
+   # This does not authorize deleting/replacing a present or different USB entry.
+   $sha=[Security.Cryptography.SHA256]::Create()
+   try{$digest=([BitConverter]::ToString($sha.ComputeHash([Convert]::FromBase64String($entry.Value.DataBase64)))).Replace('-','').ToLowerInvariant()}finally{$sha.Dispose()}
+   if(Test-EvgaReviewedUsbOrderRemoval $entry.Name $entry.Value.Attributes $digest ($null -ne $value) (Test-FirmwareValueEqual $value $entry.Value)){continue}
+  }
   if(!(Test-FirmwareValueEqual $value $entry.Value)){throw 'An existing boot entry changed; cleanup refused'}
   $kept+=,$entry.Name
  }
@@ -169,9 +179,13 @@ function Get-EvgaProfileNextSlot([string]$StateDirectory,$Installation,[switch]$
    if($last -ne 10){throw 'Reviewed retry applies only after EVP10'}
    Assert-EvgaReviewedEvp10Retry $StateDirectory $attempt $result
   }else{
-   if($result.Success -ne $true -or $result.CleanupCompleted -ne $true -or $result.AttemptSlot -ne $last){throw 'Prior attempt failed, was cancelled or remains incomplete; rearm refused'}
+   if($result.Success -ne $true -or $result.AttemptSlot -ne $last){throw 'Prior attempt failed, was cancelled or remains incomplete; rearm refused'}
    $proof=Assert-EvgaPackageResult $attempt.TargetRoot $last $attempt.Run
    if($proof.LogSha256 -cne $result.LogSha256 -or $proof.GateSha256 -cne $result.GateSha256 -or $proof.GpuMarkerSha256 -cne $result.GpuMarkerSha256){throw 'Prior evidence changed after collection'}
+   if($result.CleanupCompleted -ne $true){
+    $cleanup=Get-Content -LiteralPath (Join-Path $StateDirectory ('cleanup-{0:D2}-result.json' -f $last)) -Raw | ConvertFrom-Json
+    if($cleanup.Schema -cne 'evga-attended-cleanup-v1' -or $cleanup.AttemptSlot -ne $last -or $cleanup.CleanupCompleted -ne $true -or $cleanup.LogSha256 -cne $proof.LogSha256 -or $cleanup.GateSha256 -cne $proof.GateSha256 -or $cleanup.GpuMarkerSha256 -cne $proof.GpuMarkerSha256 -or $cleanup.OptionName -cne $attempt.OptionName){throw 'Missing matching separate cleanup receipt'}
+   }
   }
  }
  if($last -ge 99){throw 'Attempt slots exhausted'}

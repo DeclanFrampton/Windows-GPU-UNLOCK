@@ -1,6 +1,6 @@
 # Exact-machine attended installer/rearm. No formatting, BootOrder writes or automatic reboot.
 [CmdletBinding(SupportsShouldProcess)]
-param([ValidateSet('Install','Rearm','Collect','Cancel','Status')][string]$Action='Install',
+param([ValidateSet('Install','Rearm','Collect','Cleanup','Cancel','Status')][string]$Action='Install',
  [ValidateSet('SharedEsp','Usb','SeparateEsp')][string]$Layout='SharedEsp',
  [string]$StateDirectory='E:\UNLOCK\EVGA-PROFILE',
  [guid]$WindowsEspGuid='c36c3e86-02aa-4f76-af1b-96e327f9d1c1',
@@ -34,7 +34,7 @@ try {
   if($name -cne 'BootNext' -and $name -cnotmatch '^Boot7E[0-9A-F]{2}$'){throw 'Unexpected firmware mutation'}
   if($null -eq $value){[SharedEspFirmware.Native]::Write($name,$null,7)}else{[SharedEspFirmware.Native]::Write($name,[Convert]::FromBase64String($value.DataBase64),[uint32]$value.Attributes)}
  }
- if($Action -in @('Status','Collect','Cancel')){
+ if($Action -in @('Status','Collect','Cleanup','Cancel')){
   $journals=@(Get-ChildItem -LiteralPath $stateDir -File -Filter 'attempt-*.json' | Sort-Object Name)
   if(!$journals.Count){throw 'No attempt journal; preserve incomplete install and report'}
   $attempt=Get-Content -LiteralPath $journals[-1].FullName -Raw | ConvertFrom-Json
@@ -54,6 +54,22 @@ try {
    return
   }
   $resultPath=Join-Path $stateDir ('result-{0:D2}.json' -f $attempt.AttemptSlot)
+  if($Action -eq 'Cleanup'){
+   if($Layout -eq 'Usb'){throw 'Separate cleanup action is for internal-media firmware options only'}
+   $previous=Get-Content -LiteralPath $resultPath -Raw | ConvertFrom-Json
+   if($previous.Success -ne $true -or $previous.AttemptSlot -ne $attempt.AttemptSlot -or $previous.CleanupCompleted -eq $true){throw 'Expected successful collection with pending cleanup'}
+   $proof=Assert-EvgaPackageResult $attempt.TargetRoot $attempt.AttemptSlot $attempt.Run
+   if($proof.LogSha256 -cne $previous.LogSha256 -or $proof.GateSha256 -cne $previous.GateSha256 -or $proof.GpuMarkerSha256 -cne $previous.GpuMarkerSha256){throw 'Collected evidence changed'}
+   $receipt=Join-Path $stateDir ('cleanup-{0:D2}-result.json' -f $attempt.AttemptSlot)
+   if(Test-Path -LiteralPath $receipt){throw 'Cleanup already recorded; preserve receipt'}
+   if(!$PSCmdlet.ShouldProcess($attempt.Run,'Remove exact owned temporary option; preserve collection result')){return}
+   $save={param($snapshot)Write-EvgaPackageJson (Join-Path $stateDir ('cleanup-{0:D2}-separate-before.json' -f $attempt.AttemptSlot)) $snapshot}
+   Remove-EvgaPackageOption $attempt $read $write $save
+   $done=[ordered]@{Schema='evga-attended-cleanup-v1';AttemptSlot=$attempt.AttemptSlot;CleanupCompleted=$true;OptionName=$attempt.OptionName;LogSha256=$proof.LogSha256;GateSha256=$proof.GateSha256;GpuMarkerSha256=$proof.GpuMarkerSha256;OriginalResultPreserved=$true;BootOrderWritten=$false;GpuAccessed=$false}
+   Write-EvgaPackageJson $receipt $done
+   $done | ConvertTo-Json
+   return
+  }
   if(Test-Path -LiteralPath $resultPath){throw 'Attempt already finalized; do not repeat collection/cancellation'}
   if(!$PSCmdlet.ShouldProcess($attempt.Run,($Action+' current attempt; retain every receipt, reservation and backup'))){return}
   $proof=$null;$evidenceError=$null;$zip=$null
