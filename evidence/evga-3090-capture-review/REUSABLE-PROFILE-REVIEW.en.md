@@ -1,5 +1,7 @@
 # Reusable profile technical review — 2026-10-30
 
+**Acceptance update:** [EVP11/EVP12 completed the exact-machine SharedEsp acceptance sequence](EVP12-RESULT.en.md). This supersedes the pending first-shared-package test below. Maintainer approval remains pending; Usb/SeparateEsp reusable packaging remains build/mock-only.
+
 [한국어](REUSABLE-PROFILE-REVIEW.ko.md) · [Instructions](REUSABLE-PROFILE.en.md)
 
 Implementation review is complete; maintainer approval and live validation of this new packaging remain pending. Earlier SULK02 evidence demonstrates the attended transaction on the captured machine, not this installer or every layout.

@@ -1,5 +1,7 @@
 # Reusable attended EVGA installer and rearm profiles
 
+**Current acceptance:** SharedEsp is demonstrated on the exact captured machine through EVP11/EVP12. [Final status and handoff](EVP12-RESULT.en.md). The first-install commands below are historical setup instructions; do not rerun Install on the existing installation or reuse consumed slots. Use full shutdown (Shift+Shut down), not Restart, before an attended unlock attempt. Maintainer approval and live reusable Usb/SeparateEsp qualification remain pending.
+
 [한국어](REUSABLE-PROFILE.ko.md)
 
 The installer/package implementation is available for the **exact captured EVGA RTX 3090/Z790 system**, PCI `10de:2204`, subsystem `3842:3387`, PROM SHA-256 `f1c7c6b205d9a5c0626af4f82e28cc377aa16cde8c25c61c77b4b5160b26e71f`. GPU/BAR/PROM, console graph and driver-code pins remain compiled into the existing transaction adapter. The JSON files select a boot layout; they do not make arbitrary GPUs eligible. Do not register this profile with the generic automatic/headless installer.

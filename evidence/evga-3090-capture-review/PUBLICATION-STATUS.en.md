@@ -1,5 +1,7 @@
 # EVGA profile publication status
 
+**Current, 2026-10-30:** reusable SharedEsp acceptance is complete on the exact captured machine: EVP11 transaction, same-session benchmark, cleanup and normal restart; EVP12 default rearm, transaction, collection and cleanup. [Final result and handoff](EVP12-RESULT.en.md). Maintainer approval remains pending. Usb/SeparateEsp profiles exist but their reusable packaging is build/mock-only. No additional EFI run is requested for this acceptance sequence. Earlier pending statements below are superseded by this status.
+
 [한국어](PUBLICATION-STATUS.ko.md)
 
 ## Attended SULK02 evidence complete — 2026-10-30

@@ -11,6 +11,7 @@
   "permanent_unlock": false,
   "general_hardware_compatibility": false,
   "underlying_layout_has_contributor_evidence": true,
-  "reusable_package_hardware_tested": false,
+  "reusable_package_hardware_tested": true,
+  "reusable_package_evidence": "EVP11 transaction/benchmark/cleanup/normal restart; EVP12 default rearm/transaction/collection/cleanup on the exact captured machine",
   "scope": "Exact captured EVGA RTX 3090/Z790 machine; runtime code and graph fingerprints remain mandatory."
 }
