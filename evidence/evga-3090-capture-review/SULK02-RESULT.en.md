@@ -15,7 +15,7 @@ The completed benchmark passes the offline completion, protocol, timing and iden
 
 This supports attended USB-free unlock on the reviewed machine. Session timing and USB absence are operator-reported, not independent attestation. Manual tuning was not freshly reconfirmed; the recorded settings match. These GEMM results do not establish all-workload gains, complete numerical correctness or long-term stability. The reusable profile is not finished while cleanup remains blocked.
 
-Collection created the evidence ZIP, but cleanup refused with `BootOrder changed; preserve backup and stop`. Cleanup has not completed. The subsequent comparison identifies the exact contraction: the four Limine/Windows/USB entries match, while generic fallback entries 000E/000F/0010 are absent. The cause is unknown. Preserve the private backup and temporary firmware entry. Do not retry cleanup or EFI.
+Collection created the evidence ZIP, but cleanup refused with `BootOrder changed; preserve backup and stop`. Cleanup has not completed. The subsequent comparison identifies the exact contraction: the four Limine/Windows/USB entries match, while generic fallback entries 000E/000F/0010 are absent. The cause is unknown. Preserve the private backup and temporary firmware entry. Do not retry the original strict cleanup or EFI; use the scoped command below.
 
 **Next: [finish exact-owned cleanup](SULK02-CLEANUP.en.md).** Update the branch and run this one command in administrator PowerShell from the repository root:
 
