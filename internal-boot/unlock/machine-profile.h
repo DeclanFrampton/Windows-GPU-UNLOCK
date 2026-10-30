@@ -37,10 +37,10 @@
 #endif
 #endif
 
-/* Development-only exact EVGA pins. This selection is not a supported write
- * path: the release/transaction adapter and final containment are not wired. */
+/* Exact EVGA pins require the explicit attended transaction adapter.
+ * They do not opt into the generic automatic/headless installer. */
 #if defined(GU_PROFILE_EVGA_Z790_3090) && !defined(GU_EVGA_TRANSACTION_DEVELOPMENT)
-#error EVGA profile is development-only; full transaction is not yet wired
+#error EVGA profile requires its explicit attended experimental transaction adapter
 #endif
 
 /* 1 = the AMI combo splitter owns the console on top of the target GPU

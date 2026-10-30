@@ -1,4 +1,7 @@
 /* GPL-2.0-only. Shared-ESP one-shot actual transaction entry; experimental. */
+#if defined(GU_EVGA_PACKAGE) && (!defined(GU_SHARED_ESP_UNLOCK) || !defined(GU_EVGA_STOP_ONLY) || !defined(GU_EVGA_PROBE_RESOURCES) || !defined(GU_EVGA_UNLOCK) || defined(GU_AUTOMATIC_BOOT) || defined(GU_HEADLESS_RESEARCH) || defined(GU_FULL_UNLOCK) || defined(GU_SHARED_ESP_SECOND))
+#error Attended package requires the exact EVGA adapter and forbids automatic/legacy mode combinations
+#endif
 #if !defined(GU_EVGA_PACKAGE) && (!defined(GU_SHARED_ESP_UNLOCK) || !defined(GU_EVGA_STOP_ONLY) || !defined(GU_EVGA_PROBE_RESOURCES) || !defined(GU_EVGA_SHARED_ESP_ADMISSION) || defined(GU_USB_MEDIA) || !defined(GU_EVGA_UNLOCK))
 #error SULK01 requires the isolated shared-ESP unlock, never USB
 #endif

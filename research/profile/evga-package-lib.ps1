@@ -6,7 +6,7 @@ function Get-EvgaPackageProfile([string]$Layout){
  if(!$slug){throw 'Unknown layout'}
  $path=Join-Path $PSScriptRoot ('profiles/evga-z790-3090-'+$slug+'.json')
  $p=Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
- if($p.schema -cne 'evga-attended-profile-v1' -or $p.layout -cne $Layout -or $p.machine_profile -cne 'GU_PROFILE_EVGA_Z790_3090' -or $p.pci_id -cne '220410de' -or $p.subsystem_id -cne '33873842' -or $p.requires_fresh_shift_g -ne $true -or $p.automatic_unlock -ne $false){throw 'Unsupported profile contract'}
+ if($p.schema -cne 'evga-attended-profile-v1' -or $p.layout -cne $Layout -or $p.machine_profile -cne 'GU_PROFILE_EVGA_Z790_3090' -or $p.pci_id -cne '220410de' -or $p.subsystem_id -cne '33873842' -or $p.requires_fresh_shift_g -ne $true -or $p.automatic_unlock -ne $false -or $p.permanent_unlock -ne $false -or $p.general_hardware_compatibility -ne $false){throw 'Unsupported profile contract'}
  return $p
 }
 function Get-EvgaPackageHash([string]$Path){(Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()}
@@ -24,17 +24,140 @@ function Assert-EvgaPackageResult([string]$Root,[int]$Slot,[string]$Run){
  return [pscustomobject]@{Log=$log;LogSha256=(Get-EvgaPackageHash $log);GateSha256=(Get-EvgaPackageHash $gate);GpuMarkerSha256=(Get-EvgaPackageHash $gpu)}
 }
 function Assert-EvgaPackage([string]$Directory){
+ $attrs=[IO.File]::GetAttributes($Directory)
+ if(($attrs -band [IO.FileAttributes]::ReparsePoint) -or !($attrs -band [IO.FileAttributes]::Directory)){throw 'Invalid package root'}
  $m=Get-Content -LiteralPath (Join-Path $Directory 'package.json') -Raw | ConvertFrom-Json
  $p=Get-EvgaPackageProfile $m.Layout
- if($m.Schema -cne 'evga-attended-package-v1' -or $m.ProfileId -cne $p.id -or $m.AttemptSlot -lt 8 -or $m.AttemptSlot -gt 99 -or $m.Run -cne ('EVGA{0:D2}' -f $m.AttemptSlot) -or $m.RequiresFreshShiftG -ne $true -or $m.HardwareTested -ne $false){throw 'Invalid package identity'}
+ if(($m.AttemptSlot -isnot [int] -and $m.AttemptSlot -isnot [long]) -or $m.RequiresFreshShiftG -isnot [bool] -or $m.HardwareTested -isnot [bool]){throw 'Invalid package field types'}
+ if($m.Schema -cne 'evga-attended-package-v1' -or $m.ProfileId -cne $p.id -or $m.AttemptSlot -lt 8 -or $m.AttemptSlot -gt 99 -or $m.Run -cne ('EVP{0:D2}' -f $m.AttemptSlot) -or $m.EfiPath -cne ('\EFI\WindowsGPUUnlock\'+$m.Run+'\UNLOCK.EFI') -or $m.RequiresFreshShiftG -ne $true -or $m.HardwareTested -ne $false){throw 'Invalid package identity'}
  foreach($file in $m.Files){
-  if($file.Name -cnotin @('UNLOCK.EFI','profile.json','assets.json','source-manifest.json','pe-verification.json','platform-config.h')){throw 'Unknown package file'}
+  if($file.Name -cnotin @('UNLOCK.EFI','profile.json','assets.json','source-manifest.json','pe-verification.json','platform-config.h','LICENSE','README.md')){throw 'Unknown package file'}
   $path=Get-AuditCheckedPath $Directory @($file.Name) $false
   if((Get-Item -LiteralPath $path).Length -ne $file.Bytes -or (Get-EvgaPackageHash $path) -cne $file.Sha256){throw 'Package file changed'}
  }
- if($m.Files.Count -ne 6 -or @($m.Files.Name | Select-Object -Unique).Count -ne 6){throw 'Incomplete package inventory'}
+ if($m.Files.Count -ne 8 -or @($m.Files.Name | Select-Object -Unique).Count -ne 8){throw 'Incomplete package inventory'}
  $pe=Get-Content -LiteralPath (Join-Path $Directory 'pe-verification.json') -Raw | ConvertFrom-Json
  $exe=@($m.Files | Where-Object Name -CEQ 'UNLOCK.EFI')[0]
  if($pe.sha256 -cne $exe.Sha256 -or $pe.machine -cne 'AMD64' -or $pe.subsystem -ne 10 -or $pe.imports -ne 0 -or $pe.iat -ne 0 -or $pe.delay_imports -ne 0 -or !$pe.nx -or !$pe.dynamic_base){throw 'PE verification differs'}
+ $source=Get-Content -LiteralPath (Join-Path $Directory 'source-manifest.json') -Raw | ConvertFrom-Json
+ if($source.Mode -cne 'evga-attended-reusable-package' -or $source.AttemptSlot -ne $m.AttemptSlot -or $source.Layout -cne $m.Layout -or $source.WindowsEspGuid -cne $m.WindowsEspGuid -or $source.UnlockPartitionGuid -cne $m.UnlockPartitionGuid -or $source.EfiSha256 -cne $exe.Sha256 -or $source.CanUnlock -ne $true){throw 'Package and compiled source manifest differ'}
  return $m
+}
+function Get-EvgaFirmwareSnapshot([scriptblock]$Read){
+ $order=& $Read 'BootOrder'
+ if(!$order -or $order.Attributes -ne 7){throw 'Expected BootOrder attributes 7'}
+ [byte[]]$bytes=[Convert]::FromBase64String($order.DataBase64)
+ if(!$bytes.Length -or $bytes.Length%2){throw 'Malformed BootOrder'}
+ $entries=@();$names=@()
+ for($i=0;$i -lt $bytes.Length;$i+=2){
+  $name='Boot{0:X4}' -f [BitConverter]::ToUInt16($bytes,$i)
+  if($name -in $names){throw 'Duplicate BootOrder entry'};$names+=,$name
+  $value=& $Read $name;if(!$value){throw 'BootOrder references a missing entry'}
+  $entries+=,[pscustomobject]@{Name=$name;Value=$value}
+ }
+ [pscustomobject]@{BootOrder=$order;BootEntries=$entries}
+}
+function Get-EvgaOptionDescription($Value){
+ [byte[]]$data=[Convert]::FromBase64String($Value.DataBase64)
+ if($data.Length -lt 8){return ''};$end=6
+ while($end+1 -lt $data.Length -and ($data[$end] -ne 0 -or $data[$end+1] -ne 0)){$end+=2}
+ if($end+1 -ge $data.Length){return ''}
+ [Text.Encoding]::Unicode.GetString($data,6,$end-6)
+}
+function Get-EvgaPreservedCleanupSnapshot($Before,[scriptblock]$Read){
+ $now=Get-EvgaFirmwareSnapshot $Read
+ $names=@($now.BootEntries | ForEach-Object {$_.Name});$kept=@()
+ $fallback=@('UEFI:CD/DVD Drive','UEFI:Removable Device','UEFI:Network Device')
+ foreach($entry in $Before.BootEntries){
+  $value=& $Read $entry.Name
+  if($null -eq $value -and $entry.Name -notin $names -and (Get-EvgaOptionDescription $entry.Value) -cin $fallback){continue}
+  if(!(Test-FirmwareValueEqual $value $entry.Value)){throw 'An existing boot entry changed; cleanup refused'}
+  $kept+=,$entry.Name
+ }
+ if($names.Count -lt $kept.Count){throw 'BootOrder lost an existing entry'}
+ for($i=0;$i -lt $kept.Count;$i++){if($names[$i] -cne $kept[$i]){throw 'Existing BootOrder sequence changed'}}
+ foreach($entry in @($now.BootEntries | Select-Object -Skip $kept.Count)){
+  if((Get-EvgaOptionDescription $entry.Value) -cnotin $fallback){throw 'Unreviewed additional boot entry; cleanup refused'}
+ }
+ return $now
+}
+function Remove-EvgaPackageOption($Attempt,[scriptblock]$Read,[scriptblock]$Write,[scriptblock]$Save){
+ if($Attempt.OptionName -cnotmatch '^Boot7E[0-9A-F]{2}$' -or $Attempt.Option.Attributes -ne 7){throw 'Invalid owned option'}
+ $snapshot=Get-EvgaPreservedCleanupSnapshot $Attempt $Read
+ if($snapshot.BootEntries.Name -ccontains $Attempt.OptionName -or $Attempt.BootEntries.Name -ccontains $Attempt.OptionName){throw 'Temporary option is referenced by BootOrder; no cleanup attempted'}
+ $next=& $Read 'BootNext';$owned=ConvertTo-FirmwareValue ([BitConverter]::GetBytes([uint16]$Attempt.OptionNumber))
+ if($null -ne $next -and !(Test-FirmwareValueEqual $next $owned)){throw 'Another pending BootNext exists; no cleanup attempted'}
+ $current=& $Read $Attempt.OptionName
+ if($null -ne $current -and !(Test-FirmwareValueEqual $current $Attempt.Option)){throw 'Owned option changed'}
+ & $Save $snapshot
+ Assert-SharedEspFirmwareSnapshot $snapshot $Read
+ if($null -ne $next){
+  if(!(Test-FirmwareValueEqual (& $Read 'BootNext') $owned)){throw 'BootNext raced; stop'}
+  & $Write 'BootNext' $null
+ }
+ if($null -ne (& $Read 'BootNext')){throw 'BootNext not clear after cancellation'}
+ if($null -ne $current){
+  Assert-SharedEspFirmwareSnapshot $snapshot $Read
+  if($null -ne (& $Read 'BootNext')){throw 'BootNext appeared before option deletion; stop'}
+  if(!(Test-FirmwareValueEqual (& $Read $Attempt.OptionName) $Attempt.Option)){throw 'Owned option raced; stop'}
+  & $Write $Attempt.OptionName $null
+ }
+ Assert-SharedEspFirmwareSnapshot $snapshot $Read
+ if($null -ne (& $Read $Attempt.OptionName) -or $null -ne (& $Read 'BootNext')){throw 'Cleanup readback failed'}
+}
+function Get-EvgaCheckedDirectory([string]$Root,[string[]]$Components){
+ $attrs=[IO.File]::GetAttributes($Root)
+ if(($attrs -band [IO.FileAttributes]::ReparsePoint) -or !($attrs -band [IO.FileAttributes]::Directory)){throw 'Invalid root directory'}
+ $path=$Root
+ foreach($name in $Components){
+  if($name -notmatch '^[A-Za-z0-9._-]+$' -or $name -in @('.','..')){throw 'Invalid directory component'}
+  $candidate=Join-Path $path $name
+  if(!(Test-Path -LiteralPath $candidate)){[void][IO.Directory]::CreateDirectory($candidate)}
+  $path=Get-AuditCheckedPath $path @($name) $true
+ }
+ return $path
+}
+function Get-EvgaAssetSpecifications([string]$SpecFile){
+ $specs=@(Get-Content -LiteralPath $SpecFile -Raw | ConvertFrom-Json)
+ if($specs.Count -eq 1 -and $specs[0].Name -is [array]){
+  $flat=$specs[0];$specs=@()
+  for($i=0;$i -lt $flat.Name.Count;$i++){$specs+=,[pscustomobject]@{Name=$flat.Name[$i];Bytes=$flat.Bytes[$i];Sha256=$flat.Sha256[$i]}}
+ }
+ if($specs.Count -ne 5 -or @($specs.Name | Select-Object -Unique).Count -ne 5){throw 'Expected five unique asset specifications'}
+ return $specs
+}
+function Assert-EvgaAssetDirectory([string]$Directory,[string]$SpecFile){
+ $specs=@(Get-EvgaAssetSpecifications $SpecFile)
+ foreach($spec in $specs){
+  if($spec.Name -cnotin @('booter_load_ga102.bin','v67-ga102-610.43.03.bin','gsp_ga10x.bin','gsp_boot_ga102.bin','gsp_boot_desc_ga102.bin')){throw 'Invalid asset name'}
+  $file=Get-AuditCheckedPath $Directory @($spec.Name) $false
+  if((Get-Item -LiteralPath $file).Length -ne $spec.Bytes -or (Get-EvgaPackageHash $file) -cne $spec.Sha256){throw "Firmware asset differs: $($spec.Name)"}
+ }
+ foreach($name in @('NVIDIA-LICENSE','NOTICE.md')){[void](Get-AuditCheckedPath $Directory @($name) $false)}
+ return $specs
+}
+function Copy-EvgaPackageFile([string]$Source,[string]$Target,[string]$Expected){
+ if((Get-EvgaPackageHash $Source) -cne $Expected){throw 'Copy source changed'}
+ if(Test-Path -LiteralPath $Target){if((Get-EvgaPackageHash $Target) -cne $Expected){throw 'Existing destination differs; never overwrite'};return}
+ $inputStream=$null;$outputStream=$null
+ try {$inputStream=[IO.File]::OpenRead($Source);$outputStream=[IO.File]::Open($Target,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None);$inputStream.CopyTo($outputStream);$outputStream.Flush($true)}finally{if($outputStream){$outputStream.Dispose()};if($inputStream){$inputStream.Dispose()}}
+ if((Get-EvgaPackageHash $Target) -cne $Expected){throw 'Copy readback differs; preserve partial state'}
+}
+function Get-EvgaProfileNextSlot([string]$StateDirectory,$Installation){
+ $files=@(Get-ChildItem -LiteralPath $StateDirectory -File -Filter 'attempt-*.json')
+ $slots=@()
+ foreach($file in $files){if($file.Name -cnotmatch '^attempt-([0-9]{2})\.json$'){throw 'Unexpected attempt journal'};$slots+=,[int]$Matches[1]}
+ $last=[int]$Installation.SeedSlot
+ foreach($slot in @($slots | Sort-Object)){if($slot -ne $last+1){throw 'Attempt journal gap or duplicate'};$last=$slot}
+ if($last -gt [int]$Installation.SeedSlot){
+  $attempt=Get-Content -LiteralPath (Join-Path $StateDirectory ('attempt-{0:D2}.json' -f $last)) -Raw | ConvertFrom-Json
+  $resultPath=Join-Path $StateDirectory ('result-{0:D2}.json' -f $last)
+  if(!(Test-Path -LiteralPath $resultPath)){throw 'Collect the previous attempt before rearming. If it failed/hung, report it; never reset its markers.'}
+  $result=Get-Content -LiteralPath $resultPath -Raw | ConvertFrom-Json
+  if($result.Success -ne $true -or $result.CleanupCompleted -ne $true -or $result.AttemptSlot -ne $last){throw 'Prior attempt failed, was cancelled or remains incomplete; rearm refused'}
+  $proof=Assert-EvgaPackageResult $attempt.TargetRoot $last $attempt.Run
+  if($proof.LogSha256 -cne $result.LogSha256 -or $proof.GateSha256 -cne $result.GateSha256 -or $proof.GpuMarkerSha256 -cne $result.GpuMarkerSha256){throw 'Prior evidence changed after collection'}
+ }
+ if($last -ge 99){throw 'Attempt slots exhausted'}
+ return $last+1
 }

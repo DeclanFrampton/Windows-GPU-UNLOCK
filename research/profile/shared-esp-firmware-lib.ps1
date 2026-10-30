@@ -8,7 +8,7 @@ function Test-FirmwareValueEqual($A,$B){
 }
 function New-SharedEspLoadOption([guid]$PartitionGuid,[uint32]$PartitionNumber,[uint64]$StartLba,[uint64]$SizeLba,[string]$Description,[string]$FilePath='\EFI\EVGA-SHARED-AUDIT-VISIBLE.EFI'){
  if($PartitionGuid -eq [guid]::Empty -or !$PartitionNumber -or !$SizeLba -or $Description.Contains([char]0)){throw 'Invalid EFI load option input'}
- if($FilePath -cnotin @('\EFI\EVGA-SHARED-AUDIT-VISIBLE.EFI','\EFI\EVGA-SHARED-LAUNCH02.EFI')){throw 'Unsupported firmware launch path'}
+ if($FilePath -cnotin @('\EFI\EVGA-SHARED-AUDIT-VISIBLE.EFI','\EFI\EVGA-SHARED-LAUNCH02.EFI') -and $FilePath -cnotmatch '^\\EFI\\WindowsGPUUnlock\\EVP(?:0[8-9]|[1-9][0-9])\\UNLOCK\.EFI$'){throw 'Unsupported firmware launch path'}
  $path=[Text.Encoding]::Unicode.GetBytes($FilePath+[char]0)
  $stream=New-Object IO.MemoryStream;$w=New-Object IO.BinaryWriter($stream)
  try {
