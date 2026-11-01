@@ -12,6 +12,7 @@ from unicorn.x86_const import (UC_X86_REG_RSP, UC_X86_REG_RIP, UC_X86_REG_RAX,
 
 data = Path(sys.argv[1]).read_bytes()
 graphics = len(sys.argv)>2 and sys.argv[2]=='graphics'
+private = len(sys.argv)>2 and sys.argv[2]=='private'
 pe = struct.unpack_from('<I', data, 60)[0]
 opt = pe + 24
 entry = struct.unpack_from('<I', data, opt + 16)[0]
@@ -25,6 +26,8 @@ if graphics:
     cases = [c for c in cases if c != 'record-error']
     cases[cases.index('physical-gop')] = 'missing-path'
     cases += ['one-mode', 'mode-cycle', 'mode-wrong-previous', 'too-many-modes']
+if private:
+    cases=['success','wrong-child','flag-set','missing-private','mmio-node','out-of-range','unaligned-node','map-error','short-stride','overflow-pages','read-protected']
 for case in cases:
     u = Uc(UC_ARCH_X86, UC_MODE_64)
     image, stack, stubs, ram = 0x10000000, 0x20000000, 0x30000000, 0x40000000
@@ -50,6 +53,9 @@ for case in cases:
     put(node, 0 if case != 'two-nodes' else node + 0x40)
     put(node+8, node+0x40 if case == 'wrong-previous' else 0)
     put(node + 24, controller)
+    if private:
+        put(node+8, console+8 if case=='wrong-child' else console)
+        put(node+24, 1 if case=='flag-set' else 0)
     if graphics:
         put(base+0x1c68, console+8 if case=='wrong-child' else console)
         put(base+0x1cc0, 2 if case=='wrong-count' else 1)
@@ -97,9 +103,12 @@ for case in cases:
             if rcx != controller:
                 raise AssertionError('Unexpected controller')
             is_gop = bytes(engine.mem_read(rdx, 4)) == bytes.fromhex('dea94290')
-            status = unsupported if (is_gop and case == 'missing-gop') or (not is_gop and ((graphics and case=='missing-path') or (not graphics and case!='physical-gop'))) else 0
-            if status == 0:
-                put(r8, 0x77770000)
+            if private:
+                status=unsupported if case=='missing-private' else 0
+                if status==0:put(r8,node-0x80+(1 if case=='unaligned-node' else 0))
+            else:
+                status = unsupported if (is_gop and case == 'missing-gop') or (not is_gop and ((graphics and case=='missing-path') or (not graphics and case!='physical-gop'))) else 0
+                if status == 0:put(r8, 0x77770000)
         elif address == stubs + 0x200:
             name = bytes(engine.mem_read(rdx, 100)).split(b'\0', 1)[0].decode()
             events.append((name, r8))

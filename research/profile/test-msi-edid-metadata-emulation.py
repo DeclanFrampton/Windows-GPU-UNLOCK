@@ -6,12 +6,13 @@ from pathlib import Path
 from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE
 from unicorn.x86_const import UC_X86_REG_RSP, UC_X86_REG_RCX, UC_X86_REG_RDX, UC_X86_REG_R8, UC_X86_REG_R9, UC_X86_REG_RAX, UC_X86_REG_RIP
 
-data=Path(sys.argv[1]).read_bytes();nv=len(sys.argv)>2 and sys.argv[2]=='nvidia'
+data=Path(sys.argv[1]).read_bytes();post=len(sys.argv)>2 and sys.argv[2]=='owner';nv=post or (len(sys.argv)>2 and sys.argv[2]=='nvidia')
 pe=struct.unpack_from('<I',data,60)[0];opt=pe+24;entry=struct.unpack_from('<I',data,opt+16)[0]
 table=opt+struct.unpack_from('<H',data,pe+20)[0]
 cases=(['success','missing-child','wrong-child','wrong-parent-owner','duplicate-child','wrong-count','open-error','too-many-opens'] if nv else
        ['success','absent','absent-with-get','stale-owner-after','wrong-handle','two-handles','wrong-agent','wrong-count','open-error','too-many-opens'])
 rows=[]
+if post:cases=['success','absent','absent-with-get','stale-owner-after','wrong-parent-owner','wrong-count','open-error','too-many-opens','stale-child']
 for case in cases:
     u=Uc(UC_ARCH_X86,UC_MODE_64);image,ram,stubs=0x10000000,0x20000000,0x30000000
     for start,size in [(image,0x20000),(ram,0x20000),(stubs,0x1000)]:u.mem_map(start,size)
@@ -38,7 +39,12 @@ for case in cases:
             put(r9,len(handles));put(get(engine.reg_read(UC_X86_REG_RSP)+0x28),array)
         elif off==0x128:
             records=[];guid=bytes(engine.mem_read(rdx,4))
-            if nv:
+            if post:
+                if guid==bytes.fromhex('00b2f54c'):
+                    if case not in ('absent','absent-with-get'):records=[(agent+8 if case=='wrong-parent-owner' else agent,physical,16,2 if case=='wrong-count' else 1)]
+                    elif case=='absent-with-get':records=[(agent+8,0,1,1)]
+                elif case=='stale-child':records=[(agent,physical+8,8,1)]
+            elif nv:
                 if guid==bytes.fromhex('916e5709') and rcx==parent:
                     if case!='missing-child':records=[(agent,physical+8 if case=='wrong-child' else physical,8,2 if case=='wrong-count' else 1)]
                     if case=='duplicate-child':records*=2

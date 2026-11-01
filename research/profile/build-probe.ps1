@@ -5,7 +5,7 @@
 # DMA or firmware variable writes in default mode. MsiOneChildTest explicitly
 # permits one text-child removal after fresh guards. Builds files only.
 param([Parameter(Mandatory)][guid]$WindowsEspGuid,[string]$Clang='clang',[string]$LldLink='lld-link',[string]$Python='python',
-      [ValidateRange(1,255)][int]$TargetBus=1,[switch]$MsiRuntimeAudit,[switch]$MsiZeroChildTest,[switch]$MsiMembershipAudit,[switch]$MsiOneChildTest,[switch]$MsiVirtualTextTest,[switch]$MsiGraphicsTest,[switch]$MsiEdidTest)
+      [ValidateRange(1,255)][int]$TargetBus=1,[switch]$MsiRuntimeAudit,[switch]$MsiZeroChildTest,[switch]$MsiMembershipAudit,[switch]$MsiOneChildTest,[switch]$MsiVirtualTextTest,[switch]$MsiGraphicsTest,[switch]$MsiEdidTest,[switch]$MsiNvidiaRelease)
 $ErrorActionPreference='Stop'
 if($MsiZeroChildTest -and !$MsiRuntimeAudit){throw 'Zero-child test requires the exact MSI runtime audit'}
 if($MsiMembershipAudit -and (!$MsiRuntimeAudit -or $MsiZeroChildTest)){throw 'Membership audit requires identity audit and excludes method calls'}
@@ -13,6 +13,7 @@ if($MsiOneChildTest -and (!$MsiMembershipAudit -or !$MsiRuntimeAudit -or $MsiZer
 if($MsiVirtualTextTest -and !$MsiOneChildTest){throw 'Virtual renderer test requires one-child removal'}
 if($MsiGraphicsTest -and !$MsiVirtualTextTest){throw 'Graphics test requires both text removal stages'}
 if($MsiEdidTest -and !$MsiGraphicsTest){throw 'EDID test requires graphics membership removal'}
+if($MsiNvidiaRelease -and !$MsiEdidTest){throw 'NVIDIA release requires the complete consumer sequence'}
 $repo=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $boot=Join-Path $repo 'internal-boot/boot'
 function GuidC([guid]$Value){
@@ -40,6 +41,7 @@ try {
  if($MsiVirtualTextTest){$defines+='-DGU_MSI_VIRTUAL_TEXT_TEST'}
  if($MsiGraphicsTest){$defines+='-DGU_MSI_GRAPHICS_TEST'}
  if($MsiEdidTest){$defines+='-DGU_MSI_EDID_TEST'}
+ if($MsiNvidiaRelease){$defines+='-DGU_MSI_NVIDIA_RELEASE'}
  $busMode='auto'
  if($PSBoundParameters.ContainsKey('TargetBus')){
   $defines+=('-DGU_PROBE_BUS=0x{0:x}U' -f $TargetBus);$busMode='explicit'
@@ -58,12 +60,14 @@ try {
  $manifestInputs=$sources+@('diagnostic.h','media.h','probe.h','../unlock/machine-profile.h','../unlock/gpu-family.h','../unlock/firmware-profile.h')
  if($MsiRuntimeAudit){$manifestInputs+='msi-runtime-audit.h'}
  if($MsiEdidTest){$manifestInputs+='msi-edid-audit.h'}
- [ordered]@{Mode=$(if($MsiOneChildTest){'msi-one-child-removal-then-windows-usb'}else{'generic-read-only-probe-then-windows-usb'});MsiRuntimeAudit=[bool]$MsiRuntimeAudit;MsiZeroChildTest=[bool]$MsiZeroChildTest;MsiMembershipAudit=[bool]$MsiMembershipAudit;MsiOneChildTest=[bool]$MsiOneChildTest;MsiVirtualTextTest=[bool]$MsiVirtualTextTest;MsiGraphicsTest=[bool]$MsiGraphicsTest;CallsDriverStop=([bool]$MsiZeroChildTest -or [bool]$MsiOneChildTest);CanUnlock=$false;CanDetach=[bool]$MsiOneChildTest;WritesFirmwareVariables=$false;HardwareTested=$false;Defines=$defines
-  MsiEdidTest=[bool]$MsiEdidTest;NvidiaStopCalled=$false
+ if($MsiNvidiaRelease){$manifestInputs+='msi-nvidia-release.h'}
+ [ordered]@{Mode=$(if($MsiNvidiaRelease){'msi-nvidia-child-parent-release-then-windows-usb'}elseif($MsiOneChildTest){'msi-one-child-removal-then-windows-usb'}else{'generic-read-only-probe-then-windows-usb'});MsiRuntimeAudit=[bool]$MsiRuntimeAudit;MsiZeroChildTest=[bool]$MsiZeroChildTest;MsiMembershipAudit=[bool]$MsiMembershipAudit;MsiOneChildTest=[bool]$MsiOneChildTest;MsiVirtualTextTest=[bool]$MsiVirtualTextTest;MsiGraphicsTest=[bool]$MsiGraphicsTest;CallsDriverStop=([bool]$MsiZeroChildTest -or [bool]$MsiOneChildTest);CanUnlock=$false;CanDetach=[bool]$MsiOneChildTest;WritesFirmwareVariables=$false;HardwareTested=$false;Defines=$defines
+  MsiEdidTest=[bool]$MsiEdidTest;MsiNvidiaRelease=[bool]$MsiNvidiaRelease;NvidiaStopCalled=[bool]$MsiNvidiaRelease
   ProbeBusMode=$busMode;TargetBus=$(if($busMode -eq 'explicit'){$TargetBus}else{$null})
   EfiSha256=(Get-FileHash -LiteralPath "$out/BOOTX64.EFI").Hash.ToLowerInvariant();BuiltUtc=[DateTime]::UtcNow.ToString('o')
   Sources=@($manifestInputs | ForEach-Object {[ordered]@{Path=$_;Sha256=(Get-FileHash -LiteralPath $_).Hash.ToLowerInvariant()}})
  } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath "$out/manifest.json" -Encoding utf8
- if($MsiOneChildTest){"Built MSI one-child removal test $out/BOOTX64.EFI; hardware untested."}
+ if($MsiNvidiaRelease){"Built MSI NVIDIA child+parent release test $out/BOOTX64.EFI; hardware untested."}
+ elseif($MsiOneChildTest){"Built MSI one-child removal test $out/BOOTX64.EFI; hardware untested."}
  else{"Built generic read-only probe $out/BOOTX64.EFI; hardware untested."}
 } finally {Pop-Location}

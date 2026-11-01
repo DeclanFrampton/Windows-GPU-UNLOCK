@@ -155,12 +155,15 @@ static EFI_STATUS GuMsiMembership(EFI_SYSTEM_TABLE *t,VOID *base,UINTN size,GU_M
  return EFI_UNSUPPORTED;
 }
 #endif
+#ifdef GU_MSI_NVIDIA_RELEASE
+#include "msi-nvidia-release.h"
+#endif
 static EFI_STATUS GuMsiRuntimeAudit(EFI_SYSTEM_TABLE *t,GU_MSI_RECORD record){
  EFI_GUID binding=EFI_DRIVER_BINDING_PROTOCOL_GUID,loaded=EFI_LOADED_IMAGE_PROTOCOL_GUID;
  EFI_HANDLE *handles=NULL;UINTN count=0,text=0,gfx=0;
  EFI_DRIVER_BINDING_PROTOCOL *textBinding=NULL;
 #ifdef GU_MSI_EDID_TEST
- EFI_DRIVER_BINDING_PROTOCOL *edidBinding=NULL,*nvidiaBinding=NULL;VOID *edidBase=NULL;UINTN edidMatches=0,nvidiaMatches=0;
+ EFI_DRIVER_BINDING_PROTOCOL *edidBinding=NULL,*nvidiaBinding=NULL;VOID *edidBase=NULL;UINTN edidMatches=0,nvidiaMatches=0;EFI_HANDLE nvidiaParent=NULL;
 #endif
 #ifdef GU_MSI_GRAPHICS_TEST
  EFI_DRIVER_BINDING_PROTOCOL *graphicsBinding=NULL;VOID *graphicsBase=NULL;UINTN graphicsSize=0;
@@ -229,9 +232,14 @@ static EFI_STATUS GuMsiRuntimeAudit(EFI_SYSTEM_TABLE *t,GU_MSI_RECORD record){
  s=GuMsiEdidState(t,physical,edidBinding->DriverBindingHandle,TRUE);
  if(record(NULL,"msi-edid-owner-before",s)!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
  if(s!=EFI_SUCCESS)return s;
- s=GuMsiNvidiaAudit(t,physical,nvidiaBinding->DriverBindingHandle);
+ s=GuMsiNvidiaAudit(t,physical,nvidiaBinding->DriverBindingHandle,&nvidiaParent);
  if(record(NULL,"msi-nvidia-metadata-before",s)!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
  if(s!=EFI_SUCCESS)return s;
+#ifdef GU_MSI_NVIDIA_RELEASE
+ s=GuMsiNvPrivateState(t,nvidiaParent,physical);
+ if(record(NULL,"msi-nvidia-private-before",s)!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
+ if(s!=EFI_SUCCESS)return s;
+#endif
 #endif
 #endif
 #ifdef GU_MSI_VIRTUAL_TEXT_TEST
@@ -305,8 +313,29 @@ static EFI_STATUS GuMsiRuntimeAudit(EFI_SYSTEM_TABLE *t,GU_MSI_RECORD record){
  BOOLEAN flagClear=*((UINT8 *)edidBase+0x5501)==0;
  if(record(NULL,"msi-edid-flag-cleared",flagClear?EFI_SUCCESS:EFI_UNSUPPORTED)!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
  if(!flagClear)return EFI_UNSUPPORTED;
- s=GuMsiNvidiaAudit(t,physical,nvidiaBinding->DriverBindingHandle);
+ EFI_HANDLE freshParent=NULL;
+ s=GuMsiNvidiaAudit(t,physical,nvidiaBinding->DriverBindingHandle,&freshParent);
  if(record(NULL,"msi-nvidia-metadata-after",s)!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
+#ifdef GU_MSI_NVIDIA_RELEASE
+ if(s!=EFI_SUCCESS || freshParent!=nvidiaParent)return EFI_UNSUPPORTED;
+ s=GuMsiNvPrivateState(t,nvidiaParent,physical);
+ if(record(NULL,"msi-nvidia-private-fresh",s)!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
+ if(s!=EFI_SUCCESS)return s;
+ if(record(NULL,"msi-nvidia-child-stop-enter",EFI_SUCCESS)!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
+ EFI_HANDLE gpuChild=physical;
+ s=nvidiaBinding->Stop(nvidiaBinding,nvidiaParent,1,&gpuChild);
+ if(record(NULL,"msi-nvidia-child-stop-return",s)!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
+ if(s!=EFI_SUCCESS)return s;
+ s=GuMsiNvChildrenPost(t,nvidiaParent,physical,controller,nvidiaBinding->DriverBindingHandle);
+ if(record(NULL,"msi-nvidia-child-post",s)!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
+ if(s!=EFI_SUCCESS)return s;
+ if(record(NULL,"msi-nvidia-parent-stop-enter",EFI_SUCCESS)!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
+ s=nvidiaBinding->Stop(nvidiaBinding,nvidiaParent,0,NULL);
+ if(record(NULL,"msi-nvidia-parent-stop-return",s)!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
+ if(s!=EFI_SUCCESS)return s;
+ s=GuMsiNvParentPost(t,nvidiaParent,physical,controller,nvidiaBinding->DriverBindingHandle,record);
+ if(record(NULL,"msi-nvidia-parent-post",s)!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
+#endif
 #endif
 #endif
  return s;

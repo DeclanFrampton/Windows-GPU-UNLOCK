@@ -19,7 +19,8 @@ static EFI_STATUS GuMsiEdidState(EFI_SYSTEM_TABLE *t,EFI_HANDLE physical,EFI_HAN
  if(opens && t->BootServices->FreePool(opens)!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
  return ok && owners==(present?1U:0U)?EFI_SUCCESS:EFI_UNSUPPORTED;
 }
-static EFI_STATUS GuMsiNvidiaAudit(EFI_SYSTEM_TABLE *t,EFI_HANDLE physical,EFI_HANDLE agent){
+static EFI_STATUS GuMsiNvidiaAudit(EFI_SYSTEM_TABLE *t,EFI_HANDLE physical,EFI_HANDLE agent,EFI_HANDLE *parentOut){
+ if(parentOut)*parentOut=NULL;
  EFI_GUID path=EFI_DEVICE_PATH_PROTOCOL_GUID,pci=EFI_PCI_IO_PROTOCOL_GUID;
  EFI_HANDLE *handles=NULL,parent=NULL;UINTN n=0,children=0;
  EFI_STATUS s=t->BootServices->LocateHandleBuffer(ByProtocol,&path,NULL,&n,&handles);
@@ -46,5 +47,6 @@ static EFI_STATUS GuMsiNvidiaAudit(EFI_SYSTEM_TABLE *t,EFI_HANDLE physical,EFI_H
   owners++;
  }
  if(opens && t->BootServices->FreePool(opens)!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
- return ok && owners==1?EFI_SUCCESS:EFI_UNSUPPORTED;
+ if(ok && owners==1){if(parentOut)*parentOut=parent;return EFI_SUCCESS;}
+ return EFI_UNSUPPORTED;
 }

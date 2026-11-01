@@ -528,7 +528,9 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE Image,EFI_SYSTEM_TABLE *St) {
     if(s==EFI_SUCCESS){
       EFI_FILE_PROTOCOL *arm=NULL;
       s=Table->BootServices->SetWatchdogTimer(0,0,0,NULL);
-#if defined(GU_MSI_EDID_TEST)
+#if defined(GU_MSI_NVIDIA_RELEASE)
+      if(s==EFI_SUCCESS)s=Root->Open(Root,&arm,L"MSI-NVIDIA-RELEASE.ARMED",EFI_FILE_MODE_READ|EFI_FILE_MODE_WRITE,0);
+#elif defined(GU_MSI_EDID_TEST)
       if(s==EFI_SUCCESS)s=Root->Open(Root,&arm,L"MSI-EDID.ARMED",EFI_FILE_MODE_READ|EFI_FILE_MODE_WRITE,0);
 #elif defined(GU_MSI_GRAPHICS_TEST)
       if(s==EFI_SUCCESS)s=Root->Open(Root,&arm,L"MSI-GRAPHICS.ARMED",EFI_FILE_MODE_READ|EFI_FILE_MODE_WRITE,0);
