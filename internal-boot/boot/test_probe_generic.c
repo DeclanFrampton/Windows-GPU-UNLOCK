@@ -32,6 +32,7 @@ static int AttributeConfigReads;
 static EFI_PCI_IO_PROTOCOL ChangedPci;
 static UINTN TestSegment,TestBus;
 static UINT32 TestId;
+static UINT32 TestSubsystem;
 static int LocationCalls;
 
 static EFI_STATUS EFIAPI GenericRead(EFI_PCI_IO_PROTOCOL *io,EFI_PCI_IO_PROTOCOL_WIDTH w,UINT32 at,UINTN n,VOID *data) {
@@ -50,6 +51,7 @@ static EFI_STATUS EFIAPI GenericRead(EFI_PCI_IO_PROTOCOL *io,EFI_PCI_IO_PROTOCOL
       if(Mode==G_MIXED_MULTI && S.IdReads==2)v[0]=0x999910de;
     }
     if(Mode==G_UNKNOWN && n==64)v[0]=0x999910de;
+    if(n>=12 && TestSubsystem)v[11]=TestSubsystem;
     if(n==64){
       v[0]=TestId;
       if(Mode==G_UNKNOWN || Mode==G_INITIAL_ID)v[0]=0x999910de;
@@ -170,7 +172,7 @@ static void GenericSetup(int mode) {
   Pci.Pci.Read=GenericRead;Pci.GetBarAttributes=Bar;Pci.GetLocation=GenericLocation;
   Pci.Attributes=Attr;AttributeGets=AttributeOthers=0;
   AttributeReturned=FALSE;AttributeConfigReads=0;
-  TestSegment=0;TestBus=GU_TEST_PROBE_BUS;TestId=GU_BOARD_ID;LocationCalls=0;ChangedPci=Pci;
+  TestSegment=0;TestBus=GU_TEST_PROBE_BUS;TestId=GU_BOARD_ID;TestSubsystem=0;LocationCalls=0;ChangedPci=Pci;
   Bs.LocateHandleBuffer=GenericLocate;Bs.HandleProtocol=GenericHandle;
   memset(&Binding,0,sizeof(Binding));Binding.ImageHandle=ImageHandle;
   memset(&Image,0,sizeof(Image));Image.ImageBase=ImageBytes;Image.ImageSize=sizeof(ImageBytes);
