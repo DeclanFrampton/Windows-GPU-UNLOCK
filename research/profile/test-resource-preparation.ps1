@@ -8,7 +8,14 @@ $bios=[pscustomobject]@{SMBIOSBIOSVersion='5013'};$cpu=[pscustomobject]@{Name='A
 $gpu=[pscustomobject]@{PNPDeviceID='PCI\VEN_10DE&DEV_2204&SUBSYS_147D10DE&REV_A1\PRIVATE'}
 $lci=[pscustomobject]@{PNPDeviceID='LCI\PRIVATE'};$root=[pscustomobject]@{PNPDeviceID='ROOT\PRIVATE'}
 $driver=[pscustomobject]@{DeviceID='LCI\PRIVATE';DriverProviderName='LuminonCore';DriverVersion='1.0.2018.1204';IsSigned=$true}
-Assert-PinnedProbe $p $b $bios $cpu @($gpu,$lci,$root) @($driver)
+Assert-PinnedProbe $p $b $bios $cpu @($gpu,$lci) @($driver)
+Reject {Assert-PinnedProbe $p $b $bios $cpu @($gpu,$lci,$root) @($driver)}
+$swd=[pscustomobject]@{PNPDeviceID='SWD\PRIVATE'}
+Reject {Assert-PinnedProbe $p $b $bios $cpu @($gpu,$lci,$swd) @($driver)}
+foreach($signed in @($false,$true)){
+ $extra=[pscustomobject]@{DeviceID=$root.PNPDeviceID;DriverProviderName='Punktfunk';DriverVersion='9.9.929.102';IsSigned=$signed}
+ Reject {Assert-PinnedProbe $p $b $bios $cpu @($gpu,$lci,$root) @($driver,$extra)}
+}
 Reject {Assert-PinnedProbe $p $b $bios $cpu @($gpu,$lci,$gpu) @($driver)}
 Reject {Assert-PinnedProbe $p $b $bios $cpu @($gpu) @($driver)}
 Reject {Assert-PinnedProbe $p $b $bios $cpu @($gpu,$lci) @()}

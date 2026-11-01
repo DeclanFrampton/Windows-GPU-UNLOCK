@@ -42,7 +42,7 @@ function Assert-PinnedProbe($p,$Board,$Bios,$Cpu,$Video,$Drivers=@()){
  $expectedCount=1;if($p.OtherPciVendor){$expectedCount=2}
  if($target.Count -ne 1 -or $pci.Count -ne $expectedCount){throw 'Exact PCI display inventory mismatch.'}
  if($p.OtherPciVendor -and @($pci|Where-Object {$_.PNPDeviceID -match ('^PCI\\VEN_'+$p.OtherPciVendor+'&DEV_[0-9A-F]{4}&SUBSYS_[0-9A-F]{8}(?:&|\\|$)')}).Count -ne 1){throw 'PCI companion mismatch.'}
- $other=@($Video|Where-Object {$_.PNPDeviceID -notmatch '^(PCI|ROOT|SWD)\\'})
+ $other=@($Video|Where-Object {$_.PNPDeviceID -notmatch '^PCI\\'})
  if($other.Count -ne $p.NonPci.Count){throw 'Unknown display identity; stop.'}
  foreach($a in $p.NonPci){
   $v=@($other|Where-Object {$_.PNPDeviceID -cmatch ('^'+[regex]::Escape($a.Enumerator)+'\\')})

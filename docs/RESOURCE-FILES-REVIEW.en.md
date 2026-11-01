@@ -20,3 +20,5 @@ Local validation uses the actual production parser on an empty synthetic PROM, m
 driver data, hash-preservation/privacy checks and existing captured-driver positive/
 corrupt/missing/duplicate regressions. Contributor hardware/files were not independently
 rerun here. Prefer this combined test for cases needing both checks, not serial repeats.
+
+Preparation consistency: resource preparation now refuses unreviewed ROOT/SWD display identities like graph preparation, rather than silently ignoring them. A signed flag alone is not an exact identity pin. Existing signed LCI pins remain. ROOT/SWD/Punktfunk signed-and-unsigned refusal and LCI positive/negative tests pass. Completed captures remain usable; do not recapture, disable/remove adapters or change settings to pass. No hardware engine change.
