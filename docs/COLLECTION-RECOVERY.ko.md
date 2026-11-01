@@ -22,3 +22,5 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\research\profile\prepare-m
 로컬 테스트는 다중 Python, 잘못된 형식/별칭/누락 거부, 대체 출력, 차단된 쓰기,
 캡처 보존과 오류 제외를 검증합니다. 실제 검사기의 합성 거부 데이터 출력과
 issue31 태그도 실행했습니다. 소유자 하드웨어/Windows 복구는 여기서 미검증입니다.
+
+기존 파일 드라이버 검토도 동일한 단일 Python 선택과 선택적 -OutputRoot를 사용합니다. driver-review.json만 반환하며 두 번째 캡처는 필요하지 않습니다.

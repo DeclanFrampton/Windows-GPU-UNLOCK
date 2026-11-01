@@ -24,3 +24,5 @@ Local tests cover multiple applications, scalar/alias/missing refusal, alternate
 output, simulated blocked write, capture preservation and error redaction.
 The production checker export also ran on synthetic refusal data with issue31
 tagging. No owner hardware or Windows recovery was tested here.
+
+Existing-file driver review now uses the same scalar Python resolver and optional -OutputRoot. Return driver-review.json only; no second capture is needed.
