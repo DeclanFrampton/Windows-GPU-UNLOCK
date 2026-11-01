@@ -1,6 +1,6 @@
 # Issue31 graph evidence review
 
-[í•œêµ­ì–´](ISSUE31-GRAPH-EVIDENCE.ko.md)
+[한국어](ISSUE31-GRAPH-EVIDENCE.ko.md)
 
 Source: issue31 comment6560657107 and attachment34242809 graph-summary.json,
 reviewed 2026-11-01. This is contributor-supplied sanitized evidence, not a
