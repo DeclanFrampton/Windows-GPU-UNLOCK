@@ -1,6 +1,6 @@
 # MSI runtime audit build test
 
-[한국어](CHRISTIAN-RUNTIME-AUDIT.ko.md)
+[í•œêµ­ì–´](CHRISTIAN-RUNTIME-AUDIT.ko.md)
 
 Christian's saved-input preflight returned all nine checks true. Baseline collection is complete. The next build adds `GU_MSI_RUNTIME_AUDIT` to the generic observation probe. After capture it checks unique loaded DriverBinding/image instances against the two exact MSI console code hashes, versions and Stop RVAs. It logs `msi-text-code-match` and `msi-graphics-code-match`. It never calls Stop or any driver-private method. A code mismatch is recorded as a refusal, not silently treated as qualified release. The generic capture still reads PCI/MMIO/PROM and writes diagnostic files if subsequently booted; it contains no unlock, detach, GPU writes or firmware-variable writes.
 
@@ -298,3 +298,28 @@ firmware upload/execution or unlock transaction is added. Boot once attended.
 After two minutes without Windows, power off, remove USB and choose normal
 Windows Boot Manager. Do not retry/rearm. Collect returns christian-cold-result
 ZIP under C:\GPU-Unlock\Results.
+
+## 2026-11-01: live cold prefix passed; full cold PROM comparison
+
+Christian returned `christian-cold-result-7ec09cc47269437bb41c507f9e995e5b.zip`.
+`DIAG10.TXT` SHA256 `de8637614928cfb61aead1142db9bda6ae29d5daa5da037cb47aca38acc0c09c`
+records all prior stops, exclusive claim, memory-only enable, both eight-register
+passes, prefix match, chip checks, memory disable, two saved-state checks,
+exclusive release, final parent post-check and diagnostic-result succeeding.
+Chip was `b72000a1`; BAR0 `91000000`, length `01000000`; attributes 0 -> 200 -> 0.
+Both SS0 observations were `30232144`; this does not establish cross-boot stability.
+The initialized PROM still hashes to `de78e145e527059faec711a9a320b6dca6a88dc4de0fed882d1688ba2dd1aad1`.
+No unlock transaction ran. Direct Windows return is assumed under the reporting
+convention unless Christian reports otherwise; the log alone does not prove it.
+
+The next optional `-MsiColdFullProm` stage repeats the complete proven sequence,
+expanding the post-release PROM read to the fixed 1 MiB window 300000..3ffffc.
+It hashes that snapshot against the recorded initialized PROM, without saving or
+executing it. Cold phase: 262144 PROM DWORD reads + 16 register + 2 chip reads =
+262162 accesses. This count excludes the unchanged pre-release generic capture.
+The original 512-byte mode remains available. A static BSS buffer avoids a 1 MiB
+firmware stack allocation. Normal completion uses the same memory-disable,
+exact saved-state checks and ownership release, with no MMIO after disable.
+An unexpected result still holds without automatic rollback; expanded live reads
+can hang or have side effects, and manual power-off/USB removal may be required.
+No new GPU MMIO writes, DMA, firmware upload/execution, reset or unlock is added.

@@ -54,12 +54,21 @@ static EFI_STATUS GuMsiColdProbe(EFI_SYSTEM_TABLE *t,EFI_HANDLE parent,EFI_HANDL
    /* These are observations, not fixed cross-boot or same-boot SS0 pins. */
   }
  }
+#if defined(GU_MSI_COLD_FULL_PROM)
+ /* Static BSS avoids a 1 MiB firmware stack allocation. No payload execution. */
+ static UINT32 prefix[262144];
+ const UINTN promWords=262144;
+ const char *promHash="de78e145e527059faec711a9a320b6dca6a88dc4de0fed882d1688ba2dd1aad1";
+#else
  UINT32 prefix[128];
+ const UINTN promWords=128;
+ const char *promHash="73ae5e75a576f5dbbf90e7351aac055b7a9b6a249274f7ded03b33c7740d13c8";
+#endif
  s=record(NULL,"msi-cold-prom-prefix-enter",EFI_SUCCESS);if(s!=EFI_SUCCESS)return s;
- for(UINTN i=0;i<128;i++){
+ for(UINTN i=0;i<promWords;i++){
   s=pci->Mem.Read(pci,EfiPciIoWidthUint32,0,0x300000+i*4,1,&prefix[i]);if(s!=EFI_SUCCESS)return s;
  }
- BOOLEAN matched=GuHashMatches(prefix,sizeof(prefix),"73ae5e75a576f5dbbf90e7351aac055b7a9b6a249274f7ded03b33c7740d13c8");
+ BOOLEAN matched=GuHashMatches(prefix,sizeof(prefix),promHash);
  s=GuMsiColdRecord(record,"msi-cold-prom-prefix-match",matched?EFI_SUCCESS:EFI_UNSUPPORTED);if(s!=EFI_SUCCESS)return s;
  s=pci->Mem.Read(pci,EfiPciIoWidthUint32,0,0,1,&chip);if(s!=EFI_SUCCESS)return s;
  s=record(NULL,"msi-cold-chip-after-value",chip);if(s!=EFI_SUCCESS)return s;if(chip!=baselineChip)return EFI_UNSUPPORTED;
