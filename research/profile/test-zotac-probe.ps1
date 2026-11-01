@@ -10,6 +10,8 @@ if($VcVars){
  if($LASTEXITCODE -ne 0){throw 'MSVC environment failed.'}
  foreach($line in $lines){if($line -match '^([^=]+)=(.*)$'){[Environment]::SetEnvironmentVariable($matches[1],$matches[2],'Process')}}
 }
+& (Join-Path $PSScriptRoot 'test-resource-preparation.ps1')
+if(!$?){throw 'Shared resource mocks failed.'}
 & (Join-Path $PSScriptRoot 'test-zotac-preparation.ps1') -Python $Python
 if(!$?){throw 'Preparation mocks failed.'}
 Push-Location (Join-Path $repo 'internal-boot/boot')
@@ -17,9 +19,9 @@ try {
  New-Item -ItemType Directory -Path build/probe-pinned-tests -Force | Out-Null
  $flags=@('-DGU_DIAGNOSTIC_ONLY','-DGU_DIAGNOSTIC_PROBE','-DGU_PROBE_GENERIC')
  $includes=@('-I','../../deps/edk2/MdePkg/Include','-I','../../deps/edk2/MdePkg/Include/X64')
- foreach($test in @('generic','pinned')){
-  $extra=if($test -eq 'pinned'){@('-DGU_PROBE_EXPECTED_ID=0x250410deU','-DGU_PROBE_EXPECTED_SUBSYSTEM=0x263019daU')}else{@()}
-  $source=if($test -eq 'pinned'){'test_probe_pinned.c'}else{'test_probe_generic.c'}
+ foreach($test in @('generic','pinned','x570')){
+  $extra=if($test -eq 'pinned'){@('-DGU_PROBE_EXPECTED_ID=0x250410deU','-DGU_PROBE_EXPECTED_SUBSYSTEM=0x263019daU')}elseif($test -eq 'x570'){@('-DGU_PROBE_EXPECTED_ID=0x220410deU','-DGU_PROBE_EXPECTED_SUBSYSTEM=0x147d10deU','-DGU_PROBE_BUS=8U')}else{@()}
+  $source=if($test -ne 'generic'){'test_probe_pinned.c'}else{'test_probe_generic.c'}
   & $Clang -std=c11 -O1 -Wall -Wextra -Werror -D_CRT_SECURE_NO_WARNINGS @flags @extra @includes $source probe.c ../unlock/sha256.c -o "build/probe-pinned-tests/$test.exe"
   if($LASTEXITCODE -ne 0){throw "Mock compile failed: $test"}
   & "./build/probe-pinned-tests/$test.exe"
