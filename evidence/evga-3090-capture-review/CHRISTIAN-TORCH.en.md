@@ -1,5 +1,11 @@
 # Pre-unlock PyTorch baseline
 
+## Returned large-matrix test and boot target
+
+All four finite-output checks and 32 sampled numerical checks passed. Maximum sampled absolute errors: FP32 3.55098e-8, FP16-output 4.76891e-6, BF16-output 8.68796e-5, TF32 6.12715e-6. This remains sampled correctness, not exhaustive qualification or unlock proof.
+
+Next `check-christian-boot-target.ps1` reads the unique internal GPT/FAT32 system ESP identity, bootloader SHA256 and Secure Boot status to prepare a future machine-specific build. It creates a ZIP under Results, without mounting a partition, modifying BCD/firmware, changing Secure Boot, running GPU work or rebooting. Use administrator PowerShell to improve read access; unavailable reads are explicitly reported and must not be mistaken for disabled Secure Boot or a verified boot file. Mock packaging/status/hash-or-read-error and USB-target refusal checks pass in PS7/5.1. The actual boot-target result remains pending.
+
 ## Returned baseline and large-matrix check
 
 The contributor completed the pinned runner. Source hash matches its receipt; trial values are finite and medians recompute correctly: FP32 23.489277, FP16-output 67.294447, BF16-output 68.373777, TF32 33.846756 TFLOPS. [Sanitized review](christian-torch-baseline.json). This establishes current performance only; explicit prior-unlock-history confirmation is still requested.
