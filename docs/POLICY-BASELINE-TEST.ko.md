@@ -40,3 +40,5 @@ Windows API:
 [Get-SecureBootUEFI](https://learn.microsoft.com/en-us/powershell/module/secureboot/get-securebootuefi?view=windowsserver2025-ps).
 
 캡처된 암호화/보호 해제 fixture는 보고된 Device Encryption 상태를 재생합니다. 공개 변수 조회 전에 거부합니다. 암호화가 자동이었는지 의도적이었는지는 허용 입력이 아닙니다. fixture는 clear-key/보호자 출처나 복구를 검증하지 않습니다.
+
+설치된 SecureBoot 메타데이터에서 Attributes는 단순 정수가 아니라 UInt64 Attributes 속성을 가진 네이티브 래퍼임을 확인했습니다. 기준 정규화는 정확한 형식과 UInt32 범위만 허용합니다. 로컬 래퍼 생성/직렬화/속성 변경/범위 초과 거부 테스트는 펌웨어 변수를 읽지 않고 통과했습니다. 권한 없는 로컬 db 읽기는 거부되었으며 성공적인 실제 Record/Verify는 미검증입니다.

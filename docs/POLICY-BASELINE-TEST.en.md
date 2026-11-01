@@ -42,3 +42,5 @@ Windows API reference:
 [Get-SecureBootUEFI](https://learn.microsoft.com/en-us/powershell/module/secureboot/get-securebootuefi?view=windowsserver2025-ps).
 
 The captured encrypted/protection-off fixture replays a reported Device Encryption state. It is refused before any public-variable query. Whether encryption was automatic or deliberate is not an admission input. The fixture does not verify clear-key/protector provenance or recovery.
+
+Installed SecureBoot metadata confirms that Attributes is a native wrapper with a UInt64 Attributes property, not a plain integer. Baseline normalization accepts that exact type within UInt32 bounds. Local native-wrapper construction, serialization, attribute-drift and overflow-refusal tests pass without reading a firmware variable. A non-elevated local db read was denied; successful live Record/Verify remain untested.

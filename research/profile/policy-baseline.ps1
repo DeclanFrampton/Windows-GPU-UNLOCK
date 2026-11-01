@@ -3,6 +3,15 @@ function Get-GuPolicyHash([byte[]]$Bytes){
  $h=[Security.Cryptography.SHA256]::Create()
  try{([BitConverter]::ToString($h.ComputeHash($Bytes))).Replace('-','').ToLowerInvariant()}finally{$h.Dispose()}
 }
+function Convert-GuPublicVariableAttributes($Value){
+ if($null -eq $Value){throw 'Missing public variable attributes.'}
+ if($Value.GetType().FullName -ceq 'Microsoft.SecureBoot.Commands.UEFIEnvironmentVariableAttributes'){
+  # The native cmdlet returns a wrapper, not an integer or enum.
+  $Value=$Value.Attributes
+  if($Value -isnot [uint64] -or $Value -gt [uint32]::MaxValue){throw 'Invalid native public variable attributes.'}
+ }elseif($Value -isnot [uint32] -and $Value -isnot [int]){throw 'Unknown public variable attributes type.'}
+ try{return [Convert]::ToUInt32($Value)}catch{throw 'Invalid public variable attributes range.'}
+}
 function New-GuPolicyBaseline([string]$Machine,[string]$ConfigurationSha,[bool]$SecureBoot,$Encryption,$BootManager,[scriptblock]$ReadVariable){
  if($Machine -cnotmatch '^[a-z][a-z0-9-]{0,63}$' -or $ConfigurationSha -cnotmatch '^[0-9a-f]{64}$' -or !$SecureBoot){throw 'Baseline needs an exact configuration and enabled Secure Boot.'}
  Assert-GuDecryptedVolume {$Encryption}
@@ -10,9 +19,9 @@ function New-GuPolicyBaseline([string]$Machine,[string]$ConfigurationSha,[bool]$
  $vars=[ordered]@{}
  foreach($name in @('PK','KEK','db','dbx')){
   try{$v=& $ReadVariable $name}catch{throw 'A public Secure Boot variable could not be read; baseline not recorded.'}
-  if($v.Bytes -isnot [byte[]] -or !$v.Bytes.Length -or $v.Bytes.Length -gt 4MB -or
-     ($v.Attributes -isnot [uint32] -and $v.Attributes -isnot [int]) -or $v.Attributes -lt 0){throw 'Invalid public variable observation.'}
-  $vars[$name]=[ordered]@{Sha256=(Get-GuPolicyHash $v.Bytes);Bytes=$v.Bytes.Length;Attributes=[long]$v.Attributes}
+  if($v.Bytes -isnot [byte[]] -or !$v.Bytes.Length -or $v.Bytes.Length -gt 4MB){throw 'Invalid public variable observation.'}
+  $attributes=Convert-GuPublicVariableAttributes $v.Attributes
+  $vars[$name]=[ordered]@{Sha256=(Get-GuPolicyHash $v.Bytes);Bytes=$v.Bytes.Length;Attributes=[long]$attributes}
  }
  return [ordered]@{Format=1;Machine=$Machine;ConfigurationSha256=$ConfigurationSha;SecureBootEnabled=$true;SystemVolumeFullyDecrypted=$true;StandardWindowsPathObserved=$true;PublicVariables=$vars}
 }

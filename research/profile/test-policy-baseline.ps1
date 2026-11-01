@@ -9,6 +9,25 @@ if($Mode -ceq 'SelfTest'){
  $enc=[pscustomobject]@{ReadStatus='observed';ProtectionState='off';ConversionState='fully-decrypted';EncryptionPercentage=0;FullyDecryptedObserved=$true}
  $bcd=[pscustomobject]@{ReadStatus='observed';ApplicationPathState='standard-windows-uefi'}
  $query={param($name) [pscustomobject]@{Bytes=[byte[]](1,2,3);Attributes=[uint32]7}}
+ foreach($bad in @('7',-1,$null,[DayOfWeek]::Monday)){
+  $refused=$false;try{Convert-GuPublicVariableAttributes $bad|Out-Null}catch{$refused=$true}
+  if(!$refused){throw 'Invalid attribute type/range accepted'}
+ }
+ if((Convert-GuPublicVariableAttributes ([uint32]7)) -ne 7){throw 'Numeric attributes changed'}
+ # Reflection reads installed cmdlet metadata, not a UEFI variable.
+ $cmd=Get-Command Get-SecureBootUEFI -ErrorAction SilentlyContinue
+ if($cmd -and $cmd.ImplementingType){
+  $variableType=$cmd.ImplementingType.Assembly.GetType('Microsoft.SecureBoot.Commands.UEFIEnvironmentVariable')
+  $attributeType=$variableType.GetProperty('Attributes').PropertyType
+  $nativeAttribute=[Activator]::CreateInstance($attributeType,[object[]]@([uint64]7))
+  if((Convert-GuPublicVariableAttributes $nativeAttribute) -ne 7){throw 'Installed SecureBoot attribute wrapper rejected'}
+  $nativeBaseline=JsonCopy (New-GuPolicyBaseline 'issue135' ('a'*64) $true $enc $bcd {param($name) [pscustomobject]@{Bytes=[byte[]](1,2,3);Attributes=$nativeAttribute}})
+  if($nativeBaseline.PublicVariables.db.Attributes -ne 7){throw 'Native attribute object did not survive baseline serialization'}
+  $overflowAttribute=[Activator]::CreateInstance($attributeType,[object[]]@([uint64]::MaxValue))
+  $refused=$false;try{Convert-GuPublicVariableAttributes $overflowAttribute|Out-Null}catch{$refused=$true}
+  if(!$refused){throw 'Native attribute overflow accepted'}
+  Write-Host 'PASS: installed SecureBoot attribute metadata; no firmware variable read.'
+ }
  $before=JsonCopy (New-GuPolicyBaseline 'issue135' ('a'*64) $true $enc $bcd $query)
  $after=JsonCopy $before
  if((Compare-GuPolicyBaseline $before $after).Status -cne 'observations-match'){throw 'Unchanged observation lost'}
@@ -16,6 +35,8 @@ if($Mode -ceq 'SelfTest'){
   $changed=JsonCopy $after;$changed.PublicVariables.$name.Sha256='b'*64
   if((Compare-GuPolicyBaseline $before $changed).Status -cne 'observations-differ'){throw 'Changed public variable missed'}
  }
+ $attributeChange=JsonCopy $after;$attributeChange.PublicVariables.db.Attributes=8
+ if((Compare-GuPolicyBaseline $before $attributeChange).PublicVariablesUnchanged){throw 'Public variable attribute drift missed'}
  $changed=JsonCopy $after;$changed.ConfigurationSha256='b'*64
  if((Compare-GuPolicyBaseline $before $changed).ExactConfigurationUnchanged){throw 'Configuration drift missed'}
  $changed=JsonCopy $after;$changed.PublicVariables.db.Bytes='3'
