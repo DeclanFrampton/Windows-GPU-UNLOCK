@@ -34,3 +34,17 @@ image/resource qualification. The PCI-I/O-only status remains separate.
 For173, that status stays unresolved while the new field is unique-agent-matched-link
 to NVIDIA adapter0. No new capture or owner rerun is needed; this analysis used the
 already supplied summary. Five local regressions and actual-summary runs passed.
+
+## Unknown ROOT/SWD display identities
+
+Preparation now treats every non-PCI display entry as requiring an explicit reviewed
+identity, rather than silently excluding ROOT/SWD. The configuration schema still
+forbids broad ROOT/SWD exceptions. Existing narrowly pinned signed LCI remains
+unchanged; missing/duplicate/wrong driver metadata still refuses. A signed flag alone
+does not turn ROOT/SWD into a known identity. Do not uninstall/disable an adapter or
+change display/settings to pass. Keep preparation stopped pending source review.
+
+The existing test-x99-graph-preparation.ps1 mock suite now covers ROOT, SWD, the
+reported Punktfunk version with either signed state, and the prior LCI positive/
+negative cases. It queries/stages no real device. This changes preflight refusal,
+not firmware engine behavior, compatibility, ownership or unlock admission.

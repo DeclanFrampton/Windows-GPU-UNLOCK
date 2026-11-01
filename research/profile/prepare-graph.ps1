@@ -52,7 +52,7 @@ function Assert-GraphMachine([string]$Id,$Board,$Bios,$Cpu,$Video,$Drivers=@()) 
  # Software adapters do not establish firmware ownership. Unknown identity
  # formats remain a refusal, rather than being silently discarded.
  $pciVideo=@($Video | Where-Object {$_.PNPDeviceID -match '^PCI\\'})
- $other=@($Video | Where-Object {$_.PNPDeviceID -notmatch '^(PCI|ROOT|SWD)\\'})
+ $other=@($Video | Where-Object {$_.PNPDeviceID -notmatch '^PCI\\'})
  $expectedOther=@($p.KnownNonPciAdapters | Where-Object {$_})
  if($other.Count -ne $expectedOther.Count){throw 'Ambiguous display inventory; stop and report.'}
  foreach($a in $expectedOther){

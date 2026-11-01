@@ -20,7 +20,8 @@ $nvidia=[pscustomobject]@{PNPDeviceID='PCI\VEN_10DE&DEV_2204&SUBSYS_147D10DE&REV
 $virtual=[pscustomobject]@{PNPDeviceID='ROOT\DISPLAY\PRIVATE'}
 $lci=[pscustomobject]@{PNPDeviceID='LCI\PRIVATE'}
 $lciDriver=[pscustomobject]@{DeviceID='LCI\PRIVATE';DriverProviderName='LuminonCore';DriverVersion='1.0.2018.1204';IsSigned=$true}
-Assert-GraphMachine 'issue31' $x570 $x570bios $ryzen @($nvidia,$virtual,$lci) @($lciDriver)
+Assert-GraphMachine 'issue31' $x570 $x570bios $ryzen @($nvidia,$lci) @($lciDriver)
+Reject {Assert-GraphMachine 'issue31' $x570 $x570bios $ryzen @($nvidia,$virtual,$lci) @($lciDriver)}
 Reject {Assert-GraphMachine 'issue31' $x570 $x570bios $ryzen @($nvidia,$virtual)}
 Reject {Assert-GraphMachine 'issue31' $x570 $x570bios $ryzen @($nvidia,$lci) @()}
 Reject {Assert-GraphMachine 'issue31' $x570 $x570bios $ryzen @($nvidia,$lci,$lci) @($lciDriver)}
@@ -35,7 +36,14 @@ $b550=[pscustomobject]@{Manufacturer='Gigabyte Technology Co., Ltd.';Product='B5
 $f19=[pscustomobject]@{SMBIOSBIOSVersion='F19'};$apu=[pscustomobject]@{Name='AMD Ryzen 5 5600G with Radeon Graphics'}
 $rtxTi=[pscustomobject]@{PNPDeviceID='PCI\VEN_10DE&DEV_2489&SUBSYS_153C10DE&REV_A1\PRIVATE'}
 $amd=[pscustomobject]@{PNPDeviceID='PCI\VEN_1002&DEV_1638&SUBSYS_D0001458&REV_C9\PRIVATE'}
-Assert-GraphMachine 'issue180' $b550 $f19 $apu @($rtxTi,$amd,$virtual)
+Assert-GraphMachine 'issue180' $b550 $f19 $apu @($rtxTi,$amd)
+Reject {Assert-GraphMachine 'issue180' $b550 $f19 $apu @($rtxTi,$amd,$virtual)}
+$swd=[pscustomobject]@{PNPDeviceID='SWD\DISPLAY\PRIVATE'}
+Reject {Assert-GraphMachine 'issue180' $b550 $f19 $apu @($rtxTi,$amd,$swd)}
+$punktfunk=[pscustomobject]@{DeviceID=$virtual.PNPDeviceID;DriverProviderName='Punktfunk';DriverVersion='9.9.929.102';IsSigned=$false}
+Reject {Assert-GraphMachine 'issue180' $b550 $f19 $apu @($rtxTi,$amd,$virtual) @($punktfunk)}
+$punktfunk.IsSigned=$true
+Reject {Assert-GraphMachine 'issue180' $b550 $f19 $apu @($rtxTi,$amd,$virtual) @($punktfunk)}
 Reject {Assert-GraphMachine 'issue180' $b550 $f19 $apu @($rtxTi)}
 Reject {Assert-GraphMachine 'issue180' $b550 $f19 $apu @($rtxTi,$nvidia)}
 Reject {Assert-GraphMachine 'issue180' $b550 $f19 $apu @($rtxTi,$amd,$nvidia)}
