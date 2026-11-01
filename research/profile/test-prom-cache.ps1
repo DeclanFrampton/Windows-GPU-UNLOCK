@@ -40,6 +40,7 @@ function Test-PromCache([string]$Folder,[string]$Locator){
     Next='Review these local-file observations with the existing capture. No EFI boot, profile generation or unlock is authorized.'}
  }finally{$process.Dispose()}
 }
+if($MyInvocation.InvocationName -eq '.'){return}
 Import-GuHostCompiler $VcVars
 $locator=Build-GuFwsecLocate $repo $Clang
 if($SelfTest){
