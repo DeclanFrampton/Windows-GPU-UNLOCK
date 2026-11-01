@@ -14,6 +14,13 @@ $ga104=[pscustomobject]@{PNPDeviceID='PCI\VEN_10DE&DEV_2487&SUBSYS_40721458&REV_
 Assert-GraphMachine 'issue109' $gigabyte $b560bios $i5 $ga104
 Reject {Assert-GraphMachine 'issue33' $gigabyte $b560bios $i5 $ga104}
 Reject {Assert-GraphMachine 'issue109' $gigabyte $b560bios $i5 $video}
+$x570=[pscustomobject]@{Manufacturer='ASUSTeK COMPUTER INC.';Product='PRIME X570-PRO'}
+$x570bios=[pscustomobject]@{SMBIOSBIOSVersion='5013'};$ryzen=[pscustomobject]@{Name='AMD Ryzen 9 5950X 16-Core Processor'}
+$nvidia=[pscustomobject]@{PNPDeviceID='PCI\VEN_10DE&DEV_2204&SUBSYS_147D10DE&REV_A1\PRIVATE'}
+$virtual=[pscustomobject]@{PNPDeviceID='ROOT\DISPLAY\PRIVATE'}
+Assert-GraphMachine 'issue31' $x570 $x570bios $ryzen @($nvidia,$virtual)
+Reject {Assert-GraphMachine 'issue31' $x570 $x570bios $ryzen @($nvidia,$ga104)}
+Reject {Assert-GraphMachine 'issue31' $x570 $x570bios $ryzen @($nvidia,[pscustomobject]@{PNPDeviceID=$null})}
 $part=[pscustomobject]@{IsBoot=$false;IsSystem=$false}
 $disk=[pscustomobject]@{BusType='USB';UniqueId='mock-usb';IsBoot=$false;IsSystem=$false;IsReadOnly=$false;IsOffline=$false}
 $volume=[pscustomobject]@{FileSystem='FAT32';SizeRemaining=64MB}

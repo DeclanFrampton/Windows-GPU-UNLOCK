@@ -1,7 +1,7 @@
 # Exact-machine attended graph tests. No automatic boot, format or retry.
 [CmdletBinding()]
 param([ValidatePattern('^[D-Zd-z]$')][string]$Drive, [switch]$Collect,
-      [ValidateSet('issue33','issue109')][string]$Machine='issue33',
+      [ValidateSet('issue33','issue109','issue31')][string]$Machine='issue33',
       [string]$Clang='clang', [string]$LldLink='lld-link', [string]$Python='python')
 $ErrorActionPreference='Stop'
 function Get-GraphHash([string]$Path) {
@@ -13,13 +13,18 @@ function Assert-GraphMachine([string]$Id,$Board,$Bios,$Cpu,$Video) {
  $pins=@{
   issue33=@{Board='X99-PRO/USB 3.1';Maker='^ASUSTeK';Bios='4101';Cpu='\bi7-5820K\b';Pci='2204';Subsys='87AF1043'}
   issue109=@{Board='B560M DS3H V2';Maker='^Gigabyte';Bios='F7 RB';Cpu='\bi5-11400F\b';Pci='2487';Subsys='40721458'}
+  issue31=@{Board='PRIME X570-PRO';Maker='^ASUSTeK';Bios='5013';Cpu='\b5950X\b';Pci='2204';Subsys='147D10DE'}
  }
  if(!$pins.ContainsKey($Id)){throw 'Unknown graph test machine.'};$p=$pins[$Id]
+ # Known software-enumerated adapters do not establish firmware ownership.
+ # Keep every PCI adapter and reject absent/unrecognized identity formats.
+ $pciVideo=@($Video | Where-Object {$_.PNPDeviceID -match '^PCI\\'})
+ if(@($Video | Where-Object {$_.PNPDeviceID -notmatch '^(PCI|ROOT|SWD)\\'}).Count){throw 'Ambiguous display inventory; stop and report.'}
  $identity='^PCI\\VEN_10DE&DEV_'+$p.Pci+'&SUBSYS_'+$p.Subsys+'(?:&|\\|$)'
  if(@($Board).Count -ne 1 -or $Board.Product.Trim() -cne $p.Board -or
     $Board.Manufacturer -notmatch $p.Maker -or @($Bios).Count -ne 1 -or
     $Bios.SMBIOSBIOSVersion.Trim() -cne $p.Bios -or @($Cpu).Count -ne 1 -or
-    $Cpu.Name -notmatch $p.Cpu -or @($Video).Count -ne 1 -or $Video.PNPDeviceID -notmatch $identity) {
+    $Cpu.Name -notmatch $p.Cpu -or $pciVideo.Count -ne 1 -or $pciVideo[0].PNPDeviceID -notmatch $identity) {
   throw "Machine does not match $Id's exact board/BIOS/CPU/single-GPU pins. Stop and report the mismatch."
  }
 }
