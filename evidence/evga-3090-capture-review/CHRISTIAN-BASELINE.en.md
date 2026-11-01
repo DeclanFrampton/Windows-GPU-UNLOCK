@@ -1,5 +1,11 @@
 # Christian Windows baseline test
 
+## Build inputs confirmed — 2026-11-01
+
+Declan confirms Christian has never run an unlock EFI; treat the recorded benchmark as the pre-unlock reference on that report, not independent attestation. Returned boot-target data identifies ESP `3be74736-e119-47da-851a-9b1dde4d7037`, internal NVMe/FAT32, Secure Boot=false without read errors, and Windows loader SHA256 `3f8a4cbbc97b89836df92c4895236be1fac4a127665420d90509e897a7298511`.
+
+The next `test-christian-build-preflight.ps1` checks only the saved capture files and collected reports against these exact MSI inputs, creating one ZIP. It does not repeat benchmarks or query/change live firmware. Saved-input consistency passed against the actual returned files in PowerShell 7 and Windows PowerShell 5.1. A passing result is not driver release qualification or unlock eligibility. Runtime state and the valid controller-removal callbacks still require separate qualification.
+
 ## Returned result — 2026-11-01
 
 The contributor ZIP reports ASUS PRIME H510M-K R2.0, AMI BIOS 0802, RTX3090 subsystem 38811462, driver 596.49 and 24576 MiB. The NVIDIA query succeeded. Both diagnostic hashes match the previously reviewed captures. Reported telemetry includes P0, 350 W limit and maximum SM/memory clocks 2130/9751 MHz; these are observations, not recommended settings or benchmark evidence. No GPU workload or unlock was run.

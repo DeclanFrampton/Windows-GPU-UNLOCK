@@ -11,5 +11,6 @@
     "tf32": 33.84675589804014
   },
   "unlock_proven": false,
-  "prior_unlock_history_confirmation_pending": true
+  "prior_unlock_history_confirmation_pending": false,
+  "no_prior_unlock_efi_reported_by": "Declan"
 }
