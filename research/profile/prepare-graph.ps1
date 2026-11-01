@@ -134,6 +134,8 @@ $configuration=Read-GraphConfiguration $Machine
 $drivers=@()
 if(@($configuration.KnownNonPciAdapters | Where-Object {$_}).Count){$drivers=@(Get-CimInstance Win32_PnPSignedDriver -Filter "DeviceClass='DISPLAY'")}
 Assert-GraphMachine $Machine (Get-CimInstance Win32_BaseBoard) (Get-CimInstance Win32_BIOS) (Get-CimInstance Win32_Processor) @(Get-CimInstance Win32_VideoController) $drivers
+. (Join-Path $PSScriptRoot 'encryption-state.ps1')
+Assert-GuDecryptedVolume
 try {$secure=Confirm-SecureBootUEFI} catch {throw 'Secure Boot state could not be verified. Stop and report; do not change settings.'}
 if($secure -ne $false){throw 'Secure Boot must already be off for this unsigned test. Do not change it for this script.'}
 $windows=@(Get-Partition | Where-Object {$_.IsSystem -and $_.Guid})
@@ -159,6 +161,9 @@ if((Get-GraphHash $configurationPath) -cne $configurationHash){throw 'Configurat
 if(@($configuration.KnownNonPciAdapters | Where-Object {$_}).Count){
  Assert-GraphMachine $Machine (Get-CimInstance Win32_BaseBoard) (Get-CimInstance Win32_BIOS) (Get-CimInstance Win32_Processor) @(Get-CimInstance Win32_VideoController) @(Get-CimInstance Win32_PnPSignedDriver -Filter "DeviceClass='DISPLAY'")
 }
+Assert-GuDecryptedVolume
+try {$freshSecure=Confirm-SecureBootUEFI} catch {throw 'Secure Boot recheck failed; do not stage.'}
+if($freshSecure -isnot [bool] -or $freshSecure){throw 'Secure Boot policy changed or is unknown; do not stage or change settings.'}
 $receipt=Copy-GraphBoot $usb (Join-Path $built 'GRAPH-ONLY.EFI') $manifest.EfiSha256 $Machine
 $receipt['ConfigurationSha256']=$configurationHash
 $receipt | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $usb 'RTX3090-UNLOCK/graph-stage.json') -Encoding utf8

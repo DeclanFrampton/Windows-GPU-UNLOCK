@@ -2,31 +2,7 @@
 [CmdletBinding()]
 param([switch]$SelfTest)
 $ErrorActionPreference='Stop'
-function Convert-EncryptionStatus($Protection,$Conversion){
- $r=[ordered]@{Provider='Win32_EncryptableVolume';ReadStatus='unknown';ProtectionState='unknown';ConversionState='unknown';EncryptionPercentage=$null;FullyDecryptedObserved=$false}
- foreach($value in @($Protection.ReturnValue,$Conversion.ReturnValue,$Protection.ProtectionStatus,$Conversion.ConversionStatus,$Conversion.EncryptionPercentage)){
-  if($value -isnot [int] -and $value -isnot [uint32] -and $value -isnot [long] -and $value -isnot [uint64]){return $r}
- }
- if($Protection.ReturnValue -ne 0 -or $Conversion.ReturnValue -ne 0 -or
-    $Protection.ProtectionStatus -notin @(0,1,2) -or $Conversion.ConversionStatus -notin @(0,1,2,3,4,5) -or
-    $Conversion.EncryptionPercentage -isnot [ValueType] -or $Conversion.EncryptionPercentage -lt 0 -or $Conversion.EncryptionPercentage -gt 100){return $r}
- $r.ReadStatus='observed';$r.ProtectionState=@('off','on','unknown')[[int]$Protection.ProtectionStatus]
- $r.ConversionState=@('fully-decrypted','fully-encrypted','encrypting','decrypting','encryption-paused','decryption-paused')[[int]$Conversion.ConversionStatus]
- $r.EncryptionPercentage=[int]$Conversion.EncryptionPercentage
- $r.FullyDecryptedObserved=($Protection.ProtectionStatus -eq 0 -and $Conversion.ConversionStatus -eq 0 -and $Conversion.EncryptionPercentage -eq 0)
- return $r
-}
-function Read-EncryptionStatus {
- try{
-  if($env:SystemDrive -notmatch '^[A-Za-z]:$'){throw 'Unknown system drive.'}
-  $v=@(Get-CimInstance -Namespace 'root/cimv2/Security/MicrosoftVolumeEncryption' -ClassName Win32_EncryptableVolume -Filter ("DriveLetter='"+$env:SystemDrive+"'") -ErrorAction Stop)
-  if($v.Count -ne 1){throw 'Ambiguous volume.'}
-  $p=Invoke-CimMethod -InputObject $v[0] -MethodName GetProtectionStatus -ErrorAction Stop
-  $c=Invoke-CimMethod -InputObject $v[0] -MethodName GetConversionStatus -ErrorAction Stop
-  # Never query protectors, recovery passwords, keys or volume identifiers.
-  return Convert-EncryptionStatus $p $c
- }catch{return [ordered]@{Provider='Win32_EncryptableVolume';ReadStatus='unavailable';ProtectionState='unknown';ConversionState='unknown';EncryptionPercentage=$null;FullyDecryptedObserved=$false}}
-}
+. (Join-Path $PSScriptRoot '../research/profile/encryption-state.ps1')
 function Convert-BootManagerObservation([string]$Text,[int]$Exit){
  $pattern='(?im)^\s*\S+\s+[\\/]EFI[\\/]Microsoft[\\/]Boot[\\/]bootmgfw\.efi\s*$'
  return [ordered]@{QuerySucceeded=($Exit -eq 0);StandardUefiPathObserved=($Exit -eq 0 -and [regex]::IsMatch($Text,$pattern));RawBcdExported=$false;BootRecoveryVerified=$false}
@@ -43,6 +19,8 @@ function Read-BootManagerObservation {
   return Convert-BootManagerObservation $stdout.Result $p.ExitCode
  }catch{return Convert-BootManagerObservation '' -1}finally{if($p){$p.Dispose()}}
 }
+# Dot sourcing exposes read/classification functions without running queries or writing a report.
+if($MyInvocation.InvocationName -eq '.'){return}
 if($SelfTest){
  $p=[pscustomobject]@{ReturnValue=0;ProtectionStatus=0};$c=[pscustomobject]@{ReturnValue=0;ConversionStatus=0;EncryptionPercentage=0}
  if(!(Convert-EncryptionStatus $p $c).FullyDecryptedObserved){throw 'Decrypted observation lost.'}

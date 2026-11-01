@@ -44,3 +44,5 @@ report was also exercised locally; no boot recovery was tested.
 References: [Microsoft GetConversionStatus](https://learn.microsoft.com/en-us/windows/win32/secprov/getconversionstatus-win32-encryptablevolume),
 [GetProtectionStatus](https://learn.microsoft.com/en-us/windows/win32/secprov/getprotectionstatus-win32-encryptablevolume),
 [BCDEdit /enum](https://learn.microsoft.com/en-us/windows-hardware/drivers/devtest/bcdedit--enum).
+
+Preparation also requires a live observed fully decrypted system volume before build and again before staging. Protection off with encrypted data, unknown/provider failures or changed state is refused. Do not suspend/decrypt/change settings for this test. Existing-file collection remains available without this staging gate.

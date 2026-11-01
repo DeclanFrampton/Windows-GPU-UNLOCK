@@ -40,3 +40,5 @@ Secure Boot, 키와 설정을 유지하세요. 오류 시 개인 경로를 지�
 참조: [Microsoft GetConversionStatus](https://learn.microsoft.com/en-us/windows/win32/secprov/getconversionstatus-win32-encryptablevolume),
 [GetProtectionStatus](https://learn.microsoft.com/en-us/windows/win32/secprov/getprotectionstatus-win32-encryptablevolume),
 [BCDEdit /enum](https://learn.microsoft.com/en-us/windows-hardware/drivers/devtest/bcdedit--enum).
+
+준비 과정은 빌드 전과 USB 기록 전에 현재 시스템 볼륨의 완전 복호화 상태를 확인합니다. 암호화된 데이터가 남은 보호 해제 상태, 알 수 없는 상태, 공급자 실패 또는 상태 변경은 거부합니다. 테스트를 위해 보호 일시 중지, 복호화 또는 설정 변경을 하지 마세요. 기존 파일 수집에는 이 USB 준비 조건을 적용하지 않습니다.
