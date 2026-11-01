@@ -19,8 +19,8 @@ try {
  New-Item -ItemType Directory -Path build/probe-pinned-tests -Force | Out-Null
  $flags=@('-DGU_DIAGNOSTIC_ONLY','-DGU_DIAGNOSTIC_PROBE','-DGU_PROBE_GENERIC')
  $includes=@('-I','../../deps/edk2/MdePkg/Include','-I','../../deps/edk2/MdePkg/Include/X64')
- foreach($test in @('generic','pinned','x570')){
-  $extra=if($test -eq 'pinned'){@('-DGU_PROBE_EXPECTED_ID=0x250410deU','-DGU_PROBE_EXPECTED_SUBSYSTEM=0x263019daU')}elseif($test -eq 'x570'){@('-DGU_PROBE_EXPECTED_ID=0x220410deU','-DGU_PROBE_EXPECTED_SUBSYSTEM=0x147d10deU','-DGU_PROBE_BUS=8U')}else{@()}
+ foreach($test in @('generic','pinned','x570','lenovo')){
+  $extra=if($test -eq 'pinned'){@('-DGU_PROBE_EXPECTED_ID=0x250410deU','-DGU_PROBE_EXPECTED_SUBSYSTEM=0x263019daU')}elseif($test -eq 'x570'){@('-DGU_PROBE_EXPECTED_ID=0x220410deU','-DGU_PROBE_EXPECTED_SUBSYSTEM=0x147d10deU','-DGU_PROBE_BUS=8U')}elseif($test -eq 'lenovo'){@('-DGU_PROBE_EXPECTED_ID=0x250410deU','-DGU_PROBE_EXPECTED_SUBSYSTEM=0x881d1043U')}else{@()}
   $source=if($test -ne 'generic'){'test_probe_pinned.c'}else{'test_probe_generic.c'}
   & $Clang -std=c11 -O1 -Wall -Wextra -Werror -D_CRT_SECURE_NO_WARNINGS @flags @extra @includes $source probe.c ../unlock/sha256.c -o "build/probe-pinned-tests/$test.exe"
   if($LASTEXITCODE -ne 0){throw "Mock compile failed: $test"}

@@ -10,5 +10,6 @@
   "TargetDevice": "250410de",
   "TargetSubsystem": "263019da",
   "OtherPciVendor": "1002",
-  "NonPci": []
+  "NonPci": [],
+  "ManufacturerMatch": "prefix"
 }

@@ -16,5 +16,6 @@
       "Provider": "LuminonCore",
       "Version": "1.0.2018.1204"
     }
-  ]
+  ],
+  "ManufacturerMatch": "prefix"
 }

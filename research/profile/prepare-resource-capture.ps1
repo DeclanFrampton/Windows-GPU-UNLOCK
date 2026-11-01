@@ -12,12 +12,13 @@ function ProbeHash([string]$Path){
 function Read-ProbeConfiguration([string]$Id,[string]$Directory=(Join-Path $PSScriptRoot 'probe-configurations')){
  if($Id -cnotmatch '^[a-z][a-z0-9-]{0,63}$'){throw 'Invalid probe configuration ID.'}
  $p=Get-Content -LiteralPath (Join-Path $Directory ($Id+'.json')) -Raw|ConvertFrom-Json
- $keys=@('SchemaVersion','Id','Scope','Board','ManufacturerPrefix','Bios','CpuToken','TargetBus','TargetDevice','TargetSubsystem','OtherPciVendor','NonPci')
+ $keys=@('SchemaVersion','Id','Scope','Board','ManufacturerPrefix','ManufacturerMatch','Bios','CpuToken','TargetBus','TargetDevice','TargetSubsystem','OtherPciVendor','NonPci')
  if(@($p.PSObject.Properties).Count -ne $keys.Count -or @($p.PSObject.Properties|Where-Object {$_.Name -cnotin $keys}).Count -or
     $p.SchemaVersion -isnot [int] -or $p.SchemaVersion -ne 1 -or $p.Id -cne $Id -or $p.Scope -cne 'pinned-read-only-resource-capture') {throw 'Invalid probe configuration schema/scope.'}
- foreach($key in @('Board','ManufacturerPrefix','Bios','CpuToken')){
+ foreach($key in @('Board','ManufacturerPrefix','ManufacturerMatch','Bios','CpuToken')){
   if($p.$key -isnot [string] -or [string]::IsNullOrWhiteSpace($p.$key) -or $p.$key.Length -gt 128 -or $p.$key -match '[\x00-\x1f]'){throw 'Invalid machine pin.'}
  }
+ if($p.ManufacturerMatch -cnotin @('exact','prefix')){throw 'Invalid manufacturer rule.'}
  if($p.TargetBus -isnot [int] -or $p.TargetBus -lt 1 -or $p.TargetBus -gt 255 -or
     $p.TargetDevice -isnot [string] -or $p.TargetDevice -cnotmatch '^[0-9a-f]{4}10de$' -or
     $p.TargetSubsystem -isnot [string] -or $p.TargetSubsystem -cnotmatch '^[0-9a-f]{8}$' -or
@@ -48,8 +49,12 @@ function Assert-PinnedProbe($p,$Board,$Bios,$Cpu,$Video,$Drivers=@()){
   $driver=@($Drivers|Where-Object {$_.DeviceID -and $_.DeviceID -ceq $v[0].PNPDeviceID})
   if($driver.Count -ne 1 -or $driver[0].DriverProviderName -cne $a.Provider -or $driver[0].DriverVersion -cne $a.Version -or $driver[0].IsSigned -ne $true){throw 'Non-PCI driver metadata mismatch.'}
  }
- if(@($Board).Count -ne 1 -or $Board.Manufacturer -isnot [string] -or
-    !$Board.Manufacturer.StartsWith($p.ManufacturerPrefix,[StringComparison]::OrdinalIgnoreCase) -or $Board.Product.Trim() -cne $p.Board -or
+ $maker=$false
+ if(@($Board).Count -eq 1 -and $Board.Manufacturer -is [string]){
+  if($p.ManufacturerMatch -ceq 'exact'){$maker=$Board.Manufacturer -ieq $p.ManufacturerPrefix}
+  else{$maker=$Board.Manufacturer.StartsWith($p.ManufacturerPrefix,[StringComparison]::OrdinalIgnoreCase)}
+ }
+ if(@($Board).Count -ne 1 -or !$maker -or $Board.Product.Trim() -cne $p.Board -or
     @($Bios).Count -ne 1 -or $Bios.SMBIOSBIOSVersion.Trim() -cne $p.Bios -or @($Cpu).Count -ne 1 -or
     $Cpu.Name -notmatch ('\b'+[regex]::Escape($p.CpuToken)+'\b')){throw 'Exact board/BIOS/CPU mismatch; stop without changing settings.'}
 }

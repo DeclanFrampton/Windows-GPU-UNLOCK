@@ -15,6 +15,13 @@ Reject {Assert-PinnedProbe $p $b $bios $cpu @($gpu,$lci) @()}
 $driver.IsSigned=$false;Reject {Assert-PinnedProbe $p $b $bios $cpu @($gpu,$lci) @($driver)};$driver.IsSigned=$true
 $driver.DriverVersion='other';Reject {Assert-PinnedProbe $p $b $bios $cpu @($gpu,$lci) @($driver)};$driver.DriverVersion='1.0.2018.1204'
 $gpu.PNPDeviceID='PCI\VEN_10DE&DEV_2204&SUBSYS_000010DE\PRIVATE';Reject {Assert-PinnedProbe $p $b $bios $cpu @($gpu,$lci) @($driver)}
+$lenovo=Read-ProbeConfiguration 'issue19'
+$lb=[pscustomobject]@{Manufacturer='LENOVO';Product='1052'};$lbi=[pscustomobject]@{SMBIOSBIOSVersion='S0AKT48A'};$lc=[pscustomobject]@{Name='Intel Core i9-11900K'}
+$lv=[pscustomobject]@{PNPDeviceID=('PCI'+[char]92+'VEN_10DE&DEV_2504&SUBSYS_881D1043'+[char]92+'PRIVATE')}
+Assert-PinnedProbe $lenovo $lb $lbi $lc @($lv)
+$lb.Manufacturer='LENOVO-other';Reject {Assert-PinnedProbe $lenovo $lb $lbi $lc @($lv)};$lb.Manufacturer='LENOVO'
+$lb.Product='other';Reject {Assert-PinnedProbe $lenovo $lb $lbi $lc @($lv)};$lb.Product='1052'
+Reject {Assert-PinnedProbe $lenovo $lb $lbi $lc @($lv,$lv)}
 Reject {Read-ProbeConfiguration '../issue31'}
 $temp=Join-Path ([IO.Path]::GetTempPath()) ('resource-prep-'+[guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $temp|Out-Null
