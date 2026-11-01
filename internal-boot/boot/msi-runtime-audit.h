@@ -158,7 +158,14 @@ static EFI_STATUS GuMsiMembership(EFI_SYSTEM_TABLE *t,VOID *base,UINTN size,GU_M
 #ifdef GU_MSI_NVIDIA_RELEASE
 #include "msi-nvidia-release.h"
 #endif
-static EFI_STATUS GuMsiRuntimeAudit(EFI_SYSTEM_TABLE *t,GU_MSI_RECORD record){
+#ifdef GU_MSI_COLD_PROBE
+#ifndef GU_MSI_NVIDIA_RELEASE
+#error Cold probe requires verified NVIDIA child and parent release
+#endif
+#include "msi-cold-probe.h"
+#endif
+static EFI_STATUS GuMsiRuntimeAudit(EFI_SYSTEM_TABLE *t,EFI_HANDLE self,GU_MSI_RECORD record){
+ (void)self;
  EFI_GUID binding=EFI_DRIVER_BINDING_PROTOCOL_GUID,loaded=EFI_LOADED_IMAGE_PROTOCOL_GUID;
  EFI_HANDLE *handles=NULL;UINTN count=0,text=0,gfx=0;
  EFI_DRIVER_BINDING_PROTOCOL *textBinding=NULL;
@@ -335,6 +342,14 @@ static EFI_STATUS GuMsiRuntimeAudit(EFI_SYSTEM_TABLE *t,GU_MSI_RECORD record){
  if(s!=EFI_SUCCESS)return s;
  s=GuMsiNvParentPost(t,nvidiaParent,physical,controller,nvidiaBinding->DriverBindingHandle,record);
  if(record(NULL,"msi-nvidia-parent-post",s)!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
+#ifdef GU_MSI_COLD_PROBE
+ if(s!=EFI_SUCCESS)return s;
+ s=GuMsiColdProbe(t,nvidiaParent,self,record);
+ if(record(NULL,"msi-cold-probe-return",s)!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
+ if(s!=EFI_SUCCESS)return s;
+ s=GuMsiNvParentPost(t,nvidiaParent,physical,controller,nvidiaBinding->DriverBindingHandle,record);
+ if(record(NULL,"msi-cold-final-parent-post",s)!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
+#endif
 #endif
 #endif
 #endif
