@@ -11,6 +11,7 @@ from unicorn.x86_const import (UC_X86_REG_RSP, UC_X86_REG_RIP, UC_X86_REG_RAX,
                               UC_X86_REG_RCX, UC_X86_REG_RDX, UC_X86_REG_R8, UC_X86_REG_R9)
 
 data = Path(sys.argv[1]).read_bytes()
+graphics = len(sys.argv)>2 and sys.argv[2]=='graphics'
 pe = struct.unpack_from('<I', data, 60)[0]
 opt = pe + 24
 entry = struct.unpack_from('<I', data, opt + 16)[0]
@@ -20,6 +21,10 @@ rows = []
 cases = ['success', 'wrong-child', 'two-nodes', 'mmio-node', 'out-of-range',
          'unaligned-node', 'map-error', 'short-stride', 'overflow-pages',
          'physical-gop', 'missing-gop', 'record-error', 'read-protected', 'wrong-count', 'wrong-tail', 'wrong-previous']
+if graphics:
+    cases = [c for c in cases if c != 'record-error']
+    cases[cases.index('physical-gop')] = 'missing-path'
+    cases += ['one-mode', 'mode-cycle', 'mode-wrong-previous', 'too-many-modes']
 for case in cases:
     u = Uc(UC_ARCH_X86, UC_MODE_64)
     image, stack, stubs, ram = 0x10000000, 0x20000000, 0x30000000, 0x40000000
@@ -45,12 +50,23 @@ for case in cases:
     put(node, 0 if case != 'two-nodes' else node + 0x40)
     put(node+8, node+0x40 if case == 'wrong-previous' else 0)
     put(node + 24, controller)
+    if graphics:
+        put(base+0x1c68, console+8 if case=='wrong-child' else console)
+        put(base+0x1cc0, 2 if case=='wrong-count' else 1)
+        put(base+0x1cc8, node+1 if case=='unaligned-node' else node)
+        put(base+0x1cd0, node+8 if case=='wrong-tail' else node)
+        put(node+16, 0x77770000)
+        if case in ('one-mode','mode-cycle','mode-wrong-previous','too-many-modes'):
+            put(base+0x1ca0, 65 if case=='too-many-modes' else 1)
+            put(base+0x1ca8, node+0x100);put(base+0x1cb0,node+0x100)
+            put(node+0x100,node+0x100 if case=='mode-cycle' else 0)
+            put(node+0x108,node if case=='mode-wrong-previous' else 0)
     for offset in (0x38, 0x40, 0x48, 0x98):
         put(services + offset, stubs + offset)
     sp = stack + 0x8008
     put(sp, stubs + 0x1000)
     for reg, value in [(UC_X86_REG_RSP, sp), (UC_X86_REG_RCX, system),
-                       (UC_X86_REG_RDX, base), (UC_X86_REG_R8, 0x7000),
+                       (UC_X86_REG_RDX, base), (UC_X86_REG_R8, 0x1fa0 if graphics else 0x7000),
                        (UC_X86_REG_R9, stubs + 0x200)]:
         u.reg_write(reg, value)
     events, reads = [], []
@@ -81,7 +97,7 @@ for case in cases:
             if rcx != controller:
                 raise AssertionError('Unexpected controller')
             is_gop = bytes(engine.mem_read(rdx, 4)) == bytes.fromhex('dea94290')
-            status = unsupported if (is_gop and case == 'missing-gop') or (not is_gop and case != 'physical-gop') else 0
+            status = unsupported if (is_gop and case == 'missing-gop') or (not is_gop and ((graphics and case=='missing-path') or (not graphics and case!='physical-gop'))) else 0
             if status == 0:
                 put(r8, 0x77770000)
         elif address == stubs + 0x200:
@@ -98,7 +114,7 @@ for case in cases:
     u.hook_add(UC_HOOK_MEM_READ, read_hook)
     u.emu_start(image + entry, stubs + 0x1000, count=10000)
     status = u.reg_read(UC_X86_REG_RAX)
-    if (status == 0) != (case == 'success') or u.reg_read(UC_X86_REG_RSP) != sp + 8:
+    if (status == 0) != (case in ('success','one-mode')) or u.reg_read(UC_X86_REG_RSP) != sp + 8:
         raise AssertionError(f'Unexpected result {case}: {status:x}')
     if case in ('mmio-node', 'out-of-range', 'unaligned-node', 'map-error', 'short-stride', 'overflow-pages', 'read-protected') and reads:
         raise AssertionError(f'Unsafe node was read: {case}')

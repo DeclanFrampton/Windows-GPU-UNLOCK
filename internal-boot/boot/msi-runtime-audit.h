@@ -14,6 +14,63 @@
 #include <Protocol/SimpleTextOut.h>
 #include "../unlock/sha256.h"
 typedef EFI_STATUS (*GU_MSI_RECORD)(VOID *,const char *,EFI_STATUS);
+#ifdef GU_MSI_GRAPHICS_TEST
+#ifndef GU_MSI_VIRTUAL_TEXT_TEST
+#error Graphics membership removal requires both text removal stages
+#endif
+/* Read four words only from a bounded allocated-RAM range. */
+static EFI_STATUS GuMsiReadWords(EFI_SYSTEM_TABLE *t,UINTN address,UINTN words[4]){
+ if(!address || (address&7) || address>~(UINTN)0-32)return EFI_UNSUPPORTED;
+ VOID *map=NULL;UINTN bytes=32768,key=0,stride=0;UINT32 version=0;
+ EFI_STATUS s=t->BootServices->AllocatePool(EfiLoaderData,bytes,&map);if(s!=EFI_SUCCESS)return s;
+ s=t->BootServices->GetMemoryMap(&bytes,map,&key,&stride,&version);BOOLEAN readable=FALSE;
+ if(s==EFI_SUCCESS && stride>=sizeof(EFI_MEMORY_DESCRIPTOR) && bytes<=32768 && bytes%stride==0){
+  for(UINTN at=0;at<bytes;at+=stride){
+   EFI_MEMORY_DESCRIPTOR *d=(EFI_MEMORY_DESCRIPTOR *)((UINT8 *)map+at);
+   if((d->Type==EfiLoaderData || d->Type==EfiBootServicesData) && !(d->Attribute&EFI_MEMORY_RP) && d->NumberOfPages<=~(UINT64)0/4096){
+    UINT64 length=d->NumberOfPages*4096;
+    if(d->PhysicalStart<=~(UINT64)0-length && d->PhysicalStart<=address && address-d->PhysicalStart<=length && length-(address-d->PhysicalStart)>=32)readable=TRUE;
+   }
+  }
+ }
+ if(readable)for(UINTN i=0;i<4;i++)words[i]=((UINTN *)address)[i];
+ EFI_STATUS freed=t->BootServices->FreePool(map);if(freed!=EFI_SUCCESS)return freed;
+ return readable?EFI_SUCCESS:EFI_UNSUPPORTED;
+}
+static EFI_STATUS GuMsiGraphicsPlan(EFI_SYSTEM_TABLE *t,VOID *base,UINTN size,EFI_HANDLE child,EFI_HANDLE *physical){
+ if(physical)*physical=NULL;
+ if(size!=0x1fa0 || *(UINTN *)((UINT8 *)base+0x1c68)!=(UINTN)child || *(UINTN *)((UINT8 *)base+0x1cc0)!=1)return EFI_UNSUPPORTED;
+ UINTN head=*(UINTN *)((UINT8 *)base+0x1cc8),tail=*(UINTN *)((UINT8 *)base+0x1cd0),v[4];
+ EFI_STATUS s=GuMsiReadWords(t,head,v);if(s!=EFI_SUCCESS || head!=tail || v[0] || v[1] || !v[2] || !v[3])return EFI_UNSUPPORTED;
+ EFI_GUID gop=EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID,path=EFI_DEVICE_PATH_PROTOCOL_GUID;VOID *g=NULL,*p=NULL;
+ if(t->BootServices->HandleProtocol((EFI_HANDLE)v[3],&gop,&g)!=EFI_SUCCESS || (UINTN)g!=v[2] ||
+    t->BootServices->HandleProtocol((EFI_HANDLE)v[3],&path,&p)!=EFI_SUCCESS || !p)return EFI_UNSUPPORTED;
+ /* The last-controller path frees the cached mode list before taking a
+  * framebuffer snapshot. Bound and validate both directions before calling. */
+ UINTN n=*(UINTN *)((UINT8 *)base+0x1ca0),node=*(UINTN *)((UINT8 *)base+0x1ca8),last=0;
+ if(n>64)return EFI_UNSUPPORTED;
+ for(UINTN i=0;i<n;i++){
+  UINTN item[4];s=GuMsiReadWords(t,node,item);
+  if(s!=EFI_SUCCESS || item[1]!=last)return EFI_UNSUPPORTED;
+  last=node;node=item[0];
+ }
+ if(node || last!=*(UINTN *)((UINT8 *)base+0x1cb0))return EFI_UNSUPPORTED;
+ if(physical)*physical=(EFI_HANDLE)v[3];return EFI_SUCCESS;
+}
+static EFI_STATUS GuMsiGraphicsOwner(EFI_SYSTEM_TABLE *t,EFI_HANDLE physical,EFI_HANDLE child,EFI_HANDLE agent,BOOLEAN present){
+ EFI_GUID gop=EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID;EFI_OPEN_PROTOCOL_INFORMATION_ENTRY *opens=NULL;UINTN n=0,drivers=0,children=0;
+ EFI_STATUS s=t->BootServices->OpenProtocolInformation(physical,&gop,&opens,&n);if(s!=EFI_SUCCESS)return s;
+ BOOLEAN ok=n<=256 && (!n || opens);
+ if(ok)for(UINTN i=0;i<n;i++)if(opens[i].Attributes&0x18){
+  if(opens[i].AgentHandle!=agent || opens[i].OpenCount!=1)ok=FALSE;
+  if(opens[i].Attributes==0x10 && opens[i].ControllerHandle==physical)drivers++;
+  else if(opens[i].Attributes==8 && opens[i].ControllerHandle==child)children++;
+  else ok=FALSE;
+ }
+ if(opens && t->BootServices->FreePool(opens)!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
+ return ok && drivers==(present?1U:0U) && children==(present?1U:0U)?EFI_SUCCESS:EFI_UNSUPPORTED;
+}
+#endif
 #ifdef GU_MSI_VIRTUAL_TEXT_TEST
 #if !defined(GU_MSI_ONE_CHILD_TEST)
 #error Virtual text removal requires the one-child removal sequence
@@ -96,6 +153,9 @@ static EFI_STATUS GuMsiRuntimeAudit(EFI_SYSTEM_TABLE *t,GU_MSI_RECORD record){
  EFI_GUID binding=EFI_DRIVER_BINDING_PROTOCOL_GUID,loaded=EFI_LOADED_IMAGE_PROTOCOL_GUID;
  EFI_HANDLE *handles=NULL;UINTN count=0,text=0,gfx=0;
  EFI_DRIVER_BINDING_PROTOCOL *textBinding=NULL;
+#ifdef GU_MSI_GRAPHICS_TEST
+ EFI_DRIVER_BINDING_PROTOCOL *graphicsBinding=NULL;VOID *graphicsBase=NULL;UINTN graphicsSize=0;
+#endif
 #ifdef GU_MSI_VIRTUAL_TEXT_TEST
  EFI_DRIVER_BINDING_PROTOCOL *virtualBinding=NULL;UINTN virtualMatches=0;
 #endif
@@ -113,6 +173,9 @@ static EFI_STATUS GuMsiRuntimeAudit(EFI_SYSTEM_TABLE *t,GU_MSI_RECORD record){
   UINTN stop=(UINTN)d->Stop-base;
   if(d->Version==16 && stop==0x10bc && image->ImageSize>=0x2a0+21904 && GuHashMatches((UINT8 *)image->ImageBase+0x2a0,21904,"3a14de3d645d704fdd327e9e814c7b8928d98ee734d777823d3abe389d628aaa")){text++;textBinding=d;}
   if(d->Version==17 && stop==0x768 && image->ImageSize>=0x2a0+6112 && GuHashMatches((UINT8 *)image->ImageBase+0x2a0,6112,"bbfbb62cb30815f58b751879b431fff7d0a2021568b448f873407221728fb246"))gfx++;
+#ifdef GU_MSI_GRAPHICS_TEST
+  if(d->Version==17 && stop==0x768 && image->ImageSize==0x1fa0 && GuHashMatches((UINT8 *)image->ImageBase+0x2a0,6112,"bbfbb62cb30815f58b751879b431fff7d0a2021568b448f873407221728fb246")){graphicsBinding=d;graphicsBase=image->ImageBase;graphicsSize=(UINTN)image->ImageSize;}
+#endif
 #ifdef GU_MSI_VIRTUAL_TEXT_TEST
   if(d->Version==16 && stop==0xa08 && image->ImageSize==0x39a0 && GuHashMatches((UINT8 *)image->ImageBase+0x2a0,7232,"654ca7fec19bf03dabe804d0d81d47dc810788be59dea03d8c24c727281494ac")){virtualBinding=d;virtualMatches++;}
 #endif
@@ -135,6 +198,16 @@ static EFI_STATUS GuMsiRuntimeAudit(EFI_SYSTEM_TABLE *t,GU_MSI_RECORD record){
  s=GuMsiMembership(t,textBase,textSize,record,&controller);
 #ifdef GU_MSI_ONE_CHILD_TEST
  if(s!=EFI_SUCCESS || !textBinding || !controller)return EFI_UNSUPPORTED;
+#ifdef GU_MSI_GRAPHICS_TEST
+ EFI_HANDLE physical=NULL;
+ if(!graphicsBinding || !graphicsBase)return EFI_UNSUPPORTED;
+ s=GuMsiGraphicsPlan(t,graphicsBase,graphicsSize,controller,&physical);
+ if(record(NULL,"msi-graphics-plan-before",s)!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
+ if(s!=EFI_SUCCESS)return s;
+ s=GuMsiGraphicsOwner(t,physical,controller,graphicsBinding->DriverBindingHandle,TRUE);
+ if(record(NULL,"msi-graphics-owner-before",s)!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
+ if(s!=EFI_SUCCESS)return s;
+#endif
 #ifdef GU_MSI_VIRTUAL_TEXT_TEST
  s=GuMsiVirtualOwner(t,controller,virtualBinding->DriverBindingHandle,TRUE);
  if(record(NULL,"msi-virtual-text-owner-before",s)!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
@@ -170,6 +243,29 @@ static EFI_STATUS GuMsiRuntimeAudit(EFI_SYSTEM_TABLE *t,GU_MSI_RECORD record){
  if(s!=EFI_SUCCESS)return s;
  s=GuMsiVirtualInterfaces(t,controller);
  if(record(NULL,"msi-virtual-text-interfaces-removed",s)!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
+#ifdef GU_MSI_GRAPHICS_TEST
+ if(s!=EFI_SUCCESS)return s;
+ EFI_HANDLE freshPhysical=NULL;
+ s=GuMsiGraphicsPlan(t,graphicsBase,graphicsSize,controller,&freshPhysical);
+ if(record(NULL,"msi-graphics-plan-fresh",s)!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
+ if(s!=EFI_SUCCESS || freshPhysical!=physical)return EFI_UNSUPPORTED;
+ s=GuMsiGraphicsOwner(t,physical,controller,graphicsBinding->DriverBindingHandle,TRUE);if(s!=EFI_SUCCESS)return s;
+ if(record(NULL,"msi-graphics-child-stop-enter",EFI_SUCCESS)!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
+ EFI_HANDLE aggregate=controller;
+ s=graphicsBinding->Stop(graphicsBinding,physical,1,&aggregate);
+ if(record(NULL,"msi-graphics-child-stop-return",s)!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
+ if(s!=EFI_SUCCESS)return s;
+ BOOLEAN emptyGraphics=*(UINTN *)((UINT8 *)graphicsBase+0x1cc0)==0 &&
+  *(UINTN *)((UINT8 *)graphicsBase+0x1cc8)==0 && *(UINTN *)((UINT8 *)graphicsBase+0x1cd0)==0;
+ if(record(NULL,"msi-graphics-list-empty",emptyGraphics?EFI_SUCCESS:EFI_UNSUPPORTED)!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
+ if(!emptyGraphics)return EFI_UNSUPPORTED;
+ s=GuMsiGraphicsOwner(t,physical,controller,graphicsBinding->DriverBindingHandle,FALSE);
+ if(record(NULL,"msi-graphics-opens-closed",s)!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
+ if(s!=EFI_SUCCESS)return s;
+ BOOLEAN snapshotAllocated=*(UINTN *)((UINT8 *)graphicsBase+0x1c50)!=0;
+ if(record(NULL,"msi-graphics-snapshot-buffer-present",snapshotAllocated?EFI_SUCCESS:EFI_UNSUPPORTED)!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
+ if(!snapshotAllocated)return EFI_UNSUPPORTED; /* Presence does not prove Blt succeeded. */
+#endif
  return s;
 #else
  return EFI_SUCCESS;
