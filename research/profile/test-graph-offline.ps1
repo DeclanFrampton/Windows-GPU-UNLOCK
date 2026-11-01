@@ -1,8 +1,14 @@
 # Offline shared-engine/build test. Never stage, boot or change firmware policy.
 [CmdletBinding()]
-param([string]$Clang='clang',[string]$LldLink='lld-link',[string]$Python='python')
+param([ValidatePattern('^(?:[a-z][a-z0-9-]{0,63})?$')][string]$Machine,[string]$Clang='clang',[string]$LldLink='lld-link',[string]$Python='python')
 $ErrorActionPreference='Stop'
+$requestedConfiguration=$Machine
 . (Join-Path $PSScriptRoot 'prepare-graph.ps1') -Clang $Clang -LldLink $LldLink -Python $Python
+$selected=$null
+if($requestedConfiguration){
+ $configuration=Read-GraphConfiguration $requestedConfiguration
+ $selected=[ordered]@{Id=$configuration.Id;Scope=$configuration.Scope;Sha256=(Get-GraphHash (Join-Path $PSScriptRoot ('graph-configurations/'+$requestedConfiguration+'.json')))}
+}
 & (Join-Path $PSScriptRoot 'test-graph-configurations.ps1')
 if(!$?){throw 'Configuration tests failed; no boot is requested.'}
 & (Join-Path $PSScriptRoot 'test-x99-graph-preparation.ps1')
@@ -24,7 +30,7 @@ if($offset -gt $bytes.Length-176 -or [BitConverter]::ToUInt32($bytes,$offset) -n
    [BitConverter]::ToUInt16($bytes,$offset+24) -ne 0x20b){throw 'Unexpected PE header.'}
 $certificateOffset=[BitConverter]::ToUInt32($bytes,$offset+24+112+4*8)
 $certificateSize=[BitConverter]::ToUInt32($bytes,$offset+24+112+4*8+4)
-$report=[ordered]@{Test='shared-graph-offline-v1';ConfigurationTests='pass';MockStagingTests='pass';
+$report=[ordered]@{Test='shared-graph-offline-v2';SelectedConfiguration=$selected;ConfigurationTests='pass';MockStagingTests='pass';
  FixtureOnly=$true;EfiBytes=$bytes.Length;EfiSha256=$hash;Machine=$pe.machine;Imports=$pe.imports;
  CertificateDirectoryPresent=($certificateOffset -ne 0 -or $certificateSize -ne 0);
  SignatureValidated=$false;FirmwareTrustEstablished=$false;HardwareTested=$false;WriteEligible=$false;

@@ -1,1 +1,3 @@
 Python과 LLVM이 이미 설치된 Windows에서 고정 소스를 새로 풀고 `powershell -NoProfile -ExecutionPolicy Bypass -File research/profile/test-graph-offline.ps1`을 실행하세요. 공통 구성/모의 스테이징 검사 후 합성 GUID EFI fixture를 빌드/검증하고 서명 또는 펌웨어 신뢰를 주장하지 않은 채 인증서 디렉터리 존재 여부를 보고합니다. Secure Boot 조회/변경, USB 스테이징, 부팅 항목 생성 또는 EFI 실행은 하지 않습니다. Documents/GPU-Unlock-Offline-*/graph-build-test.json만 검토 후 보내 주세요. fixture를 절대 복사/부팅하지 말고 펌웨어 설정을 유지하세요. 도구 누락이나 검사 실패 시 개인 경로를 지운 짧은 오류를 보내고 중지하세요. 빌드 환경/소스 경계를 검사할 뿐 GPU 지원 증명이 아니며 서명 없는 fixture는 Secure Boot 경로를 입증하지 못합니다.
+
+선택적 `-Machine issue135`는 오프라인 JSON에 선택한 구성 ID/범위/해시를 기록합니다. 구성 데이터와 합성 GUID fixture만 검증하며 실제 펌웨어 정책을 검사/변경하거나 USB 준비를 허용하지 않습니다. issue135는 반환된 Windows 보고서의 서브시스템248910DE를 사용하며 변조나 지원 여부를 추정하지 않습니다. Secure Boot는 활성 상태로 유지하고 EFI 테스트는 중지합니다.
