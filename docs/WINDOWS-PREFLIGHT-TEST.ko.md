@@ -1,1 +1,3 @@
 Windows에서 `powershell -NoProfile -File tools/test-windows-preflight.ps1`을 실행하세요. 관리자 권한 여부, Secure Boot 조회 결과, 각 어댑터와 내부적으로 연결한 디스플레이 드라이버 공급자/제조사/버전/INF/서명 메타데이터만 읽습니다. 장치 인스턴스 ID, 이름, 예외 메시지는 제외합니다. Secure Boot 불명은 계속 불명이며 스테이징 허용이 아닙니다. Documents/GPU-Unlock-Preflight-*/windows-preflight.json만 검토 후 보내 주세요. 준비를 중지한 채로 두고 펌웨어 변경, 어댑터 제거 또는 EFI 부팅을 하지 마세요. 오류 시 개인 경로를 지운 짧은 오류만 보내고 중지하세요. 서명 메타데이터는 어댑터 유형, 펌웨어 소유권 또는 잠금 해제 자격의 증거가 아닙니다.
+
+스키마2는 숫자 PCI/서브시스템 ID와 선택적 `-ExpectedDevice 2489`(NVIDIA 공급자10DE)를 추가합니다. Windows 인벤토리의 단일/누락/불명확 일치만 보고하며 펌웨어 소유권, 호환성 또는 스테이징 허용이 아닙니다. 인스턴스 접미사는 계속 제외합니다. 출력 파일과 중지 규칙은 같습니다.

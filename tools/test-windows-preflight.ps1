@@ -1,12 +1,12 @@
 # Windows-only setup diagnostics. No device, boot or firmware writes.
 [CmdletBinding()]
-param([switch]$SelfTest)
+param([switch]$SelfTest,[ValidatePattern('^(?:[0-9A-Fa-f]{4})?$')][string]$ExpectedDevice)
 $ErrorActionPreference='Stop'
 function Public-DriverLabel($Value) {
  if($Value -isnot [string] -or $Value.Length -gt 128 -or $Value -match '[\\/:@\x00-\x1f]'){return $null}
  return $Value
 }
-function Get-PreflightReport([bool]$Elevated,[scriptblock]$QuerySecureBoot,$Video,$Drivers) {
+function Get-PreflightReport([bool]$Elevated,[scriptblock]$QuerySecureBoot,$Video,$Drivers,[string]$TargetDevice) {
  $secure=[ordered]@{State='unknown';ErrorCategory=$null;HResult=$null}
  try {
   $value=& $QuerySecureBoot
@@ -20,14 +20,20 @@ function Get-PreflightReport([bool]$Elevated,[scriptblock]$QuerySecureBoot,$Vide
  foreach($v in $Video){
   $token=$null
   if([string]$v.PNPDeviceID -match '^([A-Za-z][A-Za-z0-9_-]{0,31})\\'){$token=$Matches[1]}
+  $pci=$null
+  if([string]$v.PNPDeviceID -match '^PCI\\VEN_([0-9A-F]{4})&DEV_([0-9A-F]{4})&SUBSYS_([0-9A-F]{8})(?:&|\\|$)'){
+   $pci=[ordered]@{Vendor=$Matches[1];Device=$Matches[2];Subsystem=$Matches[3]}
+  }
   $matchesDriver=@($Drivers | Where-Object {$_.DeviceID -and $_.DeviceID -ceq $v.PNPDeviceID})
   $details=@($matchesDriver | ForEach-Object {
    [ordered]@{Provider=(Public-DriverLabel $_.DriverProviderName);Manufacturer=(Public-DriverLabel $_.Manufacturer);
     Version=(Public-DriverLabel $_.DriverVersion);Inf=(Public-DriverLabel $_.InfName);Signed=($_.IsSigned -eq $true)}
   })
-  $adapters += [ordered]@{Index=$index;EnumeratorToken=$token;MatchingDriverCount=$details.Count;Drivers=$details};$index++
+  $adapters += [ordered]@{Index=$index;EnumeratorToken=$token;Pci=$pci;MatchingDriverCount=$details.Count;Drivers=$details};$index++
  }
- return [ordered]@{SchemaVersion=1;Elevated=$Elevated;SecureBoot=$secure;DisplayAdapters=$adapters;
+ $targetMatches=@($adapters | Where-Object {$_.Pci -and $_.Pci.Vendor -ieq '10DE' -and $_.Pci.Device -ieq $TargetDevice})
+ $target=if($TargetDevice){[ordered]@{Vendor='10DE';Device=$TargetDevice.ToUpperInvariant();MatchCount=$targetMatches.Count;UniqueInventoryMatch=($targetMatches.Count -eq 1)}}else{$null}
+ return [ordered]@{SchemaVersion=2;Target=$target;Elevated=$Elevated;SecureBoot=$secure;DisplayAdapters=$adapters;
    HardwareTested=$false;WriteEligible=$false;Next='Keep EFI preparation stopped until reviewed. No settings changes or boot.'}
 }
 if($SelfTest){
@@ -43,11 +49,19 @@ if($SelfTest){
  if($r.SecureBoot.State -ne 'unknown' -or $json.Contains('PRIVATE') -or $json.Contains('WRONG') -or (Public-DriverLabel 'C:\PRIVATE\FILE')){throw 'Preflight failure/redaction regression'}
  $r=Get-PreflightReport $true {'false'} @() @()
  if($r.SecureBoot.State -ne 'unknown' -or $r.WriteEligible){throw 'Unknown state must not become disabled'}
+ $sample='PCI'+[char]92+'VEN_10DE&DEV_2489&SUBSYS_12341569&REV_A1'+[char]92+'PRIVATE'
+ $v=@([pscustomobject]@{PNPDeviceID=$sample})
+ $r=Get-PreflightReport $false {$true} $v @() '2489'
+ if(!$r.Target.UniqueInventoryMatch -or $r.DisplayAdapters[0].Pci.Subsystem -cne '12341569' -or ($r|ConvertTo-Json -Depth 8).Contains('PRIVATE')){throw 'Target inventory/privacy regression'}
+ $r=Get-PreflightReport $false {$true} @($v+$v) @() '2489'
+ if($r.Target.UniqueInventoryMatch -or $r.Target.MatchCount -ne 2){throw 'Duplicate targets must remain ambiguous'}
+ $r=Get-PreflightReport $false {$true} $v @() '2204'
+ if($r.Target.UniqueInventoryMatch -or $r.Target.MatchCount -ne 0){throw 'Wrong target accepted'}
  Write-Host 'PASS: enabled/disabled/unknown states, driver association, redaction, non-boolean refusal.';exit
 }
 $identity=[Security.Principal.WindowsIdentity]::GetCurrent()
 $elevated=([Security.Principal.WindowsPrincipal]$identity).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-$report=Get-PreflightReport $elevated {Confirm-SecureBootUEFI -ErrorAction Stop} @(Get-CimInstance Win32_VideoController) @(Get-CimInstance Win32_PnPSignedDriver -Filter "DeviceClass='DISPLAY'")
+$report=Get-PreflightReport $elevated {Confirm-SecureBootUEFI -ErrorAction Stop} @(Get-CimInstance Win32_VideoController) @(Get-CimInstance Win32_PnPSignedDriver -Filter "DeviceClass='DISPLAY'") $ExpectedDevice
 $docs=[Environment]::GetFolderPath('MyDocuments');if(!$docs){throw 'Documents folder unavailable.'}
 $out=Join-Path $docs ('GPU-Unlock-Preflight-'+[guid]::NewGuid().ToString('N').Substring(0,8))
 New-Item -ItemType Directory -Path $out|Out-Null
