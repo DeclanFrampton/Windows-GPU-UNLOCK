@@ -1,5 +1,11 @@
 # 잠금 해제 전 PyTorch 기준 성능
 
+## 반환 기준 성능과 큰 행렬 검사
+
+고정 러너가 완료되었습니다. 소스 해시와 영수증이 일치하고 유한 시험값의 중앙값 재계산이 통과했습니다. FP32 23.489277, FP16 출력 67.294447, BF16 출력 68.373777, TF32 33.846756 TFLOPS입니다. [요약](christian-torch-baseline.json). 현재 성능만 기록하며 이전 잠금 해제 실행 여부 확인은 대기 중입니다.
+
+다음 `check-christian-large-gemm.ps1`는 설치 없이 기존 환경을 사용합니다. 4096x4096의 모드별 고정 출력 여덟 값을 양자화 입력 행/열의 CPU float64 내적과 비교하고 전체 유한값을 검사합니다. 128x128 참조와 측정 크기의 간격 일부를 확인하지만 32표본은 포괄 검증이 아닙니다. 고정 Results 경로에 러너와 JSON/ZIP을 저장합니다. 시간 비교, 튜닝, 펌웨어 쓰기나 재부팅은 없습니다. passed=false여도 ZIP을 보내세요. 실행 오류는 부분 파일을 보존하고 오류를 보내며 자동 반복하지 않습니다. PowerShell 구문과 내장 Python 컴파일은 통과했으며 실제 GPU 결과는 대기 중입니다.
+
 [English](CHRISTIAN-TORCH.en.md)
 
 준비 ZIP에서 Python/NVIDIA 도구는 있고 nvcc/CUDA_PATH/cuBLAS 툴킷과 torch는 없었습니다. 새 스크립트는 `C:\GPU-Unlock\BenchmarkEnv-v1`에만 환경을 만들고 공식 PyTorch CUDA12.6 인덱스에서 `torch==2.14.1+cu126`을 설치합니다. [공식 설치 경로](https://pytorch.org/get-started/previous-versions/)를 사용하며 시스템 CUDA/드라이버/Python은 변경하지 않습니다. 수 GB 다운로드와 여유 공간이 필요합니다.

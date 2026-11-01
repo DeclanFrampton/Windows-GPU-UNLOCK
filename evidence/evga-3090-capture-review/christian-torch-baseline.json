@@ -1,0 +1,15 @@
+{
+  "schema": "christian-torch-baseline-review-v1",
+  "archive_sha256": "2d10be1824ab0f01d59aab11bc77fb2427abb18ae4e5923adbe15377495bdc42",
+  "source_hash_matches_receipt": true,
+  "medians_recomputed": true,
+  "torch": "2.14.1+cu126",
+  "medians_tflops": {
+    "fp32": 23.489276987641823,
+    "fp16_output": 67.2944468266084,
+    "bf16_output": 68.37377730448347,
+    "tf32": 33.84675589804014
+  },
+  "unlock_proven": false,
+  "prior_unlock_history_confirmation_pending": true
+}

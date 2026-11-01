@@ -1,5 +1,11 @@
 # Pre-unlock PyTorch baseline
 
+## Returned baseline and large-matrix check
+
+The contributor completed the pinned runner. Source hash matches its receipt; trial values are finite and medians recompute correctly: FP32 23.489277, FP16-output 67.294447, BF16-output 68.373777, TF32 33.846756 TFLOPS. [Sanitized review](christian-torch-baseline.json). This establishes current performance only; explicit prior-unlock-history confirmation is still requested.
+
+Next `check-christian-large-gemm.ps1` reuses the existing environment without installing anything. It checks eight fixed entries in each 4096x4096 output against CPU float64 dot products of the quantized input rows/columns, plus output finiteness. This closes part of the gap between the initial 128x128 reference and timed matrix size; 32 sampled values are not exhaustive validation. It saves the runner and checks JSON/ZIP under the fixed Results directory. No timing comparison, tuning, firmware writes or reboot. Send the ZIP even if passed=false. On runtime errors preserve files and send the error, without automatic retries. PowerShell syntax and embedded Python compilation pass; live GPU correctness results are pending.
+
 [한국어](CHRISTIAN-TORCH.ko.md)
 
 The returned readiness ZIP reports Python/NVIDIA tools present, no nvcc/CUDA_PATH/cuBLAS toolkit and no torch package. The next script creates only `C:\GPU-Unlock\BenchmarkEnv-v1` and installs pinned `torch==2.14.1+cu126` from the official PyTorch CUDA 12.6 wheel index. This follows the [official wheel installation route](https://pytorch.org/get-started/previous-versions/). It does not install a system CUDA toolkit or driver or modify system Python. The download can be several GB and needs adequate disk space/network access.
