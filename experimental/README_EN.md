@@ -20,6 +20,7 @@ Testing was conducted on physical hardware under **Windows 11 x64** on a dual-so
 | :--- | :--- | :---:| :---:| :---:| :---:|
 | **GPU 0: RTX 4070 Ti 12GB** <br>*(Ada Lovelace AD104, 60 SM)* | **BF16 Tensor Cores** <br>**FP16 Tensor Cores** <br>**FP32 CUDA Cores** | 75.0 TFLOPS <br>74.0 TFLOPS <br>28.0 TFLOPS | **146.94 TFLOPS** <br>**142.22 TFLOPS** <br>**28.30 TFLOPS** | **+95.9% (2x FASTER!)** 🔥 <br>**+92.2% gain** 🔥 <br>Parity (CUDA cores not throttled) | `SS0=0x88888888` <br>`SS1=0x8` |
 | **GPU 1: RTX 3060 12GB** <br>*(Ampere GA106, 28 SM)* | **BF16 Tensor Cores** <br>**FP16 Tensor Cores** <br>**FP32 CUDA Cores** | 25.6 TFLOPS <br>25.6 TFLOPS <br>9.6 TFLOPS | **49.57 TFLOPS** <br>**48.07 TFLOPS** <br>**9.65 TFLOPS** | **+93.6% (2x FASTER!)** 🔥 <br>**+87.8% gain** 🔥 <br>Parity (CUDA cores not throttled) | `SS0=0x88888888` <br>`SS1=0x8` |
+| **GPU: RTX 3080 Ti 12GB (eGPU)** <br>*(Ampere GA102, OCuLink bus 0x65, GMK EVO-X3)* | **BF16 Tensor Cores** <br>**FP16 Tensor Cores** <br>**TF32 Tensor Cores** <br>**FP32 Standard** | 67.2 TFLOPS <br>66.7 TFLOPS <br>33.8 TFLOPS <br>23.4 TFLOPS | **112.2 TFLOPS** <br>**109.4 TFLOPS** <br>**56.0 TFLOPS** <br>**23.1 TFLOPS** | **+67.0% (1.67x) gain** 🔥 <br>**+64.0% (1.64x) gain** 🔥 <br>**+65.7% (1.66x) gain** 🔥 <br>Parity (0.99x control) | `SS0=0x88888888` <br>`SS1=0x8` |
 
 > [!NOTE]
 > **Physical Mechanics & Throttle Removal (SS0 / SS1)**:
@@ -93,10 +94,41 @@ USB_ROOT/
 │       ├── 10de_2782_1458_40e8.rom  <-- Dump of GPU 0 (RTX 4070 Ti)
 │       └── 10de_2504_1458_40e2.rom  <-- Dump of GPU 1 (RTX 3060)
 ├── copy_to_usb.bat                  <-- 1-click quick deploy
+├── dump_vbios.bat                   <-- 1-click VBIOS dumping
+├── tools/
+│   ├── nvflashk.exe                 <-- Patched VBIOS dumper (Ada / Ampere)
+│   └── w64devkit.7z.exe             <-- Standalone GCC / MinGW-w64 toolchain
 ```
 3. Dump your card's VBIOS directly from Windows using `dump_vbios.bat`.
 4. Plug the USB drive into your PC and select it from the BIOS Boot Menu (F11 / F12).
 5. The bootloader detects all supported cards and unlocks them in RAM within 30 seconds (or immediately upon pressing `U`), passing control smoothly to Windows.
+
+---
+
+## Bundled Binaries & Toolchains (`tools/` & `UNIVERSAL-ASSETS/`)
+
+All binaries and toolchain components are bundled in the repository for seamless out-of-the-box usage:
+
+| Path / File | Purpose | Size | Description |
+| :--- | :--- | :--- | :--- |
+| **`tools/nvflashk.exe`** | Patched NVIDIA VBIOS Dumper & Flasher | ~19.8 MB | Custom `nvflashk` (v5.821) by *notfromstatefarm*. Enables dumping exact factory VBIOS ROMs from Ada Lovelace (RTX 40) and Ampere (RTX 30) cards under Windows. |
+| **`tools/w64devkit.7z.exe`** | Portable C99/MinGW-w64 Toolchain | ~64.1 MB | Complete portable GCC 16.2 / GNU ld toolchain for building `BOOTX64.EFI` on Windows (`python build.py`). Auto-extracts to `tools/w64devkit/` upon invocation. |
+| **`UNIVERSAL-ASSETS/*.bin`** | Official NVIDIA GSP & Booter Firmware | ~85 MB | 9 official firmware microcodes (including `gsp_ga10x.bin`, `booter_load` stages, and PLM selectors `v67`), required for UEFI In-RAM cold boot initialization. |
+| **`dist/EFI/BOOT/BOOTX64.EFI`** | Prebuilt Standalone UEFI Loader | ~135 KB | Precompiled In-RAM unlock bootloader for FAT32 USB drives without requiring physical SPI flashing. |
+| **`dump_vbios.bat`** / **`.ps1`** | 1-Click VBIOS Dumper | — | Probes PCI topology, calls `tools/nvflashk.exe`, and formats output ROM files strictly by hardware IDs into `EFI/VBIOS/`. |
+| **`copy_to_usb.bat`** / **`.ps1`** | 1-Click USB Deployment | — | Deploys EFI bootloader, microcodes, VBIOS dumps, and utilities to any selected USB drive letter. |
+
+---
+
+## Optional Diagnostic & Control Flags (TXT Files on USB Root)
+
+By default, the engine is tuned for maximum reliability across modern motherboards and chipsets:
+
+| File Name on USB Root | Purpose & Behavior |
+| :--- | :--- |
+| *(Default, no files)* | **Safe Direct Handoff (Recommended)**. The engine detaches UEFI GOP before PCIe FLR, restores `PCI Command = 0x0007` (Bus Master DMA enabled), and immediately transitions to Windows Boot Manager (`bootmgfw.efi`). Completely eliminates post-FLR Option ROM deadlocks observed on modern UEFI platforms (Z790/X670/B650). Windows WDDM and `nvlddmkm.sys` initialize the display heads natively. |
+| **`tx-force-reconnect.txt`** | **Forced UEFI GOP Reconnection**. Creating this empty text file on the root of your boot drive instructs the engine to call `gBS->ConnectController` after unlocking, restoring the UEFI text console and display output before Windows launches (works reliably on platforms like Z370/B660/X99). |
+| **`tx-reconnect-recursive.txt`** | **Recursive Child Connect**. Used in combination with `tx-force-reconnect.txt`. Performs a recursive binding of all child video output handles and resets `gST->ConsoleOutHandle`. |
 
 ---
 
@@ -130,3 +162,16 @@ To solve this, our repository includes an automated registry configurator:
 3. Preserves iGPU display driving and physical screen brightness control.
 *(To revert to Windows defaults: `powershell -File tools\enable_laptop_hybrid.ps1 -Restore`).*
 
+
+
+---
+
+## eGPU & OCuLink External Graphics Support
+
+*(Research, troubleshooting, and verification on the OCuLink platform: **joogle8888** in upstream [windows-GPU-UNLOCK#164](https://github.com/windows-GPU-UNLOCK/Windows-GPU-UNLOCK/issues/164) and [joogle8888/evo-x3-3080ti-unlock](https://github.com/joogle8888/evo-x3-3080ti-unlock))*
+
+When connecting GPUs via external PCIe interfaces such as **OCuLink**, **Thunderbolt**, or **USB4** (e.g. mini-PCs like the *GMKtec EVO-X3* featuring AMD Ryzen AI Max+ APUs):
+1. **Absence of I/O Space in UEFI**: Unlike physical motherboard x16 desktop slots, host firmware on external bridges does not map legacy x86 I/O ports (`PCI Command bit 0 = 0`), allocating strictly Memory Space (BAR0).
+2. **Adaptive Memory-Only Normalization (`cmd = 0x2`)**: The engine enables Memory Space exclusively (`0x2`, keeping legacy IO bit 0 clear). This guarantees that UEFI `PciIo->Attributes(Enable, BUS_MASTER)` lands cleanly at `0x6` (Memory + Bus Master DMA), eliminating the `Bus Master enable failed: command=0x3 readback=0x6` assertion mismatch.
+3. **Seamless Windows Handoff**: Prior to Windows Boot Manager entry, register readback confirms mandatory `Memory (0x2)` and `BME (0x4)` flags, treating the legacy I/O bit as optional.
+4. **Verified Hardware**: Confirmed on **GMKtec EVO-X3 (AMD Ryzen AI Max+ 395 + Radeon 8060S iGPU)** + **MSI GeForce RTX 3080 Ti 12 GB (GA102)** over an OCuLink bus link at `65:00.0`.
