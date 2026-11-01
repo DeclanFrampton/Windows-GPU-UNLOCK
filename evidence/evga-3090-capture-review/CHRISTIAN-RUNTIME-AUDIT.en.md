@@ -473,3 +473,5 @@ after five minutes without Windows, power off, remove USB, select normal
 Windows Boot Manager. Do not repeat/rearm. The staging script verifies local
 and USB payload hashes, preserves backups, and excludes ASSETS from result ZIPs.
 The 262162 cold MMIO read count is unchanged; no new GPU MMIO addresses/writes.
+
+Validation: eight compiled helper cases passed with the real SHA256 and full 262162 cold reads: success, allocation failure, map failure, short/high mapping, unexpected mapped BME, unmap and free failures. Four mocked payload-lifetime cases and six actual reader/hash-vector cases passed; the existing 17 prefix regressions passed. EFI compiled/linked and passed PE checks: 40448 bytes, SHA256 e4f98d2026b5846226555b989a920129a83df72cb5434fa6134adaaab9b3156f, AMD64 EFI, zero imports/IAT/delay imports, NX/ASLR. Fixed-source download/build plus simulated USB backup, all payload hash readbacks, collection, repeat and internal-disk refusal passed. Returned ZIP inspection confirmed ASSETS exclusion. These are software/mocked checks, not live common-buffer or recovery proof.
