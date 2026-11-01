@@ -6,8 +6,10 @@ $root = Split-Path -Parent $PSScriptRoot
 $documents = [Environment]::GetFolderPath('MyDocuments')
 if (!$documents) { throw 'Documents folder is unavailable. Stop and report this message.' }
 $folder = Join-Path $documents ('GPU-Unlock-Collector-Test-' + [Guid]::NewGuid().ToString('N').Substring(0, 8))
-$python = Get-Command python.exe -ErrorAction SilentlyContinue
-if (!$python) { throw 'Python was not found. Stop and report this message.' }
+$python = @(Get-Command python.exe -CommandType Application -All -ErrorAction SilentlyContinue) | Select-Object -First 1
+if (!$python -or $python.Source -isnot [string] -or $python.Source -match 'WindowsApps' -or !(Test-Path -LiteralPath $python.Source -PathType Leaf)) {
+    throw 'An existing Python application was not found, or resolves to an installer alias. Stop without installing or changing settings.'
+}
 New-Item -ItemType Directory -Path $folder | Out-Null
 $utf8 = New-Object System.Text.UTF8Encoding($false)
 
