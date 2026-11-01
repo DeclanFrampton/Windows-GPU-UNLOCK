@@ -56,12 +56,18 @@ if($SelfTest){
  $e=[pscustomobject]@{ProfileReportSha256=('b'*64);TreeSha256=('c'*64);Inputs=@(1,2)}
  $r=New-ProfileReviewSummary $hw $e $pins
  if($r.ExpectedHostJobCount -ne 22 -or $r.TargetPci -cne '220410de' -or $r.WriteEligible -or $r.ExistingRepoCodeExecuted -or ($r|ConvertTo-Json -Depth 6).Contains('PRIVATE')){throw 'Profile review scope/privacy regression.'}
+ $ti=$text.Replace('220410de','220310de').Replace('87b31043','161810de').Replace('0x6000U','0x5ff4U')
+ [IO.File]::WriteAllText((Join-Path $dir 'internal-boot/unlock/profile-local.h'),$ti)
+ $tiHardware=Get-LocalProfile $dir
+ $tiSummary=New-ProfileReviewSummary $tiHardware $e (Get-ReviewPins $ti)
+ if($tiSummary.TargetPci -cne '220310de' -or $tiSummary.Subsystem -cne '161810de' -or $tiSummary.Memory -cne '0x5ff4' -or $tiSummary.WriteEligible){throw '3090Ti partial-memory profile parse regression.'}
+ [IO.File]::WriteAllText((Join-Path $dir 'internal-boot/unlock/profile-local.h'),$text)
  foreach($bad in @($text+[Environment]::NewLine+'#define GU_TARGET_BUS 0x2U',$text.Replace('0xf4000000ULL','PRIVATE'))){
   $refused=$false;try{Get-ReviewPins $bad|Out-Null}catch{$refused=$true};if(!$refused){throw 'Malformed/duplicate pin accepted.'}
  }
  $refused=$false;try{Assert-LocalProfileEvidence $dir|Out-Null}catch{$refused=$true}
  if(!$refused){throw 'Missing real evidence passed trusted gate.'}
- Write-Host 'PASS: real header parser, numeric/duplicate pin refusal, 22-job shape, missing-evidence refusal and privacy. No supplied code or firmware executed.';exit
+ Write-Host 'PASS: real 3090/3090Ti partial-memory header parser, numeric/duplicate pin refusal, 22-job shape, missing-evidence refusal and privacy. No supplied code or firmware executed.';exit
 }
 try{
  if(!$ExistingRepo){$ExistingRepo=Read-Host 'Existing tested source folder containing your local profile and receipts (do not copy new files into it)'}
