@@ -1,12 +1,13 @@
 # Windows-only setup diagnostics. No device, boot or firmware writes.
 [CmdletBinding()]
-param([switch]$SelfTest,[ValidatePattern('^(?:[0-9A-Fa-f]{4})?$')][string]$ExpectedDevice)
+param([switch]$SelfTest,[ValidatePattern('^(?:[0-9A-Fa-f]{4})?$')][string]$ExpectedDevice,
+      [ValidatePattern('^(?:[0-9A-Fa-f]{8})?$')][string]$ExpectedSubsystem)
 $ErrorActionPreference='Stop'
 function Public-DriverLabel($Value) {
  if($Value -isnot [string] -or $Value.Length -gt 128 -or $Value -match '[\\/:@\x00-\x1f]'){return $null}
  return $Value
 }
-function Get-PreflightReport([bool]$Elevated,[scriptblock]$QuerySecureBoot,$Video,$Drivers,[string]$TargetDevice) {
+function Get-PreflightReport([bool]$Elevated,[scriptblock]$QuerySecureBoot,$Video,$Drivers,[string]$TargetDevice,[string]$TargetSubsystem) {
  $secure=[ordered]@{State='unknown';ErrorCategory=$null;HResult=$null}
  try {
   $value=& $QuerySecureBoot
@@ -31,8 +32,8 @@ function Get-PreflightReport([bool]$Elevated,[scriptblock]$QuerySecureBoot,$Vide
   })
   $adapters += [ordered]@{Index=$index;EnumeratorToken=$token;Pci=$pci;MatchingDriverCount=$details.Count;Drivers=$details};$index++
  }
- $targetMatches=@($adapters | Where-Object {$_.Pci -and $_.Pci.Vendor -ieq '10DE' -and $_.Pci.Device -ieq $TargetDevice})
- $target=if($TargetDevice){[ordered]@{Vendor='10DE';Device=$TargetDevice.ToUpperInvariant();MatchCount=$targetMatches.Count;UniqueInventoryMatch=($targetMatches.Count -eq 1)}}else{$null}
+ $targetMatches=@($adapters | Where-Object {$_.Pci -and $_.Pci.Vendor -ieq '10DE' -and $_.Pci.Device -ieq $TargetDevice -and (!$TargetSubsystem -or $_.Pci.Subsystem -ieq $TargetSubsystem)})
+ $target=if($TargetDevice){[ordered]@{Vendor='10DE';Device=$TargetDevice.ToUpperInvariant();ExpectedSubsystem=$(if($TargetSubsystem){$TargetSubsystem.ToUpperInvariant()}else{$null});MatchCount=$targetMatches.Count;UniqueInventoryMatch=($targetMatches.Count -eq 1)}}else{$null}
  return [ordered]@{SchemaVersion=2;Target=$target;Elevated=$Elevated;SecureBoot=$secure;DisplayAdapters=$adapters;
    HardwareTested=$false;WriteEligible=$false;Next='Keep EFI preparation stopped until reviewed. No settings changes or boot.'}
 }
@@ -57,11 +58,19 @@ if($SelfTest){
  if($r.Target.UniqueInventoryMatch -or $r.Target.MatchCount -ne 2){throw 'Duplicate targets must remain ambiguous'}
  $r=Get-PreflightReport $false {$true} $v @() '2204'
  if($r.Target.UniqueInventoryMatch -or $r.Target.MatchCount -ne 0){throw 'Wrong target accepted'}
+ $other=[pscustomobject]@{PNPDeviceID=$sample.Replace('12341569','38961462')}
+ $r=Get-PreflightReport $false {$false} @($v+$other) @() '2489' '38961462'
+ if(!$r.Target.UniqueInventoryMatch -or $r.Target.ExpectedSubsystem -cne '38961462'){throw 'Exact subsystem match failed'}
+ $r=Get-PreflightReport $false {$false} @($other,$other) @() '2489' '38961462'
+ if($r.Target.UniqueInventoryMatch -or $r.Target.MatchCount -ne 2){throw 'Duplicate subsystem accepted'}
+ $r=Get-PreflightReport $false {$false} $v @() '2489' '38961462'
+ if($r.Target.UniqueInventoryMatch -or $r.Target.MatchCount -ne 0){throw 'Wrong subsystem accepted'}
  Write-Host 'PASS: enabled/disabled/unknown states, driver association, redaction, non-boolean refusal.';exit
 }
+if($ExpectedSubsystem -and !$ExpectedDevice){throw '-ExpectedSubsystem requires -ExpectedDevice.'}
 $identity=[Security.Principal.WindowsIdentity]::GetCurrent()
 $elevated=([Security.Principal.WindowsPrincipal]$identity).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-$report=Get-PreflightReport $elevated {Confirm-SecureBootUEFI -ErrorAction Stop} @(Get-CimInstance Win32_VideoController) @(Get-CimInstance Win32_PnPSignedDriver -Filter "DeviceClass='DISPLAY'") $ExpectedDevice
+$report=Get-PreflightReport $elevated {Confirm-SecureBootUEFI -ErrorAction Stop} @(Get-CimInstance Win32_VideoController) @(Get-CimInstance Win32_PnPSignedDriver -Filter "DeviceClass='DISPLAY'") $ExpectedDevice $ExpectedSubsystem
 $docs=[Environment]::GetFolderPath('MyDocuments');if(!$docs){throw 'Documents folder unavailable.'}
 $out=Join-Path $docs ('GPU-Unlock-Preflight-'+[guid]::NewGuid().ToString('N').Substring(0,8))
 New-Item -ItemType Directory -Path $out|Out-Null
