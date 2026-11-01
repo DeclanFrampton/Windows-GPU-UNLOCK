@@ -12,9 +12,9 @@ ROOT = Path(__file__).resolve().parents[2]
 
 @unittest.skipUnless(sys.platform == 'win32' and shutil.which('powershell'), 'Windows PowerShell required')
 class LauncherTests(unittest.TestCase):
-    def run_launcher(self, python):
+    def run_launcher(self, python, text=None):
         with tempfile.TemporaryDirectory(prefix='capture test ') as folder:
-            text = ('incomplete reason=probe-unreviewed-envelope status=0x8000000000000003\n'
+            text = text or ('incomplete reason=probe-unreviewed-envelope status=0x8000000000000003\n'
                     'capture-complete=0\ndiagnostic-result status=0x8000000000000006\n')
             path = Path(folder) / 'DIAG00.TXT'
             path.write_text(text, encoding='ascii')
@@ -36,6 +36,25 @@ class LauncherTests(unittest.TestCase):
         self.assertEqual(receipt['checker_exit'], 2)
         report = json.loads((output / 'report.json').read_text(encoding='utf-8'))
         self.assertIn('probe_envelope_refused', [x['code'] for x in report['checks']])
+        self.assertIs(report['write_eligible'], False)
+
+    def test_issue104_single_capture_without_prom_or_driver_images(self):
+        # Reported excerpt only: this fixture is not a complete hardware capture.
+        text = ('probe-target seg=0x0000 bus=0x0009 dev=0x0000 fun=0x0000\n'
+                'cfg256 status=0x0000000000000000\n'
+                'subsystem=0x00000000146a10b0\n'
+                'incomplete reason=probe-unreviewed-envelope status=0x8000000000000003\n'
+                'probe targets=0001 cfg-incomplete=0000\ngops=0001\n'
+                'capture-complete=0\ndiagnostic-result status=0x8000000000000006\n')
+        result, receipt, output = self.run_launcher(sys.executable, text)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(receipt['checker_exit'], 2)
+        report = json.loads((output / 'report.json').read_text(encoding='utf-8'))
+        codes = [x['code'] for x in report['checks']]
+        self.assertIn('probe_envelope_refused', codes)
+        self.assertNotIn('invalid_graph', codes)
+        self.assertEqual(report['status'], 'invalid_data')
+        self.assertIs(report['hardware_tested'], False)
         self.assertIs(report['write_eligible'], False)
 
     def test_non_python_application_is_rejected_before_checker(self):

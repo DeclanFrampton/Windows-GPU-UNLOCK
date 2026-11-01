@@ -31,3 +31,9 @@ Review and attach **report.json and result.json** from the new
 `Documents\GPU-Unlock-Capture-Check-...` folder. Do not upload raw driver/PROM
 images or a full system report. If the script fails, send the files that exist
 or the short error with personal paths removed, then stop. Do not boot EFI again.
+
+For #104, a single existing DIAG00.TXT with the reported envelope refusal is
+sufficient for this classification test. PROM and IMG files are not required.
+Do not collect a second capture to clear the capture-count warning. Automatic
+Windows/display return is an owner observation, not profile or unlock proof.
+Keep the currently enabled Secure Boot setting unchanged.

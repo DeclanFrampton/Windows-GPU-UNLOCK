@@ -30,3 +30,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\test-existing-captur
 검토한 뒤 첨부하세요. 드라이버/PROM 원본이나 전체 시스템 보고서는 올리지 마세요.
 실패하면 생성된 파일 또는 개인 경로를 지운 짧은 오류를 보내고 중단하세요.
 EFI를 다시 부팅하지 마세요.
+
+#104의 이 분류 테스트에는 보고된 envelope 거부가 있는 기존 DIAG00.TXT
+한 개면 충분합니다. PROM 또는 IMG 파일은 필요하지 않습니다. 캡처 수 경고를
+없애려고 두 번째 캡처를 수집하지 마세요. Windows/화면 자동 복귀는 사용자
+관찰이며 프로필 또는 unlock 증거가 아닙니다. 현재 활성화된 Secure Boot를 유지하세요.
