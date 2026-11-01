@@ -260,3 +260,41 @@ failed check holds, and no explicit ResetSystem is added. Boot once attended.
 After two minutes without Windows, power off, remove USB and choose normal
 Windows Boot Manager. Do not rearm. Collect produces christian-nvidia-release-result
 ZIP under C:\GPU-Unlock\Results. This test still does not attempt unlock.
+
+## DIAG09 NVIDIA release success and bounded cold-state test
+DIAG09 records both NVIDIA Stop returns and child/parent postconditions as success.
+The measured post-parent PCI command value is0. The physical child/EDID handles
+are absent, the private interface is gone and NVIDIA ownership is released.
+This is live teardown evidence, not unlock or general recovery proof.
+
+The next MsiColdProbe repeats the release sequence, claims PCI_IO exclusively,
+requires command0 and no I/O/memory/BME/VGA decode attributes, checks BAR0's
+16MiB resource against its PCI BAR, then enables MEMORY only (0x200). It requires
+command2 and exactly saved|MEMORY attributes. No I/O, BME or VGA enable is added.
+It reads chip0 twice, eight fixed Ampere registers twice (0x118128,0x118234,
+0x110100,0x1fa828,0x823804,0x82381c,0x823820,0x1183a4), and the512-byte PROM
+prefix at0x300000..0x3001fc once:146 DWORD accesses total. The prefix must match
+SHA25673ae5e75a576f5dbbf90e7351aac055b7a9b6a249274f7ded03b33c7740d13c8.
+This is not a full cold-ROM dump or firmware execution. SS0 and other register
+values are observations; they are not pinned across boots or required stable
+within this observation test. All-ones/BADF sentinels hold.
+
+Only normal completion disables MEMORY again, verifies command0 and the exact
+saved attributes twice, closes exclusive ownership and rechecks the parent.
+No further BAR0 reads occur after Disable. Errors hold without speculative
+rollback; memory decode can remain enabled until manual recovery. Value-suffixed
+events store raw data in the status field, not operation results.
+
+Seventeen compiled-helper emulator cases passed, including success with146
+reads, volatile SS0, admission/attribute/BAR/MMIO/hash/log/restore/ownership
+failures. They verify software ordering, not live MMIO safety or recovery.
+The real EFI passed compile/PE and fixed-source download/build plus simulated
+USB backup/readback/collection/refusal checks. No live cold-state result yet.
+
+run-christian-cold-probe.ps1 -Drive G -AcceptRisk uses consumed
+MSI-COLD-PROBE.ARMED. New PCI decode changes/MMIO reads may have side effects,
+hang firmware or fail display/input/Windows. No GPU MMIO writes, DMA launch,
+firmware upload/execution or unlock transaction is added. Boot once attended.
+After two minutes without Windows, power off, remove USB and choose normal
+Windows Boot Manager. Do not retry/rearm. Collect returns christian-cold-result
+ZIP under C:\GPU-Unlock\Results.

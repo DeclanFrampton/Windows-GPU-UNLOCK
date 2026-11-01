@@ -251,3 +251,37 @@ Windows 실패를 일으킬 수 있습니다. 자동 복원/재시도는 없습�
 Windows Boot Manager로 부팅합니다. 재무장하지 않습니다. Collect는
 C:\GPU-Unlock\Results의 christian-nvidia-release-result ZIP을 만듭니다.
 이 테스트도 잠금 해제 자체를 시도하지 않습니다.
+
+## DIAG09 NVIDIA 해제 성공과 제한된 콜드 상태 테스트
+DIAG09의 NVIDIA 자식/부모 Stop 반환과 후속 검사가 성공했습니다. 측정된
+부모 후 PCI 명령 값은0입니다. 실제 자식/EDID 핸들과 private 인터페이스가
+없고 NVIDIA 소유권이 해제되었습니다. 실제 해제 증거이며 잠금 해제나 일반적인
+복구 보장은 아닙니다. 다음 MsiColdProbe는 이를 반복하고 PCI_IO를 독점
+열기한 뒤 command0 및 I/O/메모리/BME/VGA 디코딩 꺼짐을 확인합니다.
+16MiB BAR0 리소스를 PCI BAR와 비교하고 MEMORY만0x200으로 활성화합니다.
+command2와 정확한 saved|MEMORY 속성을 요구하며 I/O/BME/VGA는 켜지 않습니다.
+
+칩0을 두 번, 고정 Ampere 레지스터8개를 두 번(0x118128,0x118234,0x110100,
+0x1fa828,0x823804,0x82381c,0x823820,0x1183a4), PROM 앞512바이트
+0x300000..0x3001fc를 한 번 읽습니다. 총146 DWORD 접근입니다. 접두부는
+SHA25673ae5e75a576f5dbbf90e7351aac055b7a9b6a249274f7ded03b33c7740d13c8과
+일치해야 합니다. 전체 콜드 ROM 덤프나 펌웨어 실행은 아닙니다. SS0 등은 관찰
+값이며 부팅 간 고정하거나 같은 부팅 내 안정성을 요구하지 않습니다.
+all-ones/BADF 값은 정지합니다. 정상 완료에서만 MEMORY를 다시 끄고 command0과
+정확한 저장 속성을 두 번 확인한 뒤 독점 열기를 닫고 부모 상태를 재검사합니다.
+Disable 이후 BAR0 읽기는 없습니다. 오류 시 추측으로 복원하지 않고 정지하므로
+수동 복구 전까지 메모리 디코딩이 켜진 상태일 수 있습니다. value 접미 이벤트의
+status 필드는 작업 결과가 아닌 원시 데이터입니다.
+
+컴파일한 도우미의 에뮬레이션17개가 통과했습니다. 정상146회 읽기, SS0 변동,
+진입/속성/BAR/MMIO/해시/로그/복원/소유권 오류를 포함합니다. 소프트웨어 순서를
+검증하며 실제 MMIO 안전성이나 복구의 증거는 아닙니다. 실제 EFI 컴파일/PE와
+고정 소스 다운로드/빌드, 모의 USB 백업/해시/수집/거부 검사도 통과했습니다.
+실제 콜드 상태 결과는 아직 없습니다. run-christian-cold-probe.ps1 -Drive G
+-AcceptRisk는 소비되는 MSI-COLD-PROBE.ARMED를 사용합니다. 새 PCI 디코딩 변경과
+MMIO 읽기는 부작용, 펌웨어 멈춤 또는 화면/입력/Windows 실패를 일으킬 수 있습니다.
+GPU MMIO 쓰기, DMA 시작, 펌웨어 업로드/실행 또는 잠금 해제 트랜잭션은
+추가되지 않습니다. 직접 지켜보며 한 번만 부팅합니다. 2분 뒤 Windows가 없으면
+전원을 끄고 USB를 제거한 뒤 정상 Windows Boot Manager로 부팅합니다. 재시도/
+재무장하지 않습니다. Collect는 C:\GPU-Unlock\Results의 christian-cold-result
+ZIP을 만듭니다.
