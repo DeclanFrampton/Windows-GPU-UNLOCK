@@ -1,6 +1,6 @@
 # Mock filesystem and inventory only; does not query or stage a real disk.
 $ErrorActionPreference='Stop'
-. (Join-Path $PSScriptRoot 'prepare-x99-graph.ps1')
+. (Join-Path $PSScriptRoot 'prepare-graph.ps1')
 function Reject([scriptblock]$Action){$rejected=$false;try {& $Action}catch {$rejected=$true};if(!$rejected){throw 'Expected refusal did not occur.'}}
 $board=[pscustomobject]@{Manufacturer='ASUSTeK COMPUTER INC.';Product='X99-PRO/USB 3.1'}
 $bios=[pscustomobject]@{SMBIOSBIOSVersion='4101'};$cpu=[pscustomobject]@{Name='Intel Core i7-5820K'}

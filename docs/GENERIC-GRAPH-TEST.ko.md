@@ -1,0 +1,49 @@
+# 공통 그래프 진단
+
+[English](GENERIC-GRAPH-TEST.en.md)
+
+모든 구성은 하나의 준비 엔진과 그래프 전용 EFI 빌드를 공유합니다.
+`research/profile/graph-configurations/*.json`은 실행 코드가 아닌 보드, 제조사
+일치 규칙, BIOS, CPU 토큰, 전체 PCI 디스플레이 장치 ID 데이터입니다.
+구성 ID는 테스트 선택자이며 잠금 해제 지원 프로필이 아닙니다.
+기존 명령과 X99 진입점은 유지됩니다.
+
+Python과 LLVM은 USB가 아닌 Windows에 설치합니다. 고정된 소스 ZIP을 새로
+풀고 관리자 PowerShell과 여유 공간 16 MB 이상의 FAT32 USB를 사용하세요.
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\research\profile\prepare-machine-graph.ps1 -Machine issue182
+```
+
+검토된 이슈 안내에 지정된 ID만 사용하세요. 실제 장치, 이미 꺼진 Secure Boot,
+현재 내부 Windows ESP와 USB ID를 확인합니다. 불일치나 정책 차단 시 짧은
+오류만 보고하고 중지하세요. JSON/검사 우회, 장치 비활성화, 펌웨어 설정 변경,
+다른 ID 대체는 하지 마세요. VBIOS 이력이 불명이면 그대로 불명입니다.
+이 진단은 VBIOS를 읽거나 지원 여부를 입증하지 않습니다.
+
+표시된 범위를 이해하고 수락한 경우에만 `PREPARE`를 입력하세요.
+펌웨어 프로토콜/열린 관계, 콘솔 변수, GOP 정보, 64바이트 PCI 헤더를 읽고
+USB에 진단을 기록한 뒤 Windows로 돌아가려고 시도합니다. GPU MMIO/PROM,
+이미지 덤프, 드라이버 해제, GPU 쓰기 및 잠금 해제는 없습니다. 기존 Windows
+전환은 EFI watchdog을 끕니다. 펌웨어/화면/입력이 멈추거나 Windows 복귀가
+실패할 수 있으며 복구는 검증되지 않았습니다. 기존 USB 로더를 백업/재검증하며
+빌드 후 구성 해시를 재확인하여 graph-stage.json에 기록합니다.
+포맷, 부팅 항목 쓰기, 자동 재부팅/재시도/롤백은 없습니다.
+
+READY 후 완전히 종료하고 USB를 수동으로 한 번만 부팅하세요. Shift 키는
+필요 없습니다. 캡처 후 Windows가 예상됩니다. 2분 내 Windows가 시작되지
+않으면 전원을 끄고 USB를 제거한 뒤 일반 Windows Boot Manager를 사용하세요.
+복구 실패 시 테스트 사용을 중지하세요. 반복하지 마세요. Windows 복귀 후
+필요하면 USB를 다시 연결하고 같은 명령에 `-Collect`를 추가하여 실행하세요.
+출력된 Documents 폴더의 검토한 `graph-summary.json` 하나와 Windows가 직접
+시작했는지 수동 복구가 필요했는지만 보내 주세요. 원본 로그/EFI/백업은 로컬에
+보관하고 USB를 제거하세요. 결과 검토 후 다음 테스트를 결정합니다.
+
+## 유지관리 검사
+
+`test-graph-configurations.ps1`은 모든 데이터 구성, 거부 사례 및 기존 진입점을
+검사합니다. `test-x99-graph-preparation.ps1`은 기존 핀과 모의 파일 스테이징을
+검사합니다. `build-graph-only.ps1 -Fixture`는 공통 EFI를 검증합니다.
+Windows ESP GUID가 비어 있는 fixture는 절대로 부팅하지 마세요.
+구성 데이터 추가는 GPU 계열 지원이나 MMIO/해제/잠금 해제 허용이 아닙니다.
+별도 소스 검토, 증거 및 충분한 설명에 따른 수락이 필요합니다.

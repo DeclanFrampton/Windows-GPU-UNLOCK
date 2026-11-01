@@ -1,0 +1,50 @@
+# Shared graph diagnostic
+
+[한국어](GENERIC-GRAPH-TEST.ko.md)
+
+One preparation engine and one graph-only EFI build serve all configurations.
+`research/profile/graph-configurations/*.json` contains data, not executable code:
+board, manufacturer match rule, BIOS, CPU token and the complete expected PCI
+display-adapter tuples. The ID is a test configuration, **not a supported unlock
+profile**. Existing machine commands and the X99 entry point remain compatible.
+
+Run from a fresh pinned source ZIP on Windows with Python and LLVM installed on
+Windows, administrator PowerShell, and a FAT32 USB with at least 16 MB free:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\research\profile\prepare-machine-graph.ps1 -Machine issue182
+```
+
+Use only the configuration named in your reviewed issue instructions. The script
+checks actual inventory, Secure Boot already off, the current internal Windows
+ESP and the USB identity. A mismatch or policy block means stop and report the
+short error; do not edit JSON/guards, disable adapters, change firmware settings
+or substitute another ID to make it pass. Unknown VBIOS history remains unknown;
+this diagnostic neither reads it nor establishes qualification.
+
+Before staging, read the displayed boundary and type `PREPARE` only if accepted.
+Scope: firmware protocol/open records, console variables, GOP metadata and
+64-byte PCI headers, USB diagnostic output, attempted Windows handoff. No GPU
+MMIO/PROM, image dump, driver release, GPU writes or unlock. Existing Windows
+handoff disables the EFI watchdog. Firmware/display/input can hang and Windows
+return can fail; recovery is unproven. Existing USB loader is backed up and read
+back; configuration hash is rechecked after build and recorded in graph-stage.json.
+No formatting, boot-entry writes, automatic reboot, retry or rollback.
+
+After READY, fully shut down and manually boot the USB **once**. No Shift keys.
+Expect capture then Windows. If Windows has not started within two minutes,
+power off, remove the USB and use normal Windows Boot Manager. If recovery fails,
+stop using the test. Do not repeat. After Windows returns, reconnect USB if
+needed and run the same command with `-Collect`. Return only the reviewed
+`graph-summary.json` from the printed Documents folder, plus whether Windows
+started directly or required manual recovery. Keep raw logs/EFI/backups local
+and remove USB afterward. One result is reviewed before another test is proposed.
+
+## Maintainer checks
+
+`test-graph-configurations.ps1` tests every data file, refusal cases and the legacy
+entry point. `test-x99-graph-preparation.ps1` tests existing pins and staging with
+mock files only. `build-graph-only.ps1 -Fixture` verifies the common EFI; **never
+boot a fixture** (empty Windows ESP GUID). Adding configuration data does not
+add a GPU family or permit MMIO/release/unlock; those need separately reviewed
+source, evidence and informed acceptance.

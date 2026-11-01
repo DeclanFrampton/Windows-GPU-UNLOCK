@@ -1,0 +1,17 @@
+{
+  "SchemaVersion": 1,
+  "Id": "issue31",
+  "Scope": "graph-only",
+  "Board": "PRIME X570-PRO",
+  "ManufacturerPrefix": "ASUSTeK",
+  "Bios": "5013",
+  "CpuToken": "5950X",
+  "Adapters": [
+    {
+      "Vendor": "10DE",
+      "Device": "2204",
+      "Subsystem": "147D10DE"
+    }
+  ],
+  "ManufacturerMatch": "prefix"
+}
