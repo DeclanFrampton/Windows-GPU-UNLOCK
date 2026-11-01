@@ -551,3 +551,23 @@ or partial EFI logs skip the benchmark. Benchmark failures still produce the
 EFI result ZIP. Report whether Windows returned automatically or by manual
 power-off; benchmark data after a reboot does not prove the same GPU state was
 preserved. Permanent/unattended behavior and general compatibility are unproven.
+
+### First-write package validation (local, not live unlock)
+
+Core commit 3ea0a43 and launcher a04bfa7 were pushed to the fork. The pinned
+source downloaded and built a 91,648-byte AMD64 EFI with zero imports/IAT/delay
+imports and NX/ASLR. Package-build SHA256:
+`e5d35fa388be0341f552ce5b2f4af70d9a3581b783c4a58f7435f363c438a650`.
+PE timestamps can differ across builds; the staging receipt records that build's
+verified hash. The capture object retains its read-only compile guard; the
+manifest records flags per object.
+
+Passed: 23 wrapper/repeat-refusal cases, 17 graph ownership cases, 28 real-core
+MSI simulations using the private PROM/assets and adapted captured PCI config,
+and 28 EVGA core regression simulations. No hardware access occurred. The actual
+pinned package passed download/build/PE, simulated FAT32 USB backup/install/readback,
+arm-last staging, repeat/internal-disk refusal and result ZIP creation. Partial
+logs skipped the benchmark and the ZIP excluded ASSETS. A separate CPU stub
+fixture proved one-time benchmark dispatch and repeat collection reuse; it did
+not run PyTorch or prove GPU performance. Christian's next attended boot is the
+first live MSI write-enabled attempt; unlock, recovery and speedup remain unproven.
