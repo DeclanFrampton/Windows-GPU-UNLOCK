@@ -8,5 +8,5 @@
 #define GU_MSI_MEMBERSHIP_AUDIT
 #include "../../internal-boot/boot/msi-runtime-audit.h"
 EFI_STATUS EFIAPI efi_main(EFI_SYSTEM_TABLE *t,VOID *base,UINTN size,GU_MSI_RECORD record){
- return GuMsiMembership(t,base,size,record);
+ return GuMsiMembership(t,base,size,record,NULL);
 }

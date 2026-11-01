@@ -6,15 +6,20 @@
 #if defined(GU_MSI_MEMBERSHIP_AUDIT) && defined(GU_MSI_ZERO_CHILD_TEST)
 #error Membership observation excludes driver method execution
 #endif
+#if defined(GU_MSI_ONE_CHILD_TEST) && !defined(GU_MSI_MEMBERSHIP_AUDIT)
+#error One-child removal requires the bounded membership guards
+#endif
 #include <Protocol/DriverBinding.h>
 #include <Protocol/GraphicsOutput.h>
+#include <Protocol/SimpleTextOut.h>
 #include "../unlock/sha256.h"
 typedef EFI_STATUS (*GU_MSI_RECORD)(VOID *,const char *,EFI_STATUS);
 #ifdef GU_MSI_MEMBERSHIP_AUDIT
 /* Pinned text Stop uses image+0x6110 as child and image+0x6288 as a
  * singly-linked list. Read one node only, in allocated RAM, never MMIO. */
-static EFI_STATUS GuMsiMembership(EFI_SYSTEM_TABLE *t,VOID *base,UINTN size,GU_MSI_RECORD record){
- if(size<0x6290)return EFI_UNSUPPORTED;
+static EFI_STATUS GuMsiMembership(EFI_SYSTEM_TABLE *t,VOID *base,UINTN size,GU_MSI_RECORD record,EFI_HANDLE *controllerOut){
+ if(controllerOut)*controllerOut=NULL;
+ if(size<0x6298)return EFI_UNSUPPORTED;
  UINTN child=*(UINTN *)((UINT8 *)base+0x6110);
  UINTN node=*(UINTN *)((UINT8 *)base+0x6288);
  VOID *map=NULL;UINTN bytes=32768,key=0,stride=0;UINT32 version=0;
@@ -39,11 +44,13 @@ static EFI_STATUS GuMsiMembership(EFI_SYSTEM_TABLE *t,VOID *base,UINTN size,GU_M
  VOID *g=NULL,*p=NULL;
  BOOLEAN virtualGop=controller && t->BootServices->HandleProtocol(controller,&gop,&g)==EFI_SUCCESS && g &&
   t->BootServices->HandleProtocol(controller,&path,&p)==EFI_UNSUPPORTED;
- BOOLEAN childOk=child && child==(UINTN)t->ConsoleOutHandle,single=next==0;
+ BOOLEAN childOk=child && child==(UINTN)t->ConsoleOutHandle,single=next==0 &&
+  *(UINTN *)((UINT8 *)base+0x6280)==1 && *(UINTN *)((UINT8 *)base+0x6290)==node;
  if(record(NULL,"msi-text-child-is-console",childOk?EFI_SUCCESS:EFI_UNSUPPORTED)!=EFI_SUCCESS ||
     record(NULL,"msi-text-single-controller",single?EFI_SUCCESS:EFI_UNSUPPORTED)!=EFI_SUCCESS ||
     record(NULL,"msi-text-controller-is-virtual-gop",virtualGop?EFI_SUCCESS:EFI_UNSUPPORTED)!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
- return childOk && single && virtualGop?EFI_SUCCESS:EFI_UNSUPPORTED;
+ if(childOk && single && virtualGop){if(controllerOut)*controllerOut=controller;return EFI_SUCCESS;}
+ return EFI_UNSUPPORTED;
 }
 #endif
 static EFI_STATUS GuMsiRuntimeAudit(EFI_SYSTEM_TABLE *t,GU_MSI_RECORD record){
@@ -75,7 +82,31 @@ static EFI_STATUS GuMsiRuntimeAudit(EFI_SYSTEM_TABLE *t,GU_MSI_RECORD record){
 #ifdef GU_MSI_MEMBERSHIP_AUDIT
  if(text!=1 || gfx!=1 || !textBase)return EFI_UNSUPPORTED;
  (void)textBinding;
- return GuMsiMembership(t,textBase,textSize,record);
+ EFI_HANDLE controller=NULL;
+ s=GuMsiMembership(t,textBase,textSize,record,&controller);
+#ifdef GU_MSI_ONE_CHILD_TEST
+ if(s!=EFI_SUCCESS || !textBinding || !controller)return EFI_UNSUPPORTED;
+ EFI_HANDLE child=t->ConsoleOutHandle;
+ if(record(NULL,"msi-text-one-child-enter",EFI_SUCCESS)!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
+ s=textBinding->Stop(textBinding,controller,1,&child);
+ if(record(NULL,"msi-text-one-child-return",s)!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
+ if(s!=EFI_SUCCESS)return s;
+ BOOLEAN empty=*(UINTN *)((UINT8 *)textBase+0x6280)==0 &&
+  *(UINTN *)((UINT8 *)textBase+0x6288)==0 && *(UINTN *)((UINT8 *)textBase+0x6290)==0;
+ if(record(NULL,"msi-text-list-empty",empty?EFI_SUCCESS:EFI_UNSUPPORTED)!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
+ if(!empty)return EFI_UNSUPPORTED;
+ EFI_GUID textOut=EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL_GUID;
+ EFI_OPEN_PROTOCOL_INFORMATION_ENTRY *opens=NULL;UINTN opened=0;
+ s=t->BootServices->OpenProtocolInformation(controller,&textOut,&opens,&opened);
+ if(s!=EFI_SUCCESS)return s;
+ BOOLEAN closed=opened<=256 && (!opened || opens);
+ if(closed)for(UINTN i=0;i<opened;i++)if(opens[i].AgentHandle==textBinding->DriverBindingHandle && (opens[i].Attributes&0x18))closed=FALSE;
+ if(opens && t->BootServices->FreePool(opens)!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
+ if(record(NULL,"msi-text-opens-closed",closed?EFI_SUCCESS:EFI_UNSUPPORTED)!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
+ return closed?EFI_SUCCESS:EFI_UNSUPPORTED;
+#else
+ return s;
+#endif
 #elif defined(GU_MSI_ZERO_CHILD_TEST)
  /* Exact pinned Stop returns success before using ControllerHandle when
   * NumberOfChildren is zero. This tests invocation, never child removal. */

@@ -84,12 +84,12 @@ static EFI_STATUS CloseBootFiles(EFI_STATUS *LogStatus,EFI_STATUS *RootStatus) {
   if(RootStatus)*RootStatus=b;
   return a!=EFI_SUCCESS?a:b;
 }
-#if defined(GU_SINGLE_RTX_CONSOLE) || defined(GU_EVGA_STOP_ONLY)
+#if defined(GU_SINGLE_RTX_CONSOLE) || defined(GU_EVGA_STOP_ONLY) || defined(GU_MSI_ONE_CHILD_TEST)
 static BOOLEAN ResearchOutputDisabled;
 #endif
 
 static VOID Say(const CHAR16 *Text) {
-#if defined(GU_SINGLE_RTX_CONSOLE) || defined(GU_EVGA_STOP_ONLY)
+#if defined(GU_SINGLE_RTX_CONSOLE) || defined(GU_EVGA_STOP_ONLY) || defined(GU_MSI_ONE_CHILD_TEST)
   if(ResearchOutputDisabled)return;
 #endif
   if(Table && Table->ConOut)Table->ConOut->OutputString(Table->ConOut,(CHAR16 *)Text);
@@ -513,16 +513,33 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE Image,EFI_SYSTEM_TABLE *St) {
   GU_CONSOLE_FLOW_OPS ops={NULL,Prepare,PrepareChoice,CaptureConsole,DetachConsole,ReadyConsoleWindows,VerifyConsole,StartConsoleWindows,Record};
   s=GuConsoleFlow(&ops);
 #elif defined(GU_DIAGNOSTIC_ONLY)
+#ifdef GU_MSI_ONE_CHILD_TEST
+  Say(L"MSI attended one-child text removal. Screen may freeze. No unlock. Windows follows only verified success.\r\n");
+#else
   Say(L"GPU console diagnostic only. No unlock or driver detach. Collecting graph...\r\n");
+#endif
   s=Prepare(NULL);
   if(s==EFI_SUCCESS) {
     s=GuCaptureGraphOnVolume(Table,Log,Root);
     /* Partial observations never authorize unlock. Normal Windows boot is
      * permitted because this separate image has not touched GPU state. */
 #ifdef GU_MSI_RUNTIME_AUDIT
+#ifdef GU_MSI_ONE_CHILD_TEST
+    if(s==EFI_SUCCESS){
+      EFI_FILE_PROTOCOL *arm=NULL;
+      s=Table->BootServices->SetWatchdogTimer(0,0,0,NULL);
+      if(s==EFI_SUCCESS)s=Root->Open(Root,&arm,L"MSI-ONE-CHILD.ARMED",EFI_FILE_MODE_READ|EFI_FILE_MODE_WRITE,0);
+      if(s==EFI_SUCCESS)s=arm->Delete(arm);
+      if(s==EFI_SUCCESS)s=Record(NULL,"msi-one-child-arm-consumed",EFI_SUCCESS);
+      ResearchOutputDisabled=TRUE;
+    }
+#endif
     if(s==EFI_SUCCESS)s=GuMsiRuntimeAudit(Table,Record);
 #endif
     EFI_STATUS recorded=Record(NULL,"diagnostic-result",s);
+#ifdef GU_MSI_ONE_CHILD_TEST
+    if(s!=EFI_SUCCESS || recorded!=EFI_SUCCESS)Stop();
+#endif
     if(recorded==EFI_SUCCESS)s=Windows(NULL);
     else s=recorded;
   }
@@ -531,6 +548,9 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE Image,EFI_SYSTEM_TABLE *St) {
   s=GuHandoffFlow(&ops);
 #endif
   (void)Record(NULL,"handoff-stopped",s);
+#ifdef GU_MSI_ONE_CHILD_TEST
+  Stop(); /* Never fall back through BootOrder after a removal attempt. */
+#endif
 #ifdef GU_FULL_UNLOCK
   ScreenStatus("full-flow-returned",s);
 #endif
