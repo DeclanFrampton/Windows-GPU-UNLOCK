@@ -1,0 +1,1 @@
+Windows에서 `powershell -NoProfile -File tools/test-display-identities.ps1`을 실행하세요. Documents/GPU-Unlock-Display-*/display-identities.json만 보내 주세요. 이름과 장치 인스턴스 접미사는 제외하고 열거자 종류와 PCI ID만 기록합니다. 준비 검사를 우회하거나 USB로 부팅하지 마세요. 그래프 준비용 Python과 LLVM은 FAT32 USB가 아닌 Windows 호스트에 설치합니다.
