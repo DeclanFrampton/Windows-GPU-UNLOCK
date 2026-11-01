@@ -48,3 +48,5 @@ mock files only. `build-graph-only.ps1 -Fixture` verifies the common EFI; **neve
 boot a fixture** (empty Windows ESP GUID). Adding configuration data does not
 add a GPU family or permit MMIO/release/unlock; those need separately reviewed
 source, evidence and informed acceptance.
+
+Configuration `issue184` pins MSI MAG X870E TOMAHAWK WIFI (MS-7E59), BIOS2.A91, Ryzen9800X3D, NVIDIA2204/1462:3882 and AMD13c0/1462:7e59. Keep all reported connections: three monitors and VR headset on NVIDIA, one monitor on AMD. Both adapters remain enabled. The VR connection does not establish firmware ownership, and no adapter may be silently discarded to pass validation. VBIOS history is unknown. Use the same reviewed graph-only command with `-Machine issue184`; all acceptance, stop/recovery and collection instructions above apply.
