@@ -571,3 +571,36 @@ logs skipped the benchmark and the ZIP excluded ASSETS. A separate CPU stub
 fixture proved one-time benchmark dispatch and repeat collection reuse; it did
 not run PyTorch or prove GPU performance. Christian's next attended boot is the
 first live MSI write-enabled attempt; unlock, recovery and speedup remain unproven.
+
+## 2026-11-01 first live MSI transaction completed; Windows benchmark fix
+
+Christian returned `christian-unlock-result-59f63f7b0bf746edbde96bd8690715cc.zip`
+(Discord 1566594722720653532). DIAG14 SHA256 is
+`e5876d43c796fcfed8ed2e6aa5c9221738706fc2c134054d91cfbcf9b1cb4f7d`.
+The receipt pins core 3ea0a43316ec643d6497a91decf32094a82f3774 and EFI SHA256
+`6528229517f5937446a7dee0a0a736da5df16ef8ea993bc2b7ccbfedeb13bb1f`.
+
+Live logs show FWSEC success, the selector write, one successful PCIe FLR,
+post-FLR GFW error=0, SEC2 release, halted GSP and BME=0. The transaction returned
+0 with started=1, quiesced=1, fault=0, retained=0, maps=0, FLR=1. SS0=88888888 and
+SS1=8 were verified twice. Memory decode was disabled, attributes0 verified twice,
+exclusive ownership released, final parent postcondition passed, all five payload
+buffers freed and diagnostic-result=0. This is a successful live EFI unlock
+transaction, not yet measured proof of Windows performance improvement. The
+Windows return path (automatic versus manual) still needs the user's report.
+
+The collector attempted the Windows benchmark but PowerShell treated Python's
+missing-NumPy UserWarning on stderr as a terminating NativeCommandError. No
+measurements.json was returned. Do not repeat/rearm the successful EFI for this.
+The new `run-christian-post-unlock.ps1` verifies the existing successful log and
+exact benchmark source, then reuses a completed original measurement if present
+or starts the unchanged benchmark once with stderr/stdout redirected to files.
+It uses the existing environment, installs nothing, does not touch USB/EFI and
+has a separate atomic spent marker. A running benchmark causes refusal. A nonzero
+exit still yields a partial evidence ZIP. It emits before/after ratios against
+the recorded rounded baseline, without asserting causation or permanence.
+
+Windows PowerShell 5.1 CPU-stub checks passed: warning+exit0, exit2+partial ZIP,
+reuse of an existing measurement and refusal of a second invocation. These
+checks did not execute CUDA. Christian's next action is Windows-only performance
+verification without another reboot; no further firmware writes are requested.

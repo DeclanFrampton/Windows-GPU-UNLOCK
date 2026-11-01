@@ -531,3 +531,33 @@ ZIP 생성을 검증했다. 불완전한 로그에서는 벤치마크를 건너�
 포함하지 않는다. 별도 CPU 스텁으로 벤치마크 1회 실행 요청과 반복 수집 재사용을
 확인했으나 PyTorch 또는 GPU 성능을 실행/입증한 것은 아니다. 다음 참석 부팅이
 MSI의 첫 실제 쓰기 시도이며 잠금 해제, 복구 및 성능 향상은 아직 미입증이다.
+
+## 2026-11-01 MSI 첫 실제 트랜잭션 완료 및 Windows 벤치마크 수정
+
+Christian의 결과 ZIP은 `christian-unlock-result-59f63f7b0bf746edbde96bd8690715cc.zip`
+(Discord 1566594722720653532)이다. DIAG14 SHA256:
+`e5876d43c796fcfed8ed2e6aa5c9221738706fc2c134054d91cfbcf9b1cb4f7d`.
+영수증 코어는 3ea0a43316ec643d6497a91decf32094a82f3774이며 EFI SHA256:
+`6528229517f5937446a7dee0a0a736da5df16ef8ea993bc2b7ccbfedeb13bb1f`.
+
+실제 로그에서 FWSEC 성공, 셀렉터 쓰기, PCIe FLR 1회 성공, FLR 후 GFW error=0,
+SEC2 해제, GSP 정지와 BME=0을 확인했다. 트랜잭션 반환값0, started=1,
+quiesced=1, fault=0, retained=0, maps=0, FLR=1이다. SS0=88888888 및 SS1=8을
+두 번 검증했다. 메모리 디코드 해제, attributes0 두 번 확인, 배타적 소유권 해제,
+최종 부모 조건 통과, 자산 버퍼 5개 해제 및 diagnostic-result=0을 확인했다.
+실제 EFI 잠금 해제 트랜잭션은 성공했으나 Windows 성능 향상은 아직 측정되지
+않았다. 자동 또는 수동 Windows 복귀 여부는 사용자 확인이 필요하다.
+
+수집기가 벤치마크를 시도했으나 Python의 NumPy 미설치 UserWarning을 PowerShell이
+종료 오류로 처리했다. measurements.json은 반환되지 않았다. 이를 위해 성공한
+EFI를 재실행하거나 재무장하지 않는다. 새 run-christian-post-unlock.ps1은 기존
+성공 로그와 정확한 벤치마크 소스를 검증한 뒤 이미 완료된 원본 측정이 있으면
+재사용하고, 없으면 동일한 벤치마크를 파일 stdout/stderr 리디렉션으로 1회 실행한다.
+기존 환경만 사용하며 설치, USB/EFI 변경, 재부팅은 없다. 별도 원자적 spent 마커로
+반복을 거부하며 실행 중인 벤치마크가 있으면 중단한다. 종료 코드 오류도 부분
+증거 ZIP을 생성한다. 기록된 반올림 기준치와 비율을 제공하지만 인과관계 또는
+영구 효과를 단정하지 않는다.
+
+Windows PowerShell 5.1 CPU 스텁에서 경고+exit0, exit2+부분 ZIP, 기존 측정 재사용,
+두 번째 실행 거부를 검증했다. CUDA는 실행하지 않았다. 다음 작업은 재부팅 없이
+Windows 성능을 확인하는 것이며 추가 펌웨어 쓰기를 요청하지 않는다.
