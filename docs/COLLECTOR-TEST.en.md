@@ -32,3 +32,14 @@ suffixes; review the files before posting.
 If the result is `PARTIAL` or `FAILED`, send `result.json` and `inventory.json`
 if present. If no folder was created, paste only the short error message after
 removing personal paths. Stop there; no rerun or setting change is needed.
+
+## Contributor confirmation
+
+On 2026-11-01, [the #27 B550M / MSI 1462:5136 reporter](https://github.com/windows-GPU-UNLOCK/Windows-GPU-UNLOCK/issues/27#issuecomment-6558655010)
+reported `PASS` without a Unicode error on French-locale Windows 11 Enterprise
+build 26100, as a normal user without reboot or settings changes. Reviewed
+attachments match collector SHA-256
+`1c25e3195222a586108ce8f2b60fa42750f56e927a6c3f4c58839eb8df212a2e`,
+both process exits zero, complete inventory and `can_unlock: false`.
+This confirms that contributor's reported collector run only; other environments
+and GPU unlock remain separate validation.
