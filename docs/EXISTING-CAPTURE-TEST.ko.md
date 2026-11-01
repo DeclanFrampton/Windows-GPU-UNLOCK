@@ -20,6 +20,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\test-existing-captur
 `write_eligible: false`, `hardware_tested: false`로 유지됩니다.
 기록된 거부 사유만 설명하며 나머지 로그를 검증하거나 프로필 사용을 허가하지
 않습니다. 다른 오류나 상충하는 표식에는 여전히 `invalid_graph`가 표시될 수 있습니다.
+#170처럼 허용 범위 거부와 GOP 정보 누락 표식 두 개 및 불완전/실패 종료 표식이
+정확히 기록된 경우 `multiple_capture_failures`가 예상됩니다. 두 원인을 입증하는 결과는 아닙니다.
 
 새 `문서\GPU-Unlock-Capture-Check-...` 폴더의 **report.json, result.json**을
 검토한 뒤 첨부하세요. 드라이버/PROM 원본이나 전체 시스템 보고서는 올리지 마세요.

@@ -20,6 +20,9 @@ For the exact refusal markers reported in these issues, expect
 `invalid_data`, with `write_eligible: false` and `hardware_tested: false`.
 This explains a recorded refusal; it does not validate the rest of the log or
 approve a profile. Other or conflicting failures may still show `invalid_graph`.
+For #170's combined envelope refusal and unavailable GOP information, expect
+`multiple_capture_failures` if the log contains exactly those two failure markers
+and the incomplete/failed footer. This does not establish either root cause.
 
 Review and attach **report.json and result.json** from the new
 `Documents\GPU-Unlock-Capture-Check-...` folder. Do not upload raw driver/PROM

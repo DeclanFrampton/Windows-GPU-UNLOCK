@@ -122,6 +122,16 @@ class CompatibilityTests(unittest.TestCase):
                 (self.folder / f'DIAG{index:02d}.TXT').write_text(base + extra, encoding='ascii')
             self.assert_reason('invalid_data', 'invalid_graph')
 
+    def test_gop_failure_is_not_hidden_by_envelope_refusal(self):
+        text = ('incomplete reason=probe-unreviewed-envelope status=0x8000000000000003\n'
+                'incomplete reason=gop-info status=0x8000000000000006\n'
+                'capture-complete=0\ndiagnostic-result status=0x8000000000000006\n')
+        for index in range(2):
+            (self.folder / f'DIAG{index:02d}.TXT').write_text(text, encoding='ascii')
+        with patch.object(checker.mp, 'analyze', side_effect=AssertionError('no profile analysis')):
+            self.assert_reason('invalid_data', 'multiple_capture_failures')
+        self.assertNotIn('probe_envelope_refused', [x['code'] for x in self.result()['checks']])
+
     def test_secondary_display_path_must_agree_across_cold_boots(self):
         for no_edid in (False, True):
             with self.subTest(no_edid=no_edid):
