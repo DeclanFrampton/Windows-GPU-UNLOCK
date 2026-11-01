@@ -1,5 +1,9 @@
 # Christian MSI text-console Stop emulation
 
+## Extended synthetic-state test — 2026-11-01
+
+Christian confirmed no GPU/BIOS changes. The emulator now runs ten cases across the two saved captures. A supplied wrong child returns EFI_INVALID_PARAMETER. A matching child with an explicitly empty synthetic controller list and nonempty sibling state returns EFI_UNSUPPORTED and clears the emulated byte at RVA 0x60f9. The test originally checked 0x61f9; RIP-relative address calculation corrected that test offset before commit. These globals are constructed test inputs, not reconstructed live state. No callback/FreePool path is exercised or qualified by this result. The valid one-child/controller-present release remains unqualified; there is no new live EFI instruction for Christian.
+
 [한국어](CHRISTIAN-STOP.ko.md)
 
 The returned screenshot confirms the exact-driver pin test passed on both saved captures, with six negative pin cases per capture. This is not hardware release evidence.
