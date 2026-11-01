@@ -349,3 +349,23 @@ while the MSI-specific transaction adapter remains unfinished; the EVGA adapter
 cannot be reused unchanged because its subsystem, BAR base and PROM differ.
 
 Local validation passed both an existing verified payload directory and a fresh upstream clone/download/extraction/generation run using Python 3.14. A deliberately corrupted descriptor was refused. Report ZIP inspection confirmed one JSON file with five asset records and no firmware. This validates Windows preparation only, not firmware behavior or MSI unlock.
+
+## Python preparation compatibility correction
+
+Christian reported the deliberate Python 3.14 refusal and correctly stopped
+before installing anything. The preparation launcher now accepts Python 3.12+
+and uses a private virtual environment for 3.12/3.13 only when generating new
+payloads. It installs zstandard 0.25.0 with exact official PyPI Windows x64 wheel
+SHA256 pins and no dependencies; global Python packages, PATH and registry are
+not changed. Existing payload verification needs no decompressor installation.
+Python 3.14 retains native zstd decoding. The shared generator keeps pinned
+upstream parsing and final payload identity checks; only decompression differs.
+No USB/GPU/EFI/reboot action is introduced. If preparation fails, keep its files
+and report the error instead of changing Python installations speculatively.
+
+Official wheel metadata: https://pypi.org/pypi/zstandard/0.25.0/json
+Windows cp312 SHA256 ffef5a74088f1e09947aecf91011136665152e0b4b359c42be3373897fb39b01;
+cp313 SHA256 1f830a0dac88719af0ae43b8b2d6aef487d437036468ef3c2ea59c51f9d55fd5.
+Compiled-code behavior and live unlock remain outside this preparation step.
+
+Validation: Python 3.13.15 passed complete fresh preparation through the actual launcher: pinned source download, private environment creation, hash-checked wheel installation, upstream clone/download/extraction and all five final payload hashes, then report ZIP generation. Direct fallback generation also passed. Python compile and PowerShell parse passed. The two wheel hashes were checked against official PyPI metadata. Python 3.12 compatibility is implemented but not executed in this check; prior native 3.14 validation remains separate.

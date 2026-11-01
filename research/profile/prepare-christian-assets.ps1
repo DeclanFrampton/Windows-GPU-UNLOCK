@@ -1,22 +1,33 @@
 # Prepare payload files on Windows only. No GPU access, USB staging or reboot.
 param([string]$Root='C:\GPU-Unlock',[string]$Assets)
 $ErrorActionPreference='Stop'
-$revision='ffb6b93145267ef9b5ef5516d398d7a2e8660eb1'
+$revision='4e7cef178a52465cfd0a20396839bf6203f096f7'
 if(!$Assets){$Assets=Join-Path $Root 'Assets/ga102'}
 $python=Get-Command python -ErrorAction Stop
-$version=& $python.Source -c 'import sys; print(sys.version_info >= (3,14))'
-if($LASTEXITCODE -ne 0 -or $version -ne 'True'){throw 'Python 3.14+ required. Send this error; install nothing yet.'}
+$version=& $python.Source -c 'import sys; print(sys.version_info.major*100+sys.version_info.minor)'
+if($LASTEXITCODE -ne 0 -or [int]$version -lt 312){throw 'Python 3.12+ required. Send this error; install nothing yet.'}
 $work=Join-Path $Root ('Builds/assets-'+[guid]::NewGuid().ToString('N'))
 [void][IO.Directory]::CreateDirectory($work)
 Invoke-WebRequest -UseBasicParsing ('https://github.com/DeclanFrampton/Windows-GPU-UNLOCK/archive/'+$revision+'.zip') -OutFile (Join-Path $work 'source.zip')
 Expand-Archive -LiteralPath (Join-Path $work 'source.zip') -DestinationPath $work
 $repo=Join-Path $work ('Windows-GPU-UNLOCK-'+$revision)
 $generator=Join-Path $repo 'research/profile/prepare-evga3090-assets.py'
+$runner=$python.Source
+if([int]$version -lt 314 -and !(Test-Path -LiteralPath $Assets)){
+ $environment=Join-Path $work 'python-env'
+ & $python.Source -m venv $environment
+ if($LASTEXITCODE -ne 0){throw 'Private Python environment could not be created. Send the error.'}
+ $runner=Join-Path $environment 'Scripts/python.exe'
+ $requirements=Join-Path $work 'requirements.txt'
+ 'zstandard==0.25.0 --hash=sha256:ffef5a74088f1e09947aecf91011136665152e0b4b359c42be3373897fb39b01 --hash=sha256:1f830a0dac88719af0ae43b8b2d6aef487d437036468ef3c2ea59c51f9d55fd5' | Set-Content -LiteralPath $requirements -Encoding ascii
+ & $runner -m pip --isolated --disable-pip-version-check install --index-url https://pypi.org/simple --only-binary=:all: --no-deps --require-hashes -r $requirements
+ if($LASTEXITCODE -ne 0){throw 'Pinned decompressor installation failed. Send the error; no global packages were changed.'}
+}
 if(Test-Path -LiteralPath $Assets){
- & $python.Source -I $generator --verify-only --output $Assets
+ & $runner -I $generator --verify-only --output $Assets
 }else{
  if(!(Get-Command git -ErrorAction SilentlyContinue)){throw 'Git not found. Send this error.'}
- & $python.Source -I $generator --source (Join-Path $work 'payload-source') --output $Assets
+ & $runner -I $generator --source (Join-Path $work 'payload-source') --output $Assets
 }
 if($LASTEXITCODE -ne 0){throw 'Payload preparation/verification failed. Preserve files and send this error; do not boot USB.'}
 $specs=Get-Content -LiteralPath (Join-Path $repo 'internal-boot/unlock/assets.json') -Raw | ConvertFrom-Json
