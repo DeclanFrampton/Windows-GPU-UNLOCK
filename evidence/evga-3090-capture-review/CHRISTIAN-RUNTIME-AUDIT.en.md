@@ -155,3 +155,35 @@ Windows failure are possible. No reset, PCI writes, graphics/NVIDIA Stop, unlock
 or automatic restoration is added. Hold on any failed check; after two minutes
 without Windows, power off, remove USB and use normal Windows Boot Manager.
 Do not retry. Collect returns christian-virtual-text-result ZIP under Results.
+
+## DIAG06 renderer success and graphics membership test
+DIAG06 records successful repeated output membership removal and virtual-renderer
+Stop, closed GOP ownership and unlisted text/private interfaces. Diagnostic result
+is success. This is two live console-consumer removal stages, not GPU unlock.
+
+The next MsiGraphicsTest repeats those stages and calls the exact pinned graphics
+Stop once with the physical controller and virtual GOP child. Fresh code plus
+allocated-RAM guards require one controller, null forward/back links, exact tail,
+child equality, and payload equality with the physical GOP interface. Cached mode
+nodes are limited to 64 and checked for consistent forward/back links and tail.
+The plan and physical GOP BY_DRIVER/BY_CHILD ownership are checked again after
+text removal. Stop's last-controller path frees modes and attempts a framebuffer
+copy through the existing firmware GOP Blt method. This is new firmware execution;
+the copy and real side effects are unproven. No direct GPU register transaction,
+PCI writes, NVIDIA/parent Stop, ResetSystem or unlock code is added.
+
+Nineteen compiled graphics-plan cases and seven exact-driver synthetic cases
+passed isolated CPU emulation. The real driver code, including its snapshot
+helper, ran only against mocked services/Blt. It can return success after ignored
+allocation, close, free and Blt errors. The EFI separately requires empty
+controller count/head/tail, removed GOP ownership and an allocated snapshot
+buffer; buffer presence is NOT proof the copy succeeded. Failed checks hold.
+EFI compile/PE plus full fixed-source download/build and simulated USB backup,
+readback, collection and refusal checks passed. No live graphics result yet.
+
+run-christian-graphics.ps1 -Drive G -AcceptRisk uses a new consumed arm file,
+MSI-GRAPHICS.ARMED. It may change/freeze display, lose input, hang or prevent
+Windows boot; recovery is unproven and no automatic restoration exists. Boot
+once attended; after two minutes without Windows, power off, remove USB and
+select normal Windows Boot Manager. Do not retry. Collect packages
+christian-graphics-result under C:\GPU-Unlock\Results.

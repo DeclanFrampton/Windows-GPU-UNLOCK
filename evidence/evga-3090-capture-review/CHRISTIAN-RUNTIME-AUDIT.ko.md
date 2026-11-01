@@ -150,3 +150,34 @@ run-christian-virtual-text.ps1 -Drive G -AcceptRisk는 빌드/복사하고 실�
 추가되지 않습니다. 검사 실패 시 정지합니다. 2분 뒤 Windows가 없으면 전원을
 끄고 USB를 제거한 뒤 정상 Windows Boot Manager로 부팅합니다. 재시도하지
 않습니다. Collect는 Results의 christian-virtual-text-result ZIP을 만듭니다.
+
+## DIAG06 렌더러 성공과 그래픽 멤버십 테스트
+DIAG06의 출력 멤버십 제거 반복, 가상 렌더러 Stop, GOP 소유권 해제 및
+텍스트/전용 인터페이스 제거가 성공했습니다. 진단 결과도 성공입니다.
+실제 콘솔 소비자 제거 두 단계의 증거이며 GPU 잠금 해제는 아닙니다.
+
+다음 MsiGraphicsTest는 두 단계를 반복하고 고정된 그래픽 Stop을 실제
+컨트롤러와 가상 GOP 자식으로 한 번 호출합니다. 정확한 코드와 할당된 RAM
+검사는 단일 컨트롤러, 양쪽 링크 null, 정확한 tail, 자식 일치 및 실제 GOP
+인터페이스와 노드 payload 일치를 요구합니다. 캐시 모드 목록은 최대 64개이며
+양쪽 링크와 tail을 확인합니다. 텍스트 제거 후 계획과 실제 GOP의
+BY_DRIVER/BY_CHILD 소유권을 다시 검사합니다. 마지막 컨트롤러 제거 경로는
+모드 목록을 해제하고 기존 펌웨어 GOP Blt로 프레임버퍼 복사를 시도합니다.
+새 펌웨어 실행이며 실제 복사와 부작용은 검증되지 않았습니다. 직접 GPU
+레지스터 트랜잭션, PCI 쓰기, NVIDIA/부모 Stop, ResetSystem 또는 잠금 해제
+코드는 추가되지 않습니다.
+
+컴파일한 그래픽 계획 검사 19개와 정확한 드라이버 합성 검사 7개를 격리 CPU
+에뮬레이션으로 통과했습니다. 실제 코드의 스냅샷 도우미도 모의 서비스/Blt로만
+실행했습니다. 드라이버는 할당/닫기/메모리 반환/Blt 오류 후에도 성공을 반환할
+수 있습니다. EFI는 별도로 빈 컨트롤러 count/head/tail, GOP 소유권 해제 및
+스냅샷 버퍼 할당을 요구합니다. 버퍼 존재는 복사 성공의 증거가 아닙니다.
+검사 실패 시 정지합니다. EFI 컴파일/PE, 고정 소스 다운로드/빌드 및 모의
+USB 백업/해시 확인/수집/거부 검사가 통과했습니다. 실제 그래픽 결과는 아직 없습니다.
+
+run-christian-graphics.ps1 -Drive G -AcceptRisk는 소비되는 새 arm 파일
+MSI-GRAPHICS.ARMED를 사용합니다. 화면 변경/정지, 입력 상실, 멈춤 또는
+Windows 실패가 가능하고 복구는 검증되지 않았으며 자동 복원은 없습니다.
+직접 지켜보며 한 번만 부팅합니다. 2분 뒤 Windows가 없으면 전원을 끄고 USB를
+제거한 뒤 정상 Windows Boot Manager로 부팅합니다. 재시도하지 않습니다.
+Collect는 C:\GPU-Unlock\Results의 christian-graphics-result ZIP을 만듭니다.
