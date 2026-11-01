@@ -1,6 +1,7 @@
-# One attended graph test for issue 33. No automatic boot, format or retry.
+# Exact-machine attended graph tests. No automatic boot, format or retry.
 [CmdletBinding()]
 param([ValidatePattern('^[D-Zd-z]$')][string]$Drive, [switch]$Collect,
+      [ValidateSet('issue33','issue109')][string]$Machine='issue33',
       [string]$Clang='clang', [string]$LldLink='lld-link', [string]$Python='python')
 $ErrorActionPreference='Stop'
 function Get-GraphHash([string]$Path) {
@@ -8,15 +9,21 @@ function Get-GraphHash([string]$Path) {
  try {([BitConverter]::ToString($h.ComputeHash($f))).Replace('-','').ToLowerInvariant()}
  finally {$f.Dispose();$h.Dispose()}
 }
-function Assert-X99GraphMachine($Board,$Bios,$Cpu,$Video) {
- if(@($Board).Count -ne 1 -or $Board.Product.Trim() -cne 'X99-PRO/USB 3.1' -or
-    $Board.Manufacturer -notmatch '^ASUSTeK' -or @($Bios).Count -ne 1 -or
-    $Bios.SMBIOSBIOSVersion.Trim() -cne '4101' -or @($Cpu).Count -ne 1 -or
-    $Cpu.Name -notmatch '\bi7-5820K\b' -or @($Video).Count -ne 1 -or
-    $Video.PNPDeviceID -notmatch '^PCI\\VEN_10DE&DEV_2204&SUBSYS_87AF1043(?:&|\\|$)') {
-  throw 'This test is only for issue 33: X99-PRO/USB 3.1 BIOS 4101, i7-5820K, sole ASUS 2204/1043:87af GPU. Stop and report the mismatch.'
+function Assert-GraphMachine([string]$Id,$Board,$Bios,$Cpu,$Video) {
+ $pins=@{
+  issue33=@{Board='X99-PRO/USB 3.1';Maker='^ASUSTeK';Bios='4101';Cpu='\bi7-5820K\b';Pci='2204';Subsys='87AF1043'}
+  issue109=@{Board='B560M DS3H V2';Maker='^Gigabyte';Bios='F7 RB';Cpu='\bi5-11400F\b';Pci='2487';Subsys='40721458'}
+ }
+ if(!$pins.ContainsKey($Id)){throw 'Unknown graph test machine.'};$p=$pins[$Id]
+ $identity='^PCI\\VEN_10DE&DEV_'+$p.Pci+'&SUBSYS_'+$p.Subsys+'(?:&|\\|$)'
+ if(@($Board).Count -ne 1 -or $Board.Product.Trim() -cne $p.Board -or
+    $Board.Manufacturer -notmatch $p.Maker -or @($Bios).Count -ne 1 -or
+    $Bios.SMBIOSBIOSVersion.Trim() -cne $p.Bios -or @($Cpu).Count -ne 1 -or
+    $Cpu.Name -notmatch $p.Cpu -or @($Video).Count -ne 1 -or $Video.PNPDeviceID -notmatch $identity) {
+  throw "Machine does not match $Id's exact board/BIOS/CPU/single-GPU pins. Stop and report the mismatch."
  }
 }
+function Assert-X99GraphMachine($Board,$Bios,$Cpu,$Video){Assert-GraphMachine 'issue33' $Board $Bios $Cpu $Video}
 function Assert-GraphUsb($Partition,$Disk,$Volume,[switch]$CollectOnly) {
  if(@($Partition).Count -ne 1 -or @($Disk).Count -ne 1 -or @($Volume).Count -ne 1 -or
     $Disk.BusType -ne 'USB' -or $Volume.FileSystem -ne 'FAT32' -or
@@ -24,7 +31,7 @@ function Assert-GraphUsb($Partition,$Disk,$Volume,[switch]$CollectOnly) {
     $Disk.IsOffline -or !$Disk.UniqueId -or
     (!$CollectOnly -and ($Disk.IsReadOnly -or $Volume.SizeRemaining -lt 16MB))) {throw 'Preparation needs a writable FAT32 USB data stick with at least 16 MB free; collection only reads it. No formatting is performed.'}
 }
-function Copy-GraphBoot([string]$Root,[string]$Image,[string]$ExpectedHash) {
+function Copy-GraphBoot([string]$Root,[string]$Image,[string]$ExpectedHash,[string]$MachineId='issue33') {
  if((Get-GraphHash $Image) -cne $ExpectedHash){throw 'Built EFI hash mismatch.'}
  $capture=Join-Path $Root 'RTX3090-UNLOCK'
  if((Test-Path -LiteralPath $capture) -and @(Get-ChildItem -LiteralPath $capture -Force).Count){throw 'Capture folder is not empty. Preserve it; do not mix or repeat tests.'}
@@ -43,7 +50,7 @@ function Copy-GraphBoot([string]$Root,[string]$Image,[string]$ExpectedHash) {
  if($oldHash -and (Get-GraphHash $boot) -cne $oldHash){throw 'Existing USB boot file changed; stop.'}
  Move-Item -LiteralPath $temp -Destination $boot -Force
  if((Get-GraphHash $boot) -cne $ExpectedHash){throw 'Final USB readback failed. Do not boot.'}
- [ordered]@{Mode='issue33-graph-only';EfiSha256=$ExpectedHash;PreviousBootSha256=$oldHash}
+ [ordered]@{Mode='machine-graph-only';Machine=$MachineId;EfiSha256=$ExpectedHash;PreviousBootSha256=$oldHash}
 }
 # Dot sourcing exposes only the pure validation/staging functions to host tests.
 if($MyInvocation.InvocationName -eq '.'){return}
@@ -58,14 +65,14 @@ $usb=$Drive.ToUpperInvariant()+':\'
 if($Collect){
  $documents=[Environment]::GetFolderPath('MyDocuments')
  if(!$documents){throw 'Documents folder is unavailable.'}
- $output=Join-Path $documents ('GPU-Unlock-X99-Graph-'+[guid]::NewGuid().ToString('N').Substring(0,8))
+ $output=Join-Path $documents ('GPU-Unlock-Graph-'+[guid]::NewGuid().ToString('N').Substring(0,8))
  New-Item -ItemType Directory -Path $output | Out-Null
  & $Python -I (Join-Path $PSScriptRoot 'summarize-graph.py') (Join-Path $usb 'RTX3090-UNLOCK') (Join-Path $output 'graph-summary.json')
  if($LASTEXITCODE -ne 0){throw 'Collection summary failed. Keep the USB unchanged and report the short error.'}
  Write-Host ('Return graph-summary.json from '+$output+' and say whether Windows started directly or needed manual recovery.')
  exit 0
 }
-Assert-X99GraphMachine (Get-CimInstance Win32_BaseBoard) (Get-CimInstance Win32_BIOS) (Get-CimInstance Win32_Processor) @(Get-CimInstance Win32_VideoController)
+Assert-GraphMachine $Machine (Get-CimInstance Win32_BaseBoard) (Get-CimInstance Win32_BIOS) (Get-CimInstance Win32_Processor) @(Get-CimInstance Win32_VideoController)
 try {$secure=Confirm-SecureBootUEFI} catch {throw 'Secure Boot state could not be verified. Stop and report; do not change settings.'}
 if($secure -ne $false){throw 'Secure Boot must already be off for this unsigned test. Do not change it for this script.'}
 $windows=@(Get-Partition | Where-Object {$_.IsSystem -and $_.Guid})
@@ -86,7 +93,7 @@ $freshDisk=Get-Disk -Number $fresh.DiskNumber
 Assert-GraphUsb $fresh $freshDisk (Get-Volume -DriveLetter $Drive)
 if($fresh.DiskNumber -ne $part.DiskNumber -or $fresh.Offset -ne $part.Offset -or $fresh.Size -ne $part.Size -or
    $freshDisk.UniqueId -cne $disk.UniqueId){throw 'USB partition changed; do not stage.'}
-$receipt=Copy-GraphBoot $usb (Join-Path $built 'GRAPH-ONLY.EFI') $manifest.EfiSha256
+$receipt=Copy-GraphBoot $usb (Join-Path $built 'GRAPH-ONLY.EFI') $manifest.EfiSha256 $Machine
 $receipt | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $usb 'RTX3090-UNLOCK/graph-stage.json') -Encoding utf8
 Write-Host 'READY: fully shut down, then manually select this USB once from the firmware boot menu. No keys are required in the test.'
 Write-Host 'If Windows has not started after two minutes, power off, remove the USB and use normal Windows Boot Manager. Do not repeat this run.'

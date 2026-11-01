@@ -54,7 +54,7 @@ def main():
         with path.open('rb') as stream:
             data = stream.read(8 * 1024 * 1024 + 1)
         reports.append({'capture': path.name, **summarize(data)})
-    output.write_text(json.dumps({'test': 'issue33-graph-only', 'hardware_verified': False,
+    output.write_text(json.dumps({'test': 'graph-only-v1', 'hardware_verified': False,
                                  'write_eligible': False, 'captures': reports}, indent=2), encoding='utf-8')
 
 

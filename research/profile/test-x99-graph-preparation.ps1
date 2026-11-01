@@ -8,6 +8,12 @@ $video=[pscustomobject]@{PNPDeviceID='PCI\VEN_10DE&DEV_2204&SUBSYS_87AF1043&REV_
 Assert-X99GraphMachine $board $bios $cpu $video
 $bios.SMBIOSBIOSVersion='other';Reject {Assert-X99GraphMachine $board $bios $cpu $video};$bios.SMBIOSBIOSVersion='4101'
 Reject {Assert-X99GraphMachine $board $bios $cpu @($video,$video)}
+$gigabyte=[pscustomobject]@{Manufacturer='Gigabyte Technology Co., Ltd.';Product='B560M DS3H V2'}
+$b560bios=[pscustomobject]@{SMBIOSBIOSVersion='F7 RB'};$i5=[pscustomobject]@{Name='Intel Core i5-11400F'}
+$ga104=[pscustomobject]@{PNPDeviceID='PCI\VEN_10DE&DEV_2487&SUBSYS_40721458&REV_A1\PRIVATE'}
+Assert-GraphMachine 'issue109' $gigabyte $b560bios $i5 $ga104
+Reject {Assert-GraphMachine 'issue33' $gigabyte $b560bios $i5 $ga104}
+Reject {Assert-GraphMachine 'issue109' $gigabyte $b560bios $i5 $video}
 $part=[pscustomobject]@{IsBoot=$false;IsSystem=$false}
 $disk=[pscustomobject]@{BusType='USB';UniqueId='mock-usb';IsBoot=$false;IsSystem=$false;IsReadOnly=$false;IsOffline=$false}
 $volume=[pscustomobject]@{FileSystem='FAT32';SizeRemaining=64MB}
