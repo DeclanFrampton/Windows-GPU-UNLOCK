@@ -594,3 +594,22 @@ complete-christian-evidence.ps1은 기존 파일의 알려진 해시를 읽고 �
 재부팅, 설치는 없다. 실제 반환 파일 및 의도적 불일치 입력을 이용한 Windows
 PowerShell5.1 검증을 통과했으며 오류 시에도 부분 ZIP을 생성한다. 최종 보고와
 관리자/재사용 패키지 검토는 남아 있다. 이 공백을 위해 EFI를 다시 실행할 필요는 없다.
+
+## 2026-11-01 최종 부팅 연속성 확인 및 정상 재시작 비교
+
+최종 증거 ZIP 메시지1566597898110636172는 reviewed_files_match=true,
+automatic_windows_return=yes, rebooted_since_unlock=no, same_boot_contributor_confirmed=true,
+error=null을 보고한다. Windows 부팅 UTC는 2026-11-01T23:26:59.5000000Z이다.
+측정 처리량의 자동 복귀/동일 부팅 사용자 보고 공백을 해소했다. 프로필 메타데이터는
+정확한 참석 USB 성공을 기록하지만 재사용 재무장, 공유 ESP, 영구/무인 동작 및
+일반 호환성은 계속 미검증이다.
+
+Christian은 정상 재시작 가능 여부를 물었다. 기존 증거는 보존되었으므로 USB를
+제거한 정상 Windows 재시작이 적절하다. EFI 재실행/재무장을 요청하지 않는다.
+재시작 후 성능 유지 여부는 알 수 없다. 기존 Windows 벤치마크에 -AfterRestart를
+추가하여 기록된 부팅보다 이후인지 확인하고 별도 spent 마커/출력 이름을 사용하며
+이전 측정을 재사용하지 않고 새로 측정한다. 재부팅/설치/펌웨어 또는 USB 쓰기는
+없다. 동일한 부하 위험이 적용되며 오류/멈춤 후 추가 시도는 중단한다. Windows
+PowerShell5.1 CPU 스텁에서 경고/exit0, exit2/부분 ZIP, 이전 측정 비재사용,
+반복 거부 및 동일 부팅 거부를 확인했다. 정상 재시작 비교는 완전 전원 차단 후
+지속성 증거가 아니다.

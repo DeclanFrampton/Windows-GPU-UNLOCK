@@ -642,3 +642,23 @@ no GPU workload, firmware/USB write, reboot or installation. Windows PowerShell5
 checks passed against the actual returned files and a deliberately mismatched
 fixture (partial ZIP with error). Final report and maintainer/reusable-package
 review remain outstanding; no additional EFI run is needed to answer these gaps.
+
+## 2026-11-01 final continuity confirmed; normal-restart comparison offered
+
+Final evidence ZIP message1566597898110636172 reports reviewed_files_match=true,
+automatic_windows_return=yes, rebooted_since_unlock=no, same_boot_contributor_confirmed=true
+and error=null. Windows boot UTC was 2026-11-01T23:26:59.5000000Z. This closes the
+contributor-reported automatic-return/same-boot gap for the measured throughput.
+Profile metadata now records the exact attended USB success, while reusable rearm,
+shared ESP, permanence, unattended operation and general compatibility stay unqualified.
+
+Christian asked whether he could restart normally. The existing evidence is saved;
+normal Windows restart with the USB removed is appropriate. No EFI rerun/rearm is
+requested. Whether the performance survives a Windows restart is unknown. Added
+-AfterRestart to the existing Windows benchmark script: require boot time later
+than the recorded boot, use a distinct spent marker/output prefix and always make
+a fresh measurement (never reuse pre-restart measurements). It does not reboot,
+install or write firmware/USB. Same benchmark load risks apply; a hang/error stops
+further attempts. Windows PowerShell5.1 CPU fixtures passed stderr warning/exit0,
+exit2/partial ZIP, no stale-measurement reuse, repeat refusal and same-boot refusal.
+The optional normal-restart comparison is not proof of cold-power persistence.
