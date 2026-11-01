@@ -24,6 +24,7 @@ function Read-BcdApplicationPath {
  if($element.ReturnValue -isnot [bool] -or !$element.ReturnValue){return @{Success=$false}}
  return @{Success=$true;Path=$element.Element.String}
 }
+if($MyInvocation.InvocationName -eq '.'){return}
 if($SelfTest){
  $r=Get-BcdPathObservation { @{Success=$true;Path='\EFI\Microsoft\Boot\bootmgfw.efi'} }
  if($r.ApplicationPathState -cne 'standard-windows-uefi' -or $r.BootRecoveryVerified){throw 'Standard path classification failed.'}
