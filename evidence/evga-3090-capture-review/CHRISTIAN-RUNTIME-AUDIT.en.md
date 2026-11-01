@@ -680,3 +680,20 @@ rearm/unattended execution. See docs/MSI-INSTALLER.en.md for durable per-attempt
 receipts, failure latches, restoration ownership and review gates still required.
 The preparation-only Windows handoff builds/checks this package locally without
 GPU workload, USB/ESP writes, NVIDIA asset copying, arm creation or reboot.
+
+## 2026-11-01 preparation returned existing-state refusal
+
+Christian returned christian-profile-preparation-8801f0964fd74f76b211c35ed1712dcf.zip
+(message1566600627763552417). The report has prepared=false and 'State already
+exists; preserve it, do not overwrite or retry'. It proves the refusal occurred,
+not whether that existing state is complete. No GPU/USB/firmware action occurred.
+Do not infer a failed package build or delete the state from that message.
+
+Added report-christian-preparation.ps1 to inspect the fixed existing local state:
+verify installation policy, package-manifest binding, every file size/hash and
+profile/build identity, then return the existing plan/manifests (no EFI binary).
+It never rebuilds, overwrites, arms or upgrades that state. Partial/mismatched
+state still produces a report ZIP; no repair or rearm is attempted. Windows
+PowerShell5.1 checks passed for complete state from the real archive-built local
+package and an altered-file fixture. Actual contributor state verification is
+pending. The newer host attempt plan is not silently added to the older state.
