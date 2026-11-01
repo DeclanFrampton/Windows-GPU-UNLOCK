@@ -105,7 +105,7 @@ with its actual controller and system-console child. It does not call other
 text bindings, graphics/NVIDIA Stop, parent Stop, PCI writes or unlock.
 
 Four exact-code emulations with synthetic controller state exercised real unlink
-and the mode helper's HandleProtocol refusal branch. CloseProtocol/OpenProtocol
+and the mode helper's HandleProtocol refusal branch. CloseProtocol/UninstallMultipleProtocolInterfaces
 errors can be ignored by this driver's Stop return, so success alone is insufficient.
 These emulations do not qualify all mode rebuilding or live firmware callbacks.
 Compiled membership guards passed 15 synthetic cases. The full EFI passed PE
@@ -125,3 +125,33 @@ run-christian-one-child.ps1 -Drive G -AcceptRisk builds and stages; -Mode Collec
 packages christian-one-child-result under C:\GPU-Unlock\Results. Run attended
 once. If Windows is absent after two minutes, power off, remove USB and choose
 normal Windows Boot Manager. Do not repeat. No live one-child result yet.
+
+## DIAG05 successful membership removal and virtual renderer test
+DIAG05 records consumed arm, exact code guards, correct membership, successful
+one-child return, empty list, closed text ownership and diagnostic success.
+This establishes one live output-membership removal, not NVIDIA/GPU release.
+Correction: boot-service offset 0x150 is UninstallMultipleProtocolInterfaces,
+not OpenProtocol. Prior emulation notes naming that service were corrected.
+The ignored-error finding remains valid for CloseProtocol and uninstall calls.
+
+The next test repeats that proven removal, then calls the sole virtual GOP text
+renderer Stop with zero children. Its exact MSI IMG16 executable section is
+RVA0x2a0, 7232 bytes, SHA256
+654ca7fec19bf03dabe804d0d81d47dc810788be59dea03d8c24c727281494ac;
+Stop RVA0xa08, version16, image size0x39a0. Five isolated emulated service cases
+passed: success, refused open, refused uninstall, ignored close failure and
+ignored pool-free failure. This is not proof of actual protocol callbacks.
+Fresh code uniqueness and exact GOP owner checks precede mutation. Afterwards
+GOP ownership must be gone, text-output/private interfaces must be unlisted and
+GOP must remain listed once. UGA and graphics/NVIDIA release are not qualified.
+The list guard now also requires a null previous link; 16 compiled guard cases
+passed. EFI compile/PE and complete fixed-source download/build plus simulated
+USB backup/readback/collection/refusal tests passed. No live renderer test yet.
+
+run-christian-virtual-text.ps1 -Drive G -AcceptRisk builds/stages and creates
+MSI-VIRTUAL-TEXT.ARMED, consumed before the sequence. It adds removal of text
+interfaces and freeing renderer buffers. Display/input loss, firmware hang and
+Windows failure are possible. No reset, PCI writes, graphics/NVIDIA Stop, unlock
+or automatic restoration is added. Hold on any failed check; after two minutes
+without Windows, power off, remove USB and use normal Windows Boot Manager.
+Do not retry. Collect returns christian-virtual-text-result ZIP under Results.

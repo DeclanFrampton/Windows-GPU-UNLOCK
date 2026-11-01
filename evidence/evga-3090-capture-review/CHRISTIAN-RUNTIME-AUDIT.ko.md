@@ -122,3 +122,31 @@ PE 검사와 다운로드/빌드, 모의 USB 복사/백업/수집/거부 검사�
 christian-one-child-result ZIP을 만듭니다. 직접 지켜보며 한 번만 실행합니다.
 2분 뒤 Windows가 없으면 전원을 끄고 USB를 제거한 뒤 정상 Windows Boot Manager로
 부팅합니다. 반복하지 않습니다. 실제 자식 1개 제거 결과는 아직 없습니다.
+
+## DIAG05 멤버십 제거 성공과 가상 렌더러 테스트
+DIAG05의 arm 소비, 코드 가드, 멤버십, 자식 1개 반환, 빈 목록, 텍스트 소유권
+해제 및 진단 결과가 모두 성공했습니다. 실제 출력 멤버십 하나가 제거된
+증거이며 NVIDIA/GPU 해제 증거는 아닙니다. 정정: 부팅 서비스 0x150은
+OpenProtocol이 아닌 UninstallMultipleProtocolInterfaces입니다. 이전 서비스
+이름을 바로잡았습니다. CloseProtocol 및 제거 오류를 무시할 수 있다는
+에뮬레이션 결과는 유지됩니다.
+
+다음 테스트는 검증된 제거를 반복하고 유일한 가상 GOP 텍스트 렌더러의
+Stop을 자식 0개로 호출합니다. 정확한 MSI IMG16 코드: RVA0x2a0, 7232바이트,
+SHA256 654ca7fec19bf03dabe804d0d81d47dc810788be59dea03d8c24c727281494ac,
+Stop RVA0xa08, 버전16, 이미지 크기0x39a0입니다. 격리 에뮬레이션의 성공,
+열기 실패, 제거 실패, 닫기 오류 무시, 메모리 반환 오류 무시 경로 5개를
+검증했습니다. 실제 프로토콜 콜백의 증거는 아닙니다. 변경 전 코드와 정확한
+GOP 소유자를 검사하고 이후 GOP 소유권, 텍스트/전용 인터페이스 제거 및 GOP
+한 개 유지를 확인합니다. UGA나 그래픽/NVIDIA 해제는 검증되지 않았습니다.
+목록의 이전 링크도 null이어야 하며 컴파일한 가드 검사 16개가 통과했습니다.
+EFI 컴파일/PE와 고정 소스 다운로드/빌드, 모의 USB 백업/복사/수집/거부 검사도
+통과했습니다. 실제 렌더러 제거 결과는 아직 없습니다.
+
+run-christian-virtual-text.ps1 -Drive G -AcceptRisk는 빌드/복사하고 실행 전
+소비되는 MSI-VIRTUAL-TEXT.ARMED를 만듭니다. 텍스트 인터페이스 제거와 렌더러
+버퍼 해제가 추가되므로 화면/입력 상실, 펌웨어 멈춤 또는 Windows 실패가
+가능합니다. 리셋, PCI 쓰기, 그래픽/NVIDIA Stop, 잠금 해제 또는 자동 복원은
+추가되지 않습니다. 검사 실패 시 정지합니다. 2분 뒤 Windows가 없으면 전원을
+끄고 USB를 제거한 뒤 정상 Windows Boot Manager로 부팅합니다. 재시도하지
+않습니다. Collect는 Results의 christian-virtual-text-result ZIP을 만듭니다.
