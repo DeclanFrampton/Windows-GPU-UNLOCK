@@ -2,8 +2,9 @@
 [CmdletBinding()]
 param([ValidatePattern('^[D-Zd-z]$')][string]$Drive, [switch]$Collect,
       [ValidatePattern('^[a-z][a-z0-9-]{0,63}$')][string]$Machine='issue33',
-      [string]$Clang='clang', [string]$LldLink='lld-link', [string]$Python='python')
+      [string]$Clang='clang', [string]$LldLink='lld-link', [string]$Python='python',[string]$OutputRoot)
 $ErrorActionPreference='Stop'
+. (Join-Path $PSScriptRoot 'collection-host.ps1')
 function Get-GraphHash([string]$Path) {
  $h=[Security.Cryptography.SHA256]::Create();$f=[IO.File]::OpenRead($Path)
  try {([BitConverter]::ToString($h.ComputeHash($f))).Replace('-','').ToLowerInvariant()}
@@ -110,6 +111,7 @@ function Copy-GraphBoot([string]$Root,[string]$Image,[string]$ExpectedHash,[stri
 }
 # Dot sourcing exposes only the pure validation/staging functions to host tests.
 if($MyInvocation.InvocationName -eq '.'){return}
+if($OutputRoot -and !$Collect){throw '-OutputRoot is collection-only.'}
 $repo=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 if(!$Drive){$Drive=Read-Host 'FAT32 USB drive letter (for example D)'}
 if($Drive -notmatch '^[D-Zd-z]$'){throw 'Enter one drive letter from D through Z.'}
@@ -119,11 +121,9 @@ $volume=Get-Volume -DriveLetter $Drive
 Assert-GraphUsb $part $disk $volume -CollectOnly:$Collect
 $usb=$Drive.ToUpperInvariant()+':\'
 if($Collect){
- $documents=[Environment]::GetFolderPath('MyDocuments')
- if(!$documents){throw 'Documents folder is unavailable.'}
- $output=Join-Path $documents ('GPU-Unlock-Graph-'+[guid]::NewGuid().ToString('N').Substring(0,8))
- New-Item -ItemType Directory -Path $output | Out-Null
- & $Python -I (Join-Path $PSScriptRoot 'summarize-graph.py') (Join-Path $usb 'RTX3090-UNLOCK') (Join-Path $output 'graph-summary.json')
+ $output=New-GuCollectionOutput $OutputRoot 'GPU-Unlock-Graph' $usb
+ $pythonApplication=Resolve-GuPythonApplication $Python
+ & $pythonApplication -I (Join-Path $PSScriptRoot 'summarize-graph.py') (Join-Path $usb 'RTX3090-UNLOCK') (Join-Path $output 'graph-summary.json')
  if($LASTEXITCODE -ne 0){throw 'Collection summary failed. Keep the USB unchanged and report the short error.'}
  Write-Host ('Return graph-summary.json from '+$output+' and say whether Windows started directly or needed manual recovery.')
  exit 0

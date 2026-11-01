@@ -2,7 +2,7 @@
 [CmdletBinding()]
 param([ValidatePattern('^[D-Zd-z]$')][string]$Drive, [switch]$Collect,
       [ValidateSet('issue33','issue109','issue31','issue180','issue19')][string]$Machine='issue33',
-      [string]$Clang='clang', [string]$LldLink='lld-link', [string]$Python='python')
+      [string]$Clang='clang', [string]$LldLink='lld-link', [string]$Python='python',[string]$OutputRoot)
 $ErrorActionPreference='Stop'
 # Compatibility entry point. Shared implementation and data live alongside it.
 if($MyInvocation.InvocationName -eq '.') {
