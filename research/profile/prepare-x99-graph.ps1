@@ -1,7 +1,7 @@
 # Exact-machine attended graph tests. No automatic boot, format or retry.
 [CmdletBinding()]
 param([ValidatePattern('^[D-Zd-z]$')][string]$Drive, [switch]$Collect,
-      [ValidateSet('issue33','issue109','issue31')][string]$Machine='issue33',
+      [ValidateSet('issue33','issue109','issue31','issue180')][string]$Machine='issue33',
       [string]$Clang='clang', [string]$LldLink='lld-link', [string]$Python='python')
 $ErrorActionPreference='Stop'
 function Get-GraphHash([string]$Path) {
@@ -14,6 +14,7 @@ function Assert-GraphMachine([string]$Id,$Board,$Bios,$Cpu,$Video) {
   issue33=@{Board='X99-PRO/USB 3.1';Maker='^ASUSTeK';Bios='4101';Cpu='\bi7-5820K\b';Pci='2204';Subsys='87AF1043'}
   issue109=@{Board='B560M DS3H V2';Maker='^Gigabyte';Bios='F7 RB';Cpu='\bi5-11400F\b';Pci='2487';Subsys='40721458'}
   issue31=@{Board='PRIME X570-PRO';Maker='^ASUSTeK';Bios='5013';Cpu='\b5950X\b';Pci='2204';Subsys='147D10DE'}
+  issue180=@{Board='B550 AORUS ELITE V2';Maker='^Gigabyte';Bios='F19';Cpu='\b5600G\b';Pci='2489';Subsys='153C10DE';Other='^PCI\\VEN_1002&DEV_1638&SUBSYS_D0001458(?:&|\\|$)'}
  }
  if(!$pins.ContainsKey($Id)){throw 'Unknown graph test machine.'};$p=$pins[$Id]
  # Known software-enumerated adapters do not establish firmware ownership.
@@ -21,11 +22,17 @@ function Assert-GraphMachine([string]$Id,$Board,$Bios,$Cpu,$Video) {
  $pciVideo=@($Video | Where-Object {$_.PNPDeviceID -match '^PCI\\'})
  if(@($Video | Where-Object {$_.PNPDeviceID -notmatch '^(PCI|ROOT|SWD)\\'}).Count){throw 'Ambiguous display inventory; stop and report.'}
  $identity='^PCI\\VEN_10DE&DEV_'+$p.Pci+'&SUBSYS_'+$p.Subsys+'(?:&|\\|$)'
+ $target=@($pciVideo | Where-Object {$_.PNPDeviceID -match $identity})
+ $displayOk=$pciVideo.Count -eq 1 -and $target.Count -eq 1
+ if($p.ContainsKey('Other')) {
+  $displayOk=$pciVideo.Count -eq 2 -and $target.Count -eq 1 -and
+             @($pciVideo | Where-Object {$_.PNPDeviceID -match $p.Other}).Count -eq 1
+ }
  if(@($Board).Count -ne 1 -or $Board.Product.Trim() -cne $p.Board -or
     $Board.Manufacturer -notmatch $p.Maker -or @($Bios).Count -ne 1 -or
     $Bios.SMBIOSBIOSVersion.Trim() -cne $p.Bios -or @($Cpu).Count -ne 1 -or
-    $Cpu.Name -notmatch $p.Cpu -or $pciVideo.Count -ne 1 -or $pciVideo[0].PNPDeviceID -notmatch $identity) {
-  throw "Machine does not match $Id's exact board/BIOS/CPU/single-GPU pins. Stop and report the mismatch."
+    $Cpu.Name -notmatch $p.Cpu -or !$displayOk) {
+  throw "Machine does not match $Id's exact board/BIOS/CPU/display-adapter pins. Stop and report the mismatch."
  }
 }
 function Assert-X99GraphMachine($Board,$Bios,$Cpu,$Video){Assert-GraphMachine 'issue33' $Board $Bios $Cpu $Video}

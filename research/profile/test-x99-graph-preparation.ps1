@@ -21,6 +21,14 @@ $virtual=[pscustomobject]@{PNPDeviceID='ROOT\DISPLAY\PRIVATE'}
 Assert-GraphMachine 'issue31' $x570 $x570bios $ryzen @($nvidia,$virtual)
 Reject {Assert-GraphMachine 'issue31' $x570 $x570bios $ryzen @($nvidia,$ga104)}
 Reject {Assert-GraphMachine 'issue31' $x570 $x570bios $ryzen @($nvidia,[pscustomobject]@{PNPDeviceID=$null})}
+$b550=[pscustomobject]@{Manufacturer='Gigabyte Technology Co., Ltd.';Product='B550 AORUS ELITE V2'}
+$f19=[pscustomobject]@{SMBIOSBIOSVersion='F19'};$apu=[pscustomobject]@{Name='AMD Ryzen 5 5600G with Radeon Graphics'}
+$rtxTi=[pscustomobject]@{PNPDeviceID='PCI\VEN_10DE&DEV_2489&SUBSYS_153C10DE&REV_A1\PRIVATE'}
+$amd=[pscustomobject]@{PNPDeviceID='PCI\VEN_1002&DEV_1638&SUBSYS_D0001458&REV_C9\PRIVATE'}
+Assert-GraphMachine 'issue180' $b550 $f19 $apu @($rtxTi,$amd,$virtual)
+Reject {Assert-GraphMachine 'issue180' $b550 $f19 $apu @($rtxTi)}
+Reject {Assert-GraphMachine 'issue180' $b550 $f19 $apu @($rtxTi,$nvidia)}
+Reject {Assert-GraphMachine 'issue180' $b550 $f19 $apu @($rtxTi,$amd,$nvidia)}
 $part=[pscustomobject]@{IsBoot=$false;IsSystem=$false}
 $disk=[pscustomobject]@{BusType='USB';UniqueId='mock-usb';IsBoot=$false;IsSystem=$false;IsReadOnly=$false;IsOffline=$false}
 $volume=[pscustomobject]@{FileSystem='FAT32';SizeRemaining=64MB}
