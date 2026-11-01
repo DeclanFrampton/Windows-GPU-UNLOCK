@@ -95,3 +95,33 @@ can still hang or prevent Windows return. Existing PCI/MMIO/PROM capture reads
 remain; no new GPU registers or GPU writes. After two minutes without Windows,
 power off, remove USB and select Windows Boot Manager; do not retry.
 Return christian-membership-result ZIP from C:\GPU-Unlock\Results.
+
+## DIAG04 and one-shot output-membership removal test
+DIAG04 records successful code identities, child-is-console, single-controller,
+virtual-GOP-controller and diagnostic result. That is live membership evidence,
+not GPU release. The next MsiOneChildTest repeats fresh code/membership checks,
+adds exact count=1 and tail=head guards, and calls the pinned output Stop once
+with its actual controller and system-console child. It does not call other
+text bindings, graphics/NVIDIA Stop, parent Stop, PCI writes or unlock.
+
+Four exact-code emulations with synthetic controller state exercised real unlink
+and the mode helper's HandleProtocol refusal branch. CloseProtocol/OpenProtocol
+errors can be ignored by this driver's Stop return, so success alone is insufficient.
+These emulations do not qualify all mode rebuilding or live firmware callbacks.
+Compiled membership guards passed 15 synthetic cases. The full EFI passed PE
+checks; full download/build and mocked USB stage/backup/collect/refusal checks passed.
+
+Before invocation the EFI disables its firmware watchdog, consumes the arm file
+and flushes an enter log. It suppresses further console output. Afterwards it
+requires a successful Stop return, count/head/tail all zero, and absence of this
+binding's BY_DRIVER/BY_CHILD opens on the old controller's text-output protocol.
+Every recorded check must pass before Windows; errors hold without reset or
+BootOrder fallback. Arm consumption prevents another removal call unless a new
+arm is manually created; the script refuses existing staged/armed markers.
+No automatic rollback/rearm exists. Unexpected firmware side effects, hangs,
+display/input loss or Windows failure remain possible; recovery is unproven.
+
+run-christian-one-child.ps1 -Drive G -AcceptRisk builds and stages; -Mode Collect
+packages christian-one-child-result under C:\GPU-Unlock\Results. Run attended
+once. If Windows is absent after two minutes, power off, remove USB and choose
+normal Windows Boot Manager. Do not repeat. No live one-child result yet.

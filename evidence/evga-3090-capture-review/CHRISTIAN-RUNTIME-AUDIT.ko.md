@@ -95,3 +95,30 @@ PE 검사도 통과했습니다. run-christian-membership.ps1은 고정 소스�
 2분 뒤에도 Windows가 시작되지 않으면 전원을 끄고 USB를 제거한 뒤 정상
 Windows Boot Manager로 부팅합니다. 재시도하지 않습니다. C:\GPU-Unlock\Results의
 christian-membership-result ZIP을 보내 주세요.
+
+## DIAG04와 일회성 출력 멤버십 제거 테스트
+DIAG04의 코드 일치, 콘솔 자식, 단일 컨트롤러, 가상 GOP 및 진단 결과가
+성공했습니다. 이는 실제 멤버십 증거이며 GPU 해제 증거가 아닙니다.
+다음 MsiOneChildTest는 코드/멤버십을 새로 검사하고 count=1 및 tail=head를
+확인한 뒤 실제 컨트롤러와 시스템 콘솔 자식으로 출력 Stop을 한 번 호출합니다.
+다른 텍스트 바인딩, 그래픽/NVIDIA Stop, 부모 Stop, PCI 쓰기 또는 잠금 해제는 없습니다.
+
+합성 컨트롤러 상태의 실제 코드 에뮬레이션 4개로 목록 제거와 모드 도우미의
+HandleProtocol 거부 경로를 검증했습니다. 이 드라이버는 CloseProtocol과
+OpenProtocol 오류를 반환 상태에 반영하지 않을 수 있어 성공 반환만으로는
+충분하지 않습니다. 모든 모드 재구성 경로나 실제 펌웨어 콜백이 검증된 것은
+아닙니다. 컴파일한 멤버십 가드는 합성 검사 15개를 통과했습니다. 전체 EFI의
+PE 검사와 다운로드/빌드, 모의 USB 복사/백업/수집/거부 검사도 통과했습니다.
+
+호출 전 펌웨어 워치독을 비활성화하고 arm 파일을 소비하며 진입 로그를
+저장합니다. 이후 콘솔 출력은 억제합니다. 호출 성공, count/head/tail 모두 0,
+기존 컨트롤러 텍스트 출력 프로토콜에서 해당 바인딩의 BY_DRIVER/BY_CHILD
+열기가 없어야 Windows로 진행합니다. 오류는 리셋이나 BootOrder 대체 없이
+정지합니다. 새 arm 파일을 수동으로 만들지 않으면 제거 호출을 반복할 수
+없으며 스크립트도 기존 staged/armed 마커를 거부합니다. 자동 복원/재무장은
+없습니다. 화면/입력 상실, 펌웨어 멈춤 또는 Windows 실패가 가능하고 복구는
+검증되지 않았습니다. run-christian-one-child.ps1 -Drive G -AcceptRisk로
+빌드/복사하며 -Mode Collect로 C:\GPU-Unlock\Results의
+christian-one-child-result ZIP을 만듭니다. 직접 지켜보며 한 번만 실행합니다.
+2분 뒤 Windows가 없으면 전원을 끄고 USB를 제거한 뒤 정상 Windows Boot Manager로
+부팅합니다. 반복하지 않습니다. 실제 자식 1개 제거 결과는 아직 없습니다.
