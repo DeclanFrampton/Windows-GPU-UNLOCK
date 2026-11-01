@@ -422,3 +422,25 @@ The samples help distinguish pending download from later work, but a two-second
 unchanged sample alone cannot prove a hang. Tests passed a partial-download
 fixture with mocked process CPU data, JSON-only ZIP/privacy checks, and actual
 Windows PowerShell 5.1 collection against verified assets with real CIM inventory.
+
+## 2026-11-01: cached inputs available; finish without redownloading payloads
+
+Christian's v2 report `christian-assets-result-5031a94e41f74825ae5f3af1a9f66013.zip`
+shows no matching preparation workers and no inventory error at either sample.
+One attempt retains the complete named 314789539-byte package plus the
+26172192-byte source archive; a later attempt retains a 279969792-byte partial
+file unchanged since 19:30. File sizes do not prove input authenticity, and the
+original reason preparation ended is still unknown. Preserve both attempts.
+
+`finish-christian-assets.ps1` now discovers existing prepared Python and complete
+named cache inputs. The shared generator's --input-cache mode verifies pinned
+input hashes offline and refuses missing/invalid data without replacement
+downloads. The finalizer rechecks active workers and refuses overlap; it does
+not kill processes. It verifies the upstream ZIP hash, extracts into a fresh
+work directory and generates payloads using the complete cache. Existing
+nonempty output is verified rather than overwritten. It always attempts a
+report/log ZIP on ordinary preparation errors, keeping firmware out of it.
+Only the small pinned repository source ZIP is downloaded, not NVIDIA inputs.
+No packages, Git, Python upgrade, GPU access, EFI staging or reboot is involved.
+
+Validation passed actual offline generation from the complete pinned cache, Windows PowerShell 5.1 finalization into a fresh output directory, existing-output verification, missing-input failure reporting and an active-worker refusal fixture. ZIP inspection confirmed report/log only and five verified assets on success. No worker was stopped, cached inputs were not overwritten, and no EFI/hardware execution occurred.
