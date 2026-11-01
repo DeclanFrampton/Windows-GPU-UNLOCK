@@ -2,7 +2,8 @@
 # The probe records every NVIDIA display controller, the console/driver graph, the 1 MiB PROM
 # (PROM.BIN) and loaded driver images (IMGnn.BIN) to the stick it booted from, then starts
 # Windows. It compiles only as a diagnostic build: no unlock code, GPU writes, driver release,
-# DMA or firmware variable writes. Builds files only.
+# DMA or firmware variable writes in default mode. MsiOneChildTest explicitly
+# permits one text-child removal after fresh guards. Builds files only.
 param([Parameter(Mandatory)][guid]$WindowsEspGuid,[string]$Clang='clang',[string]$LldLink='lld-link',[string]$Python='python',
       [ValidateRange(1,255)][int]$TargetBus=1,[switch]$MsiRuntimeAudit,[switch]$MsiZeroChildTest,[switch]$MsiMembershipAudit,[switch]$MsiOneChildTest)
 $ErrorActionPreference='Stop'
@@ -55,5 +56,6 @@ try {
   EfiSha256=(Get-FileHash -LiteralPath "$out/BOOTX64.EFI").Hash.ToLowerInvariant();BuiltUtc=[DateTime]::UtcNow.ToString('o')
   Sources=@($manifestInputs | ForEach-Object {[ordered]@{Path=$_;Sha256=(Get-FileHash -LiteralPath $_).Hash.ToLowerInvariant()}})
  } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath "$out/manifest.json" -Encoding utf8
- "Built generic read-only probe $out/BOOTX64.EFI; hardware untested."
+ if($MsiOneChildTest){"Built MSI one-child removal test $out/BOOTX64.EFI; hardware untested."}
+ else{"Built generic read-only probe $out/BOOTX64.EFI; hardware untested."}
 } finally {Pop-Location}

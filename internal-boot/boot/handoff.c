@@ -521,8 +521,8 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE Image,EFI_SYSTEM_TABLE *St) {
   s=Prepare(NULL);
   if(s==EFI_SUCCESS) {
     s=GuCaptureGraphOnVolume(Table,Log,Root);
-    /* Partial observations never authorize unlock. Normal Windows boot is
-     * permitted because this separate image has not touched GPU state. */
+    /* Partial observations never authorize unlock. The optional one-child
+     * test below requires successful post-removal checks before Windows. */
 #ifdef GU_MSI_RUNTIME_AUDIT
 #ifdef GU_MSI_ONE_CHILD_TEST
     if(s==EFI_SUCCESS){
