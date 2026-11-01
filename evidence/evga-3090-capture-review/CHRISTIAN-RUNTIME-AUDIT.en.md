@@ -323,3 +323,5 @@ exact saved-state checks and ownership release, with no MMIO after disable.
 An unexpected result still holds without automatic rollback; expanded live reads
 can hang or have side effects, and manual power-off/USB removal may be required.
 No new GPU MMIO writes, DMA, firmware upload/execution, reset or unlock is added.
+
+Validation: the compiled full-PROM helper with actual SHA256 passed success (262162 reads), first-byte corruption and last-DWORD corruption cases. Both mismatch cases held with decoding enabled, as designed; they do not prove recovery. The rebuilt 512-byte helper passed all 17 regression cases. The full EFI compiled and passed AMD64 EFI PE checks (37376 bytes; SHA256 ce4b90b292e311b2a0ddf3a98fe5e1b8bae2a685791744fb21bb9ef1b4c904e9). These are software/emulated checks, not a live full-cold-PROM result. Event names retain prom-prefix for compatibility; the full-mode build manifest identifies the 1 MiB comparison.
