@@ -6,6 +6,7 @@ import sys
 
 PCI = '4cf5b200-68b8-4ca5-9eec-b23e3f50029a'
 GOP = '9042a9de-23dc-4a38-96fb-7aded080516a'
+DEVICE_PATH = '09576e91-6d3f-11d2-8e39-00a0c969723b'
 
 
 def fields(row):
@@ -75,6 +76,7 @@ def review(data):
             if not handle['gop']:
                 continue
             parents = set()
+            path_parents = set()
             for parent, index in displays.items():
                 if parent == child:
                     parents.add(index)
@@ -83,8 +85,23 @@ def review(data):
                         edge = fields(row)
                         if edge.get('controller') == child and edge.get('attributes', 0) & 8 and edge.get('count', 0) > 0:
                             parents.add(index)
+                # Same agent contract as make-profile.py's sole PCI-I/O driver
+                # and Device Path display-child observations. This is only a
+                # graph relationship: full path/provenance/release gates remain separate.
+                owners = [fields(r) for r in handles[parent]['protocols'].get(PCI, [])
+                          if r.startswith('open ') and fields(r).get('attributes') == 16]
+                if (len(owners) == 1 and owners[0].get('controller') == parent and
+                        owners[0].get('count') == 1 and owners[0].get('agent', 0) != 0):
+                    for row in handles[parent]['protocols'].get(DEVICE_PATH, []):
+                        if row.startswith('open '):
+                            edge = fields(row)
+                            if (edge.get('controller') == child and edge.get('attributes') == 8 and
+                                    edge.get('count') == 1 and edge.get('agent') == owners[0]['agent']):
+                                path_parents.add(index)
             item['gop_links'].append({'status': 'unique-protocol-link' if len(parents) == 1 else 'ambiguous' if parents else 'unresolved',
-                                      'candidate_adapter_indices': sorted(parents)})
+                                      'candidate_adapter_indices': sorted(parents),
+                                      'device_path_driver_child_status': 'unique-agent-matched-link' if len(path_parents) == 1 else 'ambiguous' if path_parents else 'unresolved',
+                                      'device_path_driver_child_adapter_indices': sorted(path_parents)})
         item['status'] = 'observed'
     return result
 

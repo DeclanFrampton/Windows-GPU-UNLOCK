@@ -24,7 +24,8 @@ def sample():
 class Tests(unittest.TestCase):
     def test_link_and_no_raw_export(self):
         r = links.review(sample())
-        self.assertEqual(r['captures'][0]['gop_links'], [{'status': 'unique-protocol-link', 'candidate_adapter_indices': [0]}])
+        self.assertEqual(r['captures'][0]['gop_links'][0]['status'], 'unique-protocol-link')
+        self.assertEqual(r['captures'][0]['gop_links'][0]['candidate_adapter_indices'], [0])
         self.assertFalse(r['physical_routing_verified'])
         self.assertNotIn('handle', str(r))
 
@@ -46,6 +47,22 @@ class Tests(unittest.TestCase):
     def test_scope_incomplete_bounds(self):
         d = sample();d['write_eligible'] = True
         with self.assertRaises(ValueError): links.review(d)
+
+    def test_device_path_requires_same_sole_driver(self):
+        d = sample();rows = d['captures'][0]['records']
+        rows[5:6] = ['open agent=0x3 controller=0x1 attributes=0x10 count=0x1',
+                     'protocol guid=' + links.DEVICE_PATH,
+                     'open agent=0x3 controller=0x2 attributes=0x8 count=0x1']
+        r = links.review(d)['captures'][0]['gop_links'][0]
+        self.assertEqual(r['status'], 'unresolved')
+        self.assertEqual(r['device_path_driver_child_adapter_indices'], [0])
+        for old, new in [('agent=0x3 controller=0x2', 'agent=0x4 controller=0x2'),
+                         ('attributes=0x10', 'attributes=0x2'), ('attributes=0x8 count=0x1', 'attributes=0x8 count=0x2')]:
+            bad = copy.deepcopy(d)
+            bad['captures'][0]['records'] = [r.replace(old, new) for r in rows]
+            self.assertEqual(links.review(bad)['captures'][0]['gop_links'][0]['device_path_driver_child_status'], 'unresolved')
+        bad = copy.deepcopy(d);bad['captures'][0]['records'].insert(5, rows[5])
+        self.assertEqual(links.review(bad)['captures'][0]['gop_links'][0]['device_path_driver_child_status'], 'unresolved')
         d = sample();d['captures'][0]['complete_markers'] = ['0']
         self.assertEqual(links.review(d)['captures'][0]['status'], 'incomplete')
         d = sample();d['captures'][0]['records'] += ['PRIVATE' * 1000]

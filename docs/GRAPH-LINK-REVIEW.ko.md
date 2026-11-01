@@ -23,3 +23,15 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\research\profile\test-grap
 자식 연결을 보이며173은 이 제한된 규칙에서 미해결입니다. 두 소유자는 별도로
 Windows 직접 복귀를 보고했습니다. Ada MMIO/잠금 해제 또는 새 리소스 캡처를
 허용하지 않습니다.
+
+## Device Path 드라이버-자식 관찰
+
+별도 device_path_driver_child_status는 Device Path BY_CHILD_CONTROLLER 연결의
+0이 아닌 에이전트가 유일한 PCI-I/O BY_DRIVER 소유자와 같을 때만 보고합니다.
+소유자의 컨트롤러는 자신이고 count1이며 자식 연결도 count1이어야 합니다.
+다른 에이전트, 중복/누락 소유자, 잘못된 속성/횟수는 미해결로 남습니다.
+이는 make-profile.py의 관계 규칙을 반영하지만 전체 경로/콘솔/이미지/리소스
+검증을 수행하지 않습니다. 기존 PCI-I/O 전용 상태는 별도로 유지합니다.
+173은 기존 상태가 미해결인 동시에 새 필드가 NVIDIA 어댑터0의
+unique-agent-matched-link입니다. 이미 제공한 요약으로 계산했으므로 새 캡처나
+소유자 재실행은 필요하지 않습니다. 로컬 회귀 5개와 실제 요약 실행을 통과했습니다.

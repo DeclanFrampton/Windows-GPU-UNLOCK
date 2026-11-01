@@ -22,3 +22,15 @@ incomplete captures, scope and size refusal. Supplied130 summary has unique Inte
 PCI-I/O child link;173 remains unresolved under this deliberately narrow rule. Both
 owners report direct Windows return separately. No Ada MMIO/unlock admission or new
 resource capture is authorized by these observations.
+
+## Device Path driver-child observation
+
+A separate device_path_driver_child_status now reports an exact Device Path
+BY_CHILD_CONTROLLER edge only when its nonzero agent matches the sole PCI-I/O
+BY_DRIVER owner (self controller, count1); child count must also be1. Wrong agent,
+duplicate owner, missing owner or wrong attributes/count remain unresolved.
+This mirrors the relationship used in make-profile.py, not its full path/console/
+image/resource qualification. The PCI-I/O-only status remains separate.
+For173, that status stays unresolved while the new field is unique-agent-matched-link
+to NVIDIA adapter0. No new capture or owner rerun is needed; this analysis used the
+already supplied summary. Five local regressions and actual-summary runs passed.
