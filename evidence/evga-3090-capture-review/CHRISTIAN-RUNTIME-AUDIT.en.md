@@ -52,3 +52,18 @@ The new EFI compiled and passed PE checks with partition inventory mocked. A Sto
 call is a new live execution boundary even with zero children; unexpected behavior
 may hang or affect display/Windows. No automatic retry. Build/package only is
 the next handoff; review the returned image before staging this method test.
+
+## Reviewed zero-child package and staging
+Returned EFI: 24,576 bytes, SHA256
+d5cd327ab59d18436e01461cdaa974db4a2614204c5d47b726b6a466deddfc60.
+All manifest source hashes match; AMD64 and EFI subsystem independently checked.
+MsiZeroChildTest and CallsDriverStop are true; unlock/detach/firmware writes false.
+run-christian-zero-child.ps1 pins that exact image, backs up the previous USB EFI
+and captures, verifies readback, and refuses a second staging using a USB marker.
+That marker is a staging guard, not an EFI boot-once enforcement mechanism.
+Local mocked USB tests passed backup, stage, collection, repeat-stage refusal and
+internal-disk refusal. No live zero-child call has run yet. Boot attended once;
+no keys are needed. Expected new events: msi-text-zero-child-enter and
+msi-text-zero-child-return, both success. If Windows is absent after two minutes,
+power off, remove USB and choose normal Windows Boot Manager; do not retry.
+Return the christian-zero-child-result ZIP and report automatic/manual return.

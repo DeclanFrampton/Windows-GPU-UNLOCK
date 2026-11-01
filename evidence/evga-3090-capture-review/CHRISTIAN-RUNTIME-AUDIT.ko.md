@@ -52,3 +52,19 @@ DIAG02.TXT SHA256: 0a808399aeb1f1826073670e228f62885dd321ba96a6fb61538749d562ae0
 테스트는 아직 수행되지 않았습니다. Stop 호출은 새 실행 경계이므로 예상과
 다르게 멈추거나 화면/Windows에 영향을 줄 수 있습니다. 자동 재시도는 없습니다.
 다음 단계는 빌드와 패키징뿐이며 반환 이미지를 검토한 후 USB 복사를 안내합니다.
+
+## 검토한 자식 0개 패키지와 USB 복사
+반환된 EFI는 24,576바이트이며 SHA256은
+d5cd327ab59d18436e01461cdaa974db4a2614204c5d47b726b6a466deddfc60입니다.
+매니페스트의 모든 소스 해시가 일치하고 AMD64 및 EFI 서브시스템을 별도로
+확인했습니다. MsiZeroChildTest와 CallsDriverStop은 참이며 잠금 해제,
+자식 제거 및 펌웨어 쓰기는 거짓입니다. run-christian-zero-child.ps1은
+이 이미지만 허용하고 기존 USB EFI와 캡처를 백업하며 복사 해시를 확인합니다.
+USB 마커로 두 번째 복사를 거부하지만 EFI의 재부팅 실행 자체를 막지는 않습니다.
+모의 USB로 백업, 복사, 수집, 반복 복사 거부와 내부 디스크 거부를 검증했습니다.
+실제 자식 0개 호출은 아직 실행되지 않았습니다. 직접 지켜보며 USB를 한 번
+부팅합니다. 키 입력은 필요 없습니다. msi-text-zero-child-enter와
+msi-text-zero-child-return 성공 기록이 목표입니다. 2분 뒤에도 Windows가
+시작되지 않으면 전원을 끄고 USB를 제거한 뒤 정상 Windows Boot Manager로
+부팅합니다. 재시도하지 않습니다. christian-zero-child-result ZIP과
+Windows 자동/수동 복귀 여부를 보내 주세요.
