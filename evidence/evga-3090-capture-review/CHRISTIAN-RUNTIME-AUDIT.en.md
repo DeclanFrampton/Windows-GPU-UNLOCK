@@ -67,3 +67,31 @@ no keys are needed. Expected new events: msi-text-zero-child-enter and
 msi-text-zero-child-return, both success. If Windows is absent after two minutes,
 power off, remove USB and choose normal Windows Boot Manager; do not retry.
 Return the christian-zero-child-result ZIP and report automatic/manual return.
+
+## Successful zero-child call and bounded membership observation
+DIAG03.TXT records both code identities, zero-child enter/return, and diagnostic
+result as success. This proves that invocation returned, not child removal.
+The collection screenshot shows an empty drive-letter entry, followed by a
+successful retry using G. New commands pass -Drive G explicitly.
+
+The next optional MsiMembershipAudit checks the pinned image globals at 0x6110
+and 0x6288 and reads only the first 32-byte controller-list node. It requires
+alignment and a containing LoaderData/BootServicesData memory-map descriptor
+without read protection; it excludes MMIO and rejects malformed map bounds.
+It checks that the child equals ConsoleOutHandle, the next pointer is null,
+and the controller exposes GOP with no device path. It never traverses further,
+changes these globals, calls Stop or authorizes release. The map is a bounded
+read guard, not an atomic snapshot or proof of callback semantics.
+
+The compiled helper passed 13 isolated CPU-emulation cases, including success,
+wrong child, multiple nodes, wrong GOP topology, service/log failures, MMIO,
+read protection, alignment and malformed map cases. Rejected RAM/MMIO cases
+performed zero node reads. The full EFI compiled and passed PE validation.
+run-christian-membership.ps1 builds a fixed source snapshot and stages it in one
+command, preserving the old EFI/captures. Real download/compile/PE plus mocked
+USB backup/readback/collection/repeat-stage/internal-disk checks passed.
+No live membership result yet. Boot once attended; capture/firmware RAM reads
+can still hang or prevent Windows return. Existing PCI/MMIO/PROM capture reads
+remain; no new GPU registers or GPU writes. After two minutes without Windows,
+power off, remove USB and select Windows Boot Manager; do not retry.
+Return christian-membership-result ZIP from C:\GPU-Unlock\Results.
