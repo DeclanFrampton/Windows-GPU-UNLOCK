@@ -15,6 +15,17 @@ KEYS = {
 }
 
 
+# Fixed diagnostic labels only: never copy arbitrary reason strings or paths.
+REASONS = {
+    'path-node-length', 'path-end', 'path-trailing-data', 'path-limit-or-missing-end',
+    'variable-size', 'variable-allocate', 'variable-read', 'variable-free',
+    'interface-read', 'gop-null-mode', 'gop-info', 'pci-location', 'pci-read',
+    'handle-snapshot', 'protocol-snapshot', 'protocol-null-guid', 'open-snapshot',
+    'handle-snapshot-changed', 'handle-identity-changed', 'opens-free',
+    'protocols-free', 'after-free', 'handles-free',
+}
+
+
 def summarize(data):
     if len(data) > 8 * 1024 * 1024:
         raise ValueError('Log too large')
@@ -34,12 +45,21 @@ def summarize(data):
             records.append(line)
     if len(records) > 100000:
         raise ValueError('Too many records')
+    reasons = [
+        {'reason': reason, 'status': status}
+        for reason, status in re.findall(
+            r'^incomplete reason=([a-z-]+) status=(0x[0-9a-f]{16})$', text, re.M)
+        if reason in REASONS
+    ]
+    reason_count = len(re.findall(r'^incomplete reason=', text, re.M))
     return {
         'sha256': hashlib.sha256(data).hexdigest(),
         'graph_only_marker': text.count('capture-scope=graph-only no-gpu-mmio no-prom no-image-dump') == 1,
         'complete_markers': re.findall(r'^capture-complete=([01])$', text, re.M),
         'diagnostic_statuses': re.findall(r'^diagnostic-result status=(0x[0-9a-f]{16})$', text, re.M),
-        'incomplete_reason_count': len(re.findall(r'^incomplete reason=', text, re.M)),
+        'incomplete_reason_count': reason_count,
+        'incomplete_reasons': reasons,
+        'unexported_reason_count': reason_count - len(reasons),
         'records': records,
     }
 
@@ -54,7 +74,7 @@ def main():
         with path.open('rb') as stream:
             data = stream.read(8 * 1024 * 1024 + 1)
         reports.append({'capture': path.name, **summarize(data)})
-    output.write_text(json.dumps({'test': 'graph-only-v1', 'hardware_verified': False,
+    output.write_text(json.dumps({'test': 'graph-only-v2', 'hardware_verified': False,
                                  'write_eligible': False, 'captures': reports}, indent=2), encoding='utf-8')
 
 

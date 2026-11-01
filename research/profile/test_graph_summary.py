@@ -28,6 +28,27 @@ class GraphSummaryTests(unittest.TestCase):
         self.assertEqual(result['records'], [line.rstrip()])
         self.assertEqual(result['complete_markers'], ['1', '0'])
 
+    def test_failure_reasons_survive_without_private_text(self):
+        data = (b'incomplete reason=gop-info status=0x8000000000000006\n'
+                b'incomplete reason=PRIVATE-PATH status=0x8000000000000006\n'
+                b'incomplete reason=gop-info status=PRIVATE\n'
+                b'capture-complete=0\n'
+                b'diagnostic-result status=0x8000000000000006\n')
+        result = graph.summarize(data)
+        self.assertEqual(result['incomplete_reason_count'], 3)
+        self.assertEqual(result['incomplete_reasons'], [
+            {'reason': 'gop-info', 'status': '0x8000000000000006'}])
+        self.assertEqual(result['unexported_reason_count'], 2)
+        self.assertEqual(result['complete_markers'], ['0'])
+        self.assertNotIn('PRIVATE', json.dumps(result))
+
+    def test_duplicate_and_conflicting_reasons_are_not_deduplicated(self):
+        result = graph.summarize(
+            b'incomplete reason=gop-info status=0x8000000000000006\n'
+            b'incomplete reason=gop-info status=0x8000000000000007\n')
+        self.assertEqual(len(result['incomplete_reasons']), 2)
+        self.assertEqual(result['unexported_reason_count'], 0)
+
     def test_invalid_encoding_is_not_repaired(self):
         with self.assertRaises(UnicodeError):
             graph.summarize(b'\x8f')
