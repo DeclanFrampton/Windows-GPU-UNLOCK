@@ -404,3 +404,21 @@ PowerShell window if the original preparation is still busy; do not relaunch it.
 Local checks passed absent, fully verified and corrupt/partial payload cases;
 all three ZIPs contained one report JSON and no firmware. Only the fully
 verified case reported completion. Existing raw payloads were unchanged.
+
+## 2026-11-01: preparation report returned; download/process visibility added
+
+Christian returned `christian-assets-result-7ff7ea5d2e31453a81d8391e4a513c2f.zip`.
+Its report says preparation_complete=false, all five outputs and both notices
+missing. Recent build directories contain the source ZIP, upstream ZIP and
+private Python environment. This does not identify the download/extraction
+boundary, prove an active worker, or justify restarting preparation.
+
+Collector v2 adds two samples two seconds apart of bounded known input-cache
+file names/sizes/timestamps and matching preparation Python process IDs, CPU
+time and working set. It never exports command lines, download contents,
+endpoints or unrelated process metadata. Process-inventory failure is explicit.
+No process is stopped; preparation is not retried; no GPU/USB/firmware action.
+The samples help distinguish pending download from later work, but a two-second
+unchanged sample alone cannot prove a hang. Tests passed a partial-download
+fixture with mocked process CPU data, JSON-only ZIP/privacy checks, and actual
+Windows PowerShell 5.1 collection against verified assets with real CIM inventory.

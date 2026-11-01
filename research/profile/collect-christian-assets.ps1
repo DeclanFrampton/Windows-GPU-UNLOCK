@@ -33,10 +33,39 @@ if(Test-Path -LiteralPath $builds){
   [pscustomobject]@{directory=$_.Name;last_write_utc=$_.LastWriteTimeUtc.ToString('o');source_zip_present=(Test-Path -LiteralPath (Join-Path $_.FullName 'source.zip'));payload_source_zip_present=(Test-Path -LiteralPath (Join-Path $_.FullName 'payload-source.zip'));private_python_present=(Test-Path -LiteralPath (Join-Path $_.FullName 'python-env/Scripts/python.exe'))}
  })
 }
+# Observe only the known payload cache and matching preparation processes.
+# Never include command lines, file contents, endpoints or unrelated processes.
+function Get-PreparationSnapshot {
+ $files=@();$processes=@();$processError=$null
+ if(Test-Path -LiteralPath $builds){
+  $files=@(Get-ChildItem -LiteralPath $builds -Directory -Filter 'assets-*' | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 5 | ForEach-Object {
+   $directory=$_.Name
+   $cache=Join-Path $_.FullName 'payload-source/gpu-unlock-0ebdb1c6308b6a2072be5bf04513472942541956/inputs'
+   foreach($candidate in @($cache,(Join-Path $cache 'inputs'))){
+    if(Test-Path -LiteralPath $candidate){
+     Get-ChildItem -LiteralPath $candidate -File -Force | Select-Object -First 10 | ForEach-Object {
+      [pscustomobject]@{directory=$directory;cache_subdirectory=(Split-Path $candidate -Leaf);name=$_.Name;bytes=$_.Length;last_write_utc=$_.LastWriteTimeUtc.ToString('o')}
+     }
+    }
+   }
+  })
+ }
+ try {
+  $processes=@(Get-CimInstance Win32_Process -Filter "Name = 'python.exe' OR Name = 'pythonw.exe'" -ErrorAction Stop | Where-Object {
+   $_.CommandLine -and $_.CommandLine.IndexOf([IO.Path]::GetFullPath($builds),[StringComparison]::OrdinalIgnoreCase) -ge 0 -and $_.CommandLine.Contains('prepare-evga3090-assets.py')
+  } | ForEach-Object {
+   [pscustomobject]@{process_id=$_.ProcessId;cpu_seconds=([double]$_.KernelModeTime+[double]$_.UserModeTime)/10000000;working_set_bytes=[long]$_.WorkingSetSize}
+  })
+ }catch{$processError='Preparation process inventory unavailable'}
+ [pscustomobject]@{sample_utc=[DateTime]::UtcNow.ToString('o');cache_files=$files;preparation_processes=$processes;process_inventory_error=$processError}
+}
+$first=Get-PreparationSnapshot
+Start-Sleep -Seconds 2
+$second=Get-PreparationSnapshot
 $complete=@($observed | Where-Object {!$_.verified}).Count -eq 0 -and @($notices | Where-Object {!$_.present}).Count -eq 0
 $results=Join-Path $Root 'Results';[void][IO.Directory]::CreateDirectory($results)
 $out=Join-Path $results ('christian-assets-result-'+[guid]::NewGuid().ToString('N'));[void][IO.Directory]::CreateDirectory($out)
-[ordered]@{test='christian-assets-collection-v1';preparation_complete=$complete;assets_directory=$Assets;assets=$observed;notices=$notices;recent_preparation_directories=$work;gpu_accessed=$false;efi_staged=$false;unlock_attempted=$false;preparation_retried=$false} | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $out 'verification.json') -Encoding utf8
+[ordered]@{test='christian-assets-collection-v2';progress_samples=@($first,$second);preparation_complete=$complete;assets_directory=$Assets;assets=$observed;notices=$notices;recent_preparation_directories=$work;gpu_accessed=$false;efi_staged=$false;unlock_attempted=$false;preparation_retried=$false} | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $out 'verification.json') -Encoding utf8
 $zip=$out+'.zip';Compress-Archive -LiteralPath $out -DestinationPath $zip
 if(!(Test-Path -LiteralPath $zip -PathType Leaf) -or (Get-Item -LiteralPath $zip).Length -le 0){throw 'Report ZIP creation failed; send this error'}
 Write-Output ('Preparation complete at collection: '+$complete)
