@@ -34,8 +34,8 @@ def verify(output):
     return specs
 
 def prepare(source, output):
-    if sys.version_info < (3, 14):
-        raise ValueError("Use Python3.14+ for native zstd archive support")
+    if sys.version_info < (3, 12):
+        raise ValueError("Use Python3.12+ for filtered archive extraction")
     if output.exists() and any(output.iterdir()):
         raise ValueError("Output is nonempty; preserve it and use --verify-only or a new output directory")
     if not source.exists():
@@ -56,10 +56,16 @@ def prepare(source, output):
         archive.extractall(extraction, filter="data")
     generate = load("evga_asset_generate", firmware / "generate_v67.py")
     def native_member(package_path, name):
-        with tarfile.open(package_path, mode="r:*") as archive:
-            return generate.read_member(archive, name)
+        if sys.version_info >= (3, 14):
+            with tarfile.open(package_path, mode="r:*") as archive:
+                return generate.read_member(archive, name)
+        # The caller installs a pinned wheel only into its private environment.
+        import zstandard
+        with zstandard.open(package_path, "rb") as stream:
+            with tarfile.open(fileobj=stream, mode="r|") as archive:
+                return generate.read_member(archive, name)
     # Keep pinned parsing, package identity, payload construction and hash checks.
-    # Replace only the external decompressor with Python's native zstd support.
+    # Replace only decompression; keep the pinned parser and output hash checks.
     generate.extract_member = native_member
     old_argv = sys.argv
     try:
