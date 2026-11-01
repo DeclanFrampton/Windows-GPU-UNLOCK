@@ -17,12 +17,12 @@ function Assert-X99GraphMachine($Board,$Bios,$Cpu,$Video) {
   throw 'This test is only for issue 33: X99-PRO/USB 3.1 BIOS 4101, i7-5820K, sole ASUS 2204/1043:87af GPU. Stop and report the mismatch.'
  }
 }
-function Assert-GraphUsb($Partition,$Disk,$Volume) {
+function Assert-GraphUsb($Partition,$Disk,$Volume,[switch]$CollectOnly) {
  if(@($Partition).Count -ne 1 -or @($Disk).Count -ne 1 -or @($Volume).Count -ne 1 -or
     $Disk.BusType -ne 'USB' -or $Volume.FileSystem -ne 'FAT32' -or
     $Partition.IsSystem -or $Partition.IsBoot -or $Disk.IsBoot -or $Disk.IsSystem -or
-    $Disk.IsReadOnly -or $Disk.IsOffline -or !$Disk.UniqueId -or
-    $Volume.SizeRemaining -lt 16MB) {throw 'Select an existing writable FAT32 USB data stick with at least 16 MB free. No formatting is performed.'}
+    $Disk.IsOffline -or !$Disk.UniqueId -or
+    (!$CollectOnly -and ($Disk.IsReadOnly -or $Volume.SizeRemaining -lt 16MB))) {throw 'Preparation needs a writable FAT32 USB data stick with at least 16 MB free; collection only reads it. No formatting is performed.'}
 }
 function Copy-GraphBoot([string]$Root,[string]$Image,[string]$ExpectedHash) {
  if((Get-GraphHash $Image) -cne $ExpectedHash){throw 'Built EFI hash mismatch.'}
@@ -53,7 +53,7 @@ if($Drive -notmatch '^[D-Zd-z]$'){throw 'Enter one drive letter from D through Z
 $part=Get-Partition -DriveLetter $Drive
 $disk=Get-Disk -Number $part.DiskNumber
 $volume=Get-Volume -DriveLetter $Drive
-Assert-GraphUsb $part $disk $volume
+Assert-GraphUsb $part $disk $volume -CollectOnly:$Collect
 $usb=$Drive.ToUpperInvariant()+':\'
 if($Collect){
  $documents=[Environment]::GetFolderPath('MyDocuments')

@@ -16,6 +16,9 @@ $disk.BusType='SATA';Reject {Assert-GraphUsb $part $disk $volume};$disk.BusType=
 $part.IsSystem=$true;Reject {Assert-GraphUsb $part $disk $volume};$part.IsSystem=$false
 $volume.FileSystem='NTFS';Reject {Assert-GraphUsb $part $disk $volume}
 $volume.FileSystem='FAT32';$volume.SizeRemaining=1MB;Reject {Assert-GraphUsb $part $disk $volume}
+Assert-GraphUsb $part $disk $volume -CollectOnly
+$disk.IsReadOnly=$true;Assert-GraphUsb $part $disk $volume -CollectOnly
+Reject {Assert-GraphUsb $part $disk $volume};$disk.IsReadOnly=$false
 $temp=Join-Path ([IO.Path]::GetTempPath()) ('graph-prep-'+[guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path (Join-Path $temp 'EFI/BOOT') -Force | Out-Null
 $image=Join-Path $temp 'source.efi';$boot=Join-Path $temp 'EFI/BOOT/BOOTX64.EFI'
