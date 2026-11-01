@@ -18,10 +18,10 @@
 #error GPU family and firmware must be derived from the selected machine profile
 #endif
 
-#if (defined(GU_PROFILE_B650M_3090FE) + defined(GU_PROFILE_B660M_3070TI) + defined(GU_PROFILE_B660M_3090TI) + defined(GU_PROFILE_X870_3090TI) + defined(GU_PROFILE_B660PLUS_3060) + defined(GU_PROFILE_LOCAL) + defined(GU_PROFILE_H610M_3060) + defined(GU_PROFILE_PROBE_H610M_3060) + defined(GU_PROFILE_EVGA_Z790_3090)) > 1
+#if (defined(GU_PROFILE_B650M_3090FE) + defined(GU_PROFILE_B660M_3070TI) + defined(GU_PROFILE_B660M_3090TI) + defined(GU_PROFILE_X870_3090TI) + defined(GU_PROFILE_B660PLUS_3060) + defined(GU_PROFILE_LOCAL) + defined(GU_PROFILE_H610M_3060) + defined(GU_PROFILE_PROBE_H610M_3060) + defined(GU_PROFILE_EVGA_Z790_3090) + defined(GU_PROFILE_MSI_H510_3090)) > 1
 #error Select exactly one machine profile
 #endif
-#if !defined(GU_PROFILE_B650M_3090FE) && !defined(GU_PROFILE_B660M_3070TI) && !defined(GU_PROFILE_B660M_3090TI) && !defined(GU_PROFILE_X870_3090TI) && !defined(GU_PROFILE_B660PLUS_3060) && !defined(GU_PROFILE_LOCAL) && !defined(GU_PROFILE_H610M_3060) && !defined(GU_PROFILE_PROBE_H610M_3060) && !defined(GU_PROFILE_EVGA_Z790_3090)
+#if !defined(GU_PROFILE_B650M_3090FE) && !defined(GU_PROFILE_B660M_3070TI) && !defined(GU_PROFILE_B660M_3090TI) && !defined(GU_PROFILE_X870_3090TI) && !defined(GU_PROFILE_B660PLUS_3060) && !defined(GU_PROFILE_LOCAL) && !defined(GU_PROFILE_H610M_3060) && !defined(GU_PROFILE_PROBE_H610M_3060) && !defined(GU_PROFILE_EVGA_Z790_3090) && !defined(GU_PROFILE_MSI_H510_3090)
 #define GU_PROFILE_B650M_3090FE 1
 #endif
 
@@ -43,11 +43,20 @@
 #error EVGA profile requires its explicit attended experimental transaction adapter
 #endif
 
+#if defined(GU_PROFILE_MSI_H510_3090)
+#if !defined(GU_MSI_TRANSACTION_DEVELOPMENT) || !defined(GU_MSI_UNLOCK)
+#error MSI write profile requires its explicit attended transaction wrapper
+#endif
+#if defined(GU_INTERNAL_BOOT) || defined(GU_AUTOMATIC_BOOT) || defined(GU_FULL_UNLOCK) || defined(GU_HEADLESS_RESEARCH) || defined(GU_PROFILE_LOCAL)
+#error MSI profile is not an automatic, generic or internal-install profile
+#endif
+#endif
+
 /* 1 = the AMI combo splitter owns the console on top of the target GPU
  * (aggregate GOP + text-out driver chain; verified on AMI boards without a
  * second display GPU). 0 = nvgop owns the console GOP on the target directly
  * (original verified B650M headless topology). */
-#if defined(GU_PROFILE_B660M_3070TI) || defined(GU_PROFILE_B660M_3090TI) || defined(GU_PROFILE_B660PLUS_3060) || defined(GU_PROFILE_EVGA_Z790_3090)
+#if defined(GU_PROFILE_B660M_3070TI) || defined(GU_PROFILE_B660M_3090TI) || defined(GU_PROFILE_B660PLUS_3060) || defined(GU_PROFILE_EVGA_Z790_3090) || defined(GU_PROFILE_MSI_H510_3090)
 #define GU_CONSOLE_AGGREGATE 1
 #elif !defined(GU_PROFILE_LOCAL)
 #define GU_CONSOLE_AGGREGATE 0
@@ -63,7 +72,20 @@
 #define GU_CONSOLE_CHILD_COUNT 2
 #endif
 
-#if defined(GU_PROFILE_EVGA_Z790_3090)
+#if defined(GU_PROFILE_MSI_H510_3090)
+/* Driver code/topology are pinned separately by msi-runtime-audit.h. */
+#define GU_PROFILE_NAME "MSI-3090-H510-ATTENDED-DEVELOPMENT"
+#define GU_BOARD_ID 0x220410deU
+#define GU_BOARD_SUBSYSTEM 0x38811462U
+#define GU_BAR0_BASE 0x91000000ULL
+#define GU_BAR0_END 0x91ffffffULL
+#define GU_DEVICE_MEMORY_SIZE 0x6000U
+#define GU_GPU_FAMILY GU_GPU_FAMILY_GA102
+#define GU_PROM_SHA256 "de78e145e527059faec711a9a320b6dca6a88dc4de0fed882d1688ba2dd1aad1"
+#define GU_ROOT_PORT_DEVICE 1U
+#define GU_ROOT_PORT_FUNCTION 0U
+#define GU_RTX_PATH_BYTES 2,1,12,0,0xd0,0x41,3,10,0,0,0,0,1,1,6,0,0,1,1,1,6,0,0,0,2,3,8,0,32,3,1,128,127,255,4,0
+#elif defined(GU_PROFILE_EVGA_Z790_3090)
 /* Captured EVGA 2204:3387 on ASUS Z790, firmware and topology are pinned by
  * the separate EVGA release harness. These constants do not authorize writes. */
 #define GU_PROFILE_NAME "EVGA-3090-Z790-DEVELOPMENT"
@@ -261,7 +283,7 @@
  * probes deliberately receive neither chip traits nor firmware defaults. */
 #if !defined(GU_PROFILE_PROBE_H610M_3060)
 #include "gpu-family.h"
-#if !defined(GU_PROFILE_LOCAL) && !defined(GU_PROFILE_EVGA_Z790_3090)
+#if !defined(GU_PROFILE_LOCAL) && !defined(GU_PROFILE_EVGA_Z790_3090) && !defined(GU_PROFILE_MSI_H510_3090)
 #include "firmware-profile.h"
 #endif
 #endif

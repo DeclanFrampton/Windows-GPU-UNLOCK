@@ -4,6 +4,10 @@
 #include <IndustryStandard/Acpi.h>
 #ifdef GU_MSI_ADMISSION
 #include "../unlock/msi-admission.h"
+#ifdef GU_MSI_UNLOCK
+#include "../unlock/msi-transaction.h"
+static EFI_STATUS GuMsiRunTransaction(EFI_SYSTEM_TABLE *,EFI_HANDLE,EFI_HANDLE,EFI_PCI_IO_PROTOCOL *,const UINT32[9],const VOID *,UINTN,GU_MSI_RECORD);
+#endif
 #endif
 static EFI_STATUS GuMsiColdConfig(EFI_PCI_IO_PROTOCOL *pci,UINT16 command,UINT32 cfg[16]){
  EFI_STATUS s=pci->Pci.Read(pci,EfiPciIoWidthUint32,0,16,cfg);
@@ -103,7 +107,11 @@ static EFI_STATUS GuMsiColdProbe(EFI_SYSTEM_TABLE *t,EFI_HANDLE parent,EFI_HANDL
  s=record(NULL,"msi-admission-pm-value",caps.pm);if(s!=EFI_SUCCESS)return s;
  s=record(NULL,"msi-admission-pcie-value",caps.pcie);if(s!=EFI_SUCCESS)return s;
  s=record(NULL,"msi-admission-msi-value",caps.msi);if(s!=EFI_SUCCESS)return s;
+#ifdef GU_MSI_UNLOCK
+ s=GuMsiRunTransaction(t,parent,self,pci,entry,prefix,sizeof(prefix),record);if(s!=EFI_SUCCESS)return s;
+#else
  s=record(NULL,"msi-admission-complete-no-unlock",EFI_SUCCESS);if(s!=EFI_SUCCESS)return s;
+#endif
 #endif
  s=record(NULL,"msi-cold-memory-disable-enter",EFI_SUCCESS);if(s!=EFI_SUCCESS)return s;
  s=pci->Attributes(pci,EfiPciIoAttributeOperationDisable,EFI_PCI_IO_ATTRIBUTE_MEMORY,NULL);
@@ -117,6 +125,9 @@ static EFI_STATUS GuMsiColdProbe(EFI_SYSTEM_TABLE *t,EFI_HANDLE parent,EFI_HANDL
  s=record(NULL,"msi-cold-saved-state-restored",EFI_SUCCESS);if(s!=EFI_SUCCESS)return s;
  s=t->BootServices->CloseProtocol(parent,&pciGuid,self,NULL);
  s=GuMsiColdRecord(record,"msi-cold-exclusive-close",s);if(s!=EFI_SUCCESS)return s;
+#ifdef GU_MSI_UNLOCK
+ Gu.owned=FALSE;
+#endif
  EFI_OPEN_PROTOCOL_INFORMATION_ENTRY *opens=NULL;UINTN n=0;
  s=t->BootServices->OpenProtocolInformation(parent,&pciGuid,&opens,&n);if(s!=EFI_SUCCESS)return s;
  BOOLEAN unowned=n<=256 && (!n || opens);

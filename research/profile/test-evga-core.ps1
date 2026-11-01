@@ -21,7 +21,7 @@ $config=Join-Path $out 'evga-captured-config.txt';$lines | Set-Content -LiteralP
 Push-Location (Join-Path $repo 'internal-boot/unlock')
 try {
  $flags=@('-std=c11','-O1','-Wall','-Wextra','-Werror','-Wno-unused-parameter','-Wno-unused-function','-D_CRT_SECURE_NO_WARNINGS','-D__KERNEL__','-DGU_UEFI_PORT','-DGU_PROFILE_EVGA_Z790_3090','-DGU_EVGA_TRANSACTION_DEVELOPMENT','-DGU_EXPERIMENTAL_3090','-DGU_ENTRY_LATCHED_SS1_FULL','-DGU_TARGET_PCI_ID=0x220410deU','-Icompat','-I../../deps/edk2/MdePkg/Include','-I../../deps/edk2/MdePkg/Include/X64')
- $src=@('tests/test_efi_transaction.c','port.c','compat.c','vendor/unlock_610.c','vendor/prep_610.c','vendor/layout_610.c','vendor/vbios_610.c','vendor/gfw_eval.c')
+ $src=@('tests/test_efi_transaction.c','checks.c','port.c','compat.c','vendor/unlock_610.c','vendor/prep_610.c','vendor/layout_610.c','vendor/vbios_610.c','vendor/gfw_eval.c')
  $exe=Join-Path $out 'evga-real-core-host.exe';& $Clang @flags @src -o $exe
  if($LASTEXITCODE -ne 0){throw 'Core host compile failed'}
  & $exe $Prom $Assets $config

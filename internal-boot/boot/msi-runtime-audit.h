@@ -1,7 +1,10 @@
-/* GPL-2.0-only. Identity audit; optional exact zero-child method test. */
+/* GPL-2.0-only. Pinned MSI lifecycle audit; only explicit GU_MSI_UNLOCK adds a transaction. */
 #pragma once
 #if !defined(GU_DIAGNOSTIC_ONLY) || !defined(GU_DIAGNOSTIC_PROBE) || !defined(GU_PROBE_GENERIC) || defined(GU_EVGA_STOP_ONLY) || defined(GU_FULL_UNLOCK)
 #error MSI audit is restricted to the generic observation build
+#endif
+#if defined(GU_EXPERIMENTAL_3090) && !defined(GU_MSI_UNLOCK)
+#error MSI write permission requires the explicit MSI transaction wrapper
 #endif
 #if defined(GU_MSI_MEMBERSHIP_AUDIT) && defined(GU_MSI_ZERO_CHILD_TEST)
 #error Membership observation excludes driver method execution
@@ -161,6 +164,9 @@ static EFI_STATUS GuMsiMembership(EFI_SYSTEM_TABLE *t,VOID *base,UINTN size,GU_M
 #ifdef GU_MSI_COLD_PROBE
 #ifndef GU_MSI_NVIDIA_RELEASE
 #error Cold probe requires verified NVIDIA child and parent release
+#endif
+#ifdef GU_MSI_UNLOCK
+static EFI_STATUS GuMsiSetTransactionGraph(EFI_SYSTEM_TABLE *,EFI_HANDLE,EFI_HANDLE,EFI_HANDLE,EFI_HANDLE,EFI_HANDLE);
 #endif
 #include "msi-cold-probe.h"
 #endif
@@ -344,6 +350,9 @@ static EFI_STATUS GuMsiRuntimeAudit(EFI_SYSTEM_TABLE *t,EFI_HANDLE self,GU_MSI_R
  if(record(NULL,"msi-nvidia-parent-post",s)!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
 #ifdef GU_MSI_COLD_PROBE
  if(s!=EFI_SUCCESS)return s;
+#ifdef GU_MSI_UNLOCK
+ s=GuMsiSetTransactionGraph(t,self,nvidiaParent,physical,controller,nvidiaBinding->DriverBindingHandle);if(s!=EFI_SUCCESS)return s;
+#endif
  s=GuMsiColdProbe(t,nvidiaParent,self,record);
  if(record(NULL,"msi-cold-probe-return",s)!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
  if(s!=EFI_SUCCESS)return s;

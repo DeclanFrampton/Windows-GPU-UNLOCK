@@ -504,3 +504,50 @@ hold; recovery remains unproven. No new GPU MMIO address/write, reset, DMA launc
 or firmware execution is added. The MSI transaction adapter remains unfinished.
 
 Validation: 24 CPU admission cases passed (hash decision mocked), including alternate valid SS0, wrong board/subsystem/BAR/command/capabilities/PROM decision/cold state/location and sentinel refusals. Six compiled full-cold helper cases using real SHA256 and the captured PCI fixture passed: success with262171 reads, changed final SS0 (262169 before hold), PCI read/location failure, wrong MSI subsystem and malformed capability pointer. Existing17 prefix and8 DMA regressions passed after harness changes. Full EFI PE/build passed43008bytes SHA256235c2975979b520965c5dcca6a31fa022dfaabb5b10e3424f1fc003210ff65b3, AMD64EFI,zero imports/IAT/delay imports,NX/ASLR. Fixed-source download/build and simulated USB backup/payload readback/collection/repeat/internal-disk refusal passed; result ZIP excludes ASSETS. No live exact-admission result or transaction execution is claimed.
+
+## 2026-11-01: live exact admission passed; first write-enabled MSI proposal
+
+Christian returned `christian-admission-result-6857814f77de404382a136a958af51e9.zip`.
+DIAG13 records successful exact admission, PM60/PCIe78/MSI68, immutable entry
+comparison, all preceding resource checks and the complete cleanup/Windows
+handoff preparation path. It explicitly says complete-no-unlock: there has
+still been no live MSI transaction execution or unlock proof at this point.
+
+The first write-enabled kit now selects the explicit development profile
+GU_PROFILE_MSI_H510_3090, which pins 220410de/38811462, BAR0 91000000..91ffffff,
+24 GiB and the captured PROM hash. It requires the dedicated attended wrapper
+and refuses automatic/internal/generic installer combinations. Standard profiles
+remain unchanged. The generic capture object is compiled separately under its
+existing read-only guards; per-source defines are recorded in the build manifest.
+The main image identifies itself as write-enabled before capture and on screen.
+
+The wrapper runs after the demonstrated release, payload residency, cold PROM,
+resource mapping and exact admission, while the original exclusive PCI claim
+is still held and MEMORY alone is enabled. It independently checks the released
+MSI graph and every parent protocol: only passive opens plus exactly its own
+exclusive claim are permitted. It revalidates payloads, config and entry state,
+then latches the same per-attempt SS0/SS1 reference once. It invokes the existing
+GA102 shared transaction core: GPU MMIO/PCI writes, BME, firmware upload and
+execution, DMA and one FLR are now possible. SS1 remains limited to one write
+of8 through the existing phase guard; the entry reference is not overwritten.
+
+A successful core return must also pass BME containment, quiescence, no retained
+allocations/maps/faults, fresh graph checks and two chip/memory/SS0=88888888,
+SS1=8 observations. Only then can normal decode-off, exclusive close, payload
+release and Windows continue. Every error holds; known core containment is not
+a blanket rollback, recovery guarantee or retry. A partial write/firmware/DMA
+failure can corrupt memory, hang or prevent Windows/GPU recovery. The new
+-AcceptUnlockRisk switch is required; no local tool executes the EFI or reboots.
+MSI-UNLOCK.ARMED is consumed before lifecycle calls and MSI-UNLOCK.STAGED blocks
+repeated staging. Attend one boot only. If Windows is absent after10 minutes,
+power off, remove USB and select normal Windows Boot Manager; do not retry/rearm.
+
+Collect always preserves EFI evidence and excludes prepared ASSETS. Only with
+complete successful EFI logging and two target observations does it run the
+existing pinned PyTorch benchmark once, using the already installed environment.
+It performs no install. An atomically spent benchmark marker prevents repeat
+workloads; repeat collection can carry forward the prior measurements. Failed
+or partial EFI logs skip the benchmark. Benchmark failures still produce the
+EFI result ZIP. Report whether Windows returned automatically or by manual
+power-off; benchmark data after a reboot does not prove the same GPU state was
+preserved. Permanent/unattended behavior and general compatibility are unproven.

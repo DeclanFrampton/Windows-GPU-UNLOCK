@@ -24,7 +24,7 @@ VOID GuCopyFromIo(VOID *D,const VOID *S,size_t N) {
   if(Gu.fault || Address<Gu.bar_base || Address-Gu.bar_base>Gu.bar_size ||
      N>Gu.bar_size-(Address-Gu.bar_base)){Gu.fault=TRUE;return;}
   Offset=Address-Gu.bar_base;
-#if defined(GU_PROFILE_EVGA_Z790_3090)
+#if defined(GU_PROFILE_EVGA_Z790_3090) || defined(GU_PROFILE_MSI_H510_3090)
   /* This card was captured with DWORD PROM reads. Do not silently change
      access width or permit an unqualified MMIO-copy range. */
   if(Offset!=0x300000 || N!=0x100000){Gu.fault=TRUE;return;}

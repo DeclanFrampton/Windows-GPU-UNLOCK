@@ -231,6 +231,13 @@ static EFI_STATUS Record(VOID *Context,const char *Event,EFI_STATUS Status) {
   if(s!=EFI_SUCCESS || written!=n)return EFI_DEVICE_ERROR;
   return Log->Flush(Log);
 }
+#ifdef GU_MSI_UNLOCK
+#include "msi-transaction-graph.h"
+static EFI_STATUS GuMsiRunTransaction(EFI_SYSTEM_TABLE *t,EFI_HANDLE parent,EFI_HANDLE self,EFI_PCI_IO_PROTOCOL *pci,const UINT32 entry[9],const VOID *prom,UINTN bytes,GU_MSI_RECORD record){
+ EFI_STATUS s=GuMsiTransaction(t,self,parent,pci,entry,prom,bytes,GuMsiPayloads,MsiTransactionGraph,record);
+ EFI_STATUS logged=record(NULL,"msi-unlock-transaction-return",s);return s==EFI_SUCCESS?logged:s;
+}
+#endif
 #ifndef GU_DIAGNOSTIC_ONLY
 static EFI_STATUS LoadUnlock(VOID) {
   EFI_FILE_PROTOCOL *file=NULL;
@@ -516,13 +523,19 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE Image,EFI_SYSTEM_TABLE *St) {
   GU_CONSOLE_FLOW_OPS ops={NULL,Prepare,PrepareChoice,CaptureConsole,DetachConsole,ReadyConsoleWindows,VerifyConsole,StartConsoleWindows,Record};
   s=GuConsoleFlow(&ops);
 #elif defined(GU_DIAGNOSTIC_ONLY)
-#ifdef GU_MSI_ONE_CHILD_TEST
+#if defined(GU_MSI_UNLOCK)
+  Say(L"ATTENDED MSI UNLOCK ATTEMPT. GPU writes, DMA, firmware execution and reset may occur. Recovery unproven.\r\n");
+#elif defined(GU_MSI_ONE_CHILD_TEST)
   Say(L"MSI attended one-child text removal. Screen may freeze. No unlock. Windows follows only verified success.\r\n");
 #else
   Say(L"GPU console diagnostic only. No unlock or driver detach. Collecting graph...\r\n");
 #endif
   s=Prepare(NULL);
   if(s==EFI_SUCCESS) {
+#ifdef GU_MSI_UNLOCK
+    s=Record(NULL,"msi-unlock-write-enabled-image",EFI_SUCCESS);
+    if(s==EFI_SUCCESS)
+#endif
     s=GuCaptureGraphOnVolume(Table,Log,Root);
     /* Partial observations never authorize unlock. The optional one-child
      * test below requires successful post-removal checks before Windows. */
@@ -531,7 +544,9 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE Image,EFI_SYSTEM_TABLE *St) {
     if(s==EFI_SUCCESS){
       EFI_FILE_PROTOCOL *arm=NULL;
       s=Table->BootServices->SetWatchdogTimer(0,0,0,NULL);
-#if defined(GU_MSI_COLD_PROBE)
+#if defined(GU_MSI_UNLOCK)
+      if(s==EFI_SUCCESS)s=Root->Open(Root,&arm,L"MSI-UNLOCK.ARMED",EFI_FILE_MODE_READ|EFI_FILE_MODE_WRITE,0);
+#elif defined(GU_MSI_COLD_PROBE)
       if(s==EFI_SUCCESS)s=Root->Open(Root,&arm,L"MSI-COLD-PROBE.ARMED",EFI_FILE_MODE_READ|EFI_FILE_MODE_WRITE,0);
 #elif defined(GU_MSI_NVIDIA_RELEASE)
       if(s==EFI_SUCCESS)s=Root->Open(Root,&arm,L"MSI-NVIDIA-RELEASE.ARMED",EFI_FILE_MODE_READ|EFI_FILE_MODE_WRITE,0);
