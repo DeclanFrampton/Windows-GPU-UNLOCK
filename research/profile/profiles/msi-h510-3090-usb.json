@@ -15,6 +15,7 @@
   "same_boot_performance_contributor_confirmed": true,
   "automatic_unlock": false,
   "permanent_unlock": false,
+  "normal_restart_performance_persisted": false,
   "shared_esp_qualified": false,
   "reusable_rearm_package_qualified": false,
   "general_hardware_compatibility": false,

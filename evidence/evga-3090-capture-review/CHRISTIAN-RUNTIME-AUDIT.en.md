@@ -662,3 +662,21 @@ install or write firmware/USB. Same benchmark load risks apply; a hang/error sto
 further attempts. Windows PowerShell5.1 CPU fixtures passed stderr warning/exit0,
 exit2/partial ZIP, no stale-measurement reuse, repeat refusal and same-boot refusal.
 The optional normal-restart comparison is not proof of cold-power persistence.
+
+## 2026-11-01 normal restart returned performance near baseline
+
+Christian's `christian-post-restart-b4c6f41e38854dc8a01f4edc8680b2e7.zip`
+(message1566599328922083398) recorded a later Windows boot at
+2026-11-01T23:44:35.5000000Z, fresh measurements (not reused), exit0 and error=null.
+Medians: FP32 23.2130, FP16 output66.9916, BF16 output70.6781, TF3233.7323 TFLOPS.
+Relative to original baseline: 0.9882x,0.9955x,1.0337x,0.9966x. The prior tensor
+uplift did not persist across this normal restart without an unlock rerun.
+This supports preparing a per-boot flow, not claiming a permanent hardware unlock.
+Do not repeat the old arm or erase its receipt to recover the gains.
+
+Reusable package preparation now builds an integrity-described EFI/profile/source
+payload and fresh local PreparedNotInstalled state. Its policy explicitly disables
+rearm/unattended execution. See docs/MSI-INSTALLER.en.md for durable per-attempt
+receipts, failure latches, restoration ownership and review gates still required.
+The preparation-only Windows handoff builds/checks this package locally without
+GPU workload, USB/ESP writes, NVIDIA asset copying, arm creation or reboot.

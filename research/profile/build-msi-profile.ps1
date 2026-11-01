@@ -1,5 +1,5 @@
 # Build a reusable, integrity-described payload. Does not install, arm, reboot or bundle NVIDIA assets.
-param([Parameter(Mandatory)][string]$OutputDirectory,
+param([Parameter(Mandatory)][string]$OutputDirectory,[ValidatePattern('^[0-9a-f]{40}$')][string]$SourceRevision,
  [string]$Clang='clang',[string]$LldLink='lld-link',[string]$Python='python')
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'msi-package-lib.ps1')
@@ -33,9 +33,10 @@ GPL-2.0 source hashes and per-object build flags: source-manifest.json.
 [IO.File]::WriteAllText((Join-Path $out 'README.md'),$readme,[Text.UTF8Encoding]::new($false))
 $files=@{'UNLOCK.EFI'=(Join-Path $build 'BOOTX64.EFI');'profile.json'=(Join-Path $PSScriptRoot 'profiles/msi-h510-3090-usb.json');'assets.json'=(Join-Path $repo 'internal-boot/unlock/assets.json');'source-manifest.json'=(Join-Path $build 'manifest.json');'pe-verification.json'=(Join-Path $build 'pe-verification.json');'LICENSE'=(Join-Path $repo 'LICENSE')}
 foreach($name in $files.Keys){Copy-Item -LiteralPath $files[$name] -Destination (Join-Path $out $name)}
-$revision=(& git -C $repo rev-parse HEAD).Trim();if($LASTEXITCODE -ne 0){throw 'Cannot record source revision'}
+if($SourceRevision){$revision=$SourceRevision;$dirty=$null}
+else{$revision=(& git -C $repo rev-parse HEAD).Trim();if($LASTEXITCODE -ne 0){throw 'Cannot record source revision'};$dirty=(@(& git -C $repo status --porcelain).Count -gt 0)}
 $inventory=@(Get-ChildItem -LiteralPath $out -File|Sort-Object Name|ForEach-Object {[ordered]@{Name=$_.Name;Bytes=$_.Length;Sha256=(Get-MsiPackageHash $_.FullName)}})
-[ordered]@{Schema='msi-attended-preparation-v1';ProfileId='msi-h510-3090-usb';Layout='Usb';SourceCommit=$revision;SourceTreeDirty=(@(& git -C $repo status --porcelain).Count -gt 0);AutomaticUnlock=$false;PermanentUnlock=$false;RearmEnabled=$false;AssetsBundled=$false;PackageHardwareTested=$false;Files=$inventory}|ConvertTo-Json -Depth 8|Set-Content -LiteralPath (Join-Path $out 'package.json') -Encoding utf8
+[ordered]@{Schema='msi-attended-preparation-v1';ProfileId='msi-h510-3090-usb';Layout='Usb';SourceCommit=$revision;SourceTreeDirty=$dirty;AutomaticUnlock=$false;PermanentUnlock=$false;RearmEnabled=$false;AssetsBundled=$false;PackageHardwareTested=$false;Files=$inventory}|ConvertTo-Json -Depth 8|Set-Content -LiteralPath (Join-Path $out 'package.json') -Encoding utf8
 $null=Assert-MsiPackage $out
 Compress-Archive -LiteralPath $out -DestinationPath ($out+'.zip')
 [ordered]@{package=$out;zip=($out+'.zip');staged=$false;armed=$false;rearm_enabled=$false;hardware_tested=$false}|ConvertTo-Json
