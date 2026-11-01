@@ -100,6 +100,28 @@ class CompatibilityTests(unittest.TestCase):
         self.populate(count=1)
         self.assert_reason('needs_data', 'capture_count')
 
+    def test_explicit_envelope_refusal_is_explained_without_profile_analysis(self):
+        text = ('incomplete reason=probe-unreviewed-envelope status=0x8000000000000003\n'
+                'capture-complete=0\ndiagnostic-result status=0x8000000000000006\n')
+        for index in range(2):
+            (self.folder / f'DIAG{index:02d}.TXT').write_text(text, encoding='ascii')
+        with patch.object(checker.mp, 'analyze', side_effect=AssertionError('no profile analysis')):
+            self.assert_reason('invalid_data', 'probe_envelope_refused')
+        result = self.result()
+        self.assertEqual([x['available'] for x in result['observations']], [False, False])
+        with self.assertRaises(checker.mp.Refused):
+            checker.mp.parse_handles(text)
+
+    def test_ambiguous_or_conflicting_refusal_markers_remain_invalid_graph(self):
+        base = ('incomplete reason=probe-unreviewed-envelope status=0x8000000000000003\n'
+                'capture-complete=0\ndiagnostic-result status=0x8000000000000006\n')
+        for extra in ('capture-complete=1\n',
+                      'diagnostic-result status=0x0000000000000000\n',
+                      'incomplete reason=PRIVATE-UNTRUSTED status=0x1\n'):
+            for index in range(2):
+                (self.folder / f'DIAG{index:02d}.TXT').write_text(base + extra, encoding='ascii')
+            self.assert_reason('invalid_data', 'invalid_graph')
+
     def test_secondary_display_path_must_agree_across_cold_boots(self):
         for no_edid in (False, True):
             with self.subTest(no_edid=no_edid):
