@@ -26,12 +26,45 @@ REASONS = {
 }
 
 
+def path_observation(line):
+    match = re.fullmatch(r'path-node raw=([0-9a-f]{8,8192})', line)
+    if not match or len(match[1]) % 2:
+        return None
+    node = bytes.fromhex(match[1])
+    size = int.from_bytes(node[2:4], 'little')
+    if size != len(node) or size < 4:
+        return None
+    result = f'path-node type=0x{node[0]:02x} subtype=0x{node[1]:02x} bytes=0x{size:04x}'
+    if node[:2] == b'\x01\x01':
+        if size != 6 or node[4] > 7 or node[5] > 31:
+            return None
+        result += f' function=0x{node[4]:02x} device=0x{node[5]:02x}'
+    # No payload from ACPI, GUID/vendor, media, network or file path nodes.
+    return result
+
+
 def summarize(data):
     if len(data) > 8 * 1024 * 1024:
         raise ValueError('Log too large')
     text = data.decode('utf-8-sig').replace('\r\n', '\n')
     records = []
+    handle = None
+    protocol = None
     for line in text.splitlines():
+        if re.fullmatch(r'handle id=0x[0-9a-f]{1,16}', line):
+            handle = line
+            protocol = None
+        elif re.fullmatch(r'protocol guid=[0-9a-f-]{36}', line):
+            protocol = line.partition('=')[2]
+        if handle and protocol == '09576e91-6d3f-11d2-8e39-00a0c969723b':
+            observation = path_observation(line)
+            if observation:
+                records.append(observation)
+                continue
+        failure = re.fullmatch(r'incomplete reason=([a-z-]+) status=(0x[0-9a-f]{16})', line)
+        if handle and failure and failure[1] in REASONS:
+            records.append(line)
+            continue
         if re.fullmatch(r'pci config-dwords=(?:[0-9a-f]{8} ){16}', line):
             records.append(line.rstrip())
             continue
@@ -74,7 +107,7 @@ def main():
         with path.open('rb') as stream:
             data = stream.read(8 * 1024 * 1024 + 1)
         reports.append({'capture': path.name, **summarize(data)})
-    output.write_text(json.dumps({'test': 'graph-only-v2', 'hardware_verified': False,
+    output.write_text(json.dumps({'test': 'graph-only-v3', 'hardware_verified': False,
                                  'write_eligible': False, 'captures': reports}, indent=2), encoding='utf-8')
 
 
