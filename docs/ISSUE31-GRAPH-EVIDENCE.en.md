@@ -1,6 +1,6 @@
 # Issue31 graph evidence review
 
-[한국어](ISSUE31-GRAPH-EVIDENCE.ko.md)
+[í•œêµ­ì–´](ISSUE31-GRAPH-EVIDENCE.ko.md)
 
 Source: issue31 comment6560657107 and attachment34242809 graph-summary.json,
 reviewed 2026-11-01. This is contributor-supplied sanitized evidence, not a
@@ -12,8 +12,9 @@ success status, no incomplete reasons and5,328 records each. DIAG00 raw-log hash
 DIAG01 hash:
 `3128b7968eb3f474219baccf240bcc348d6da13f39a75d78d821826fa1c5ef02`.
 The reporter says Windows started automatically without manual recovery; the
-number of boots and which log corresponds to that outcome remain unconfirmed.
-Do not request another boot just to clarify existing evidence.
+reporter subsequently disclosed two accidental USB boots. Preserve them as two
+separate observations, without claiming independent full-shutdown provenance.
+Do not request another graph boot just to clarify existing evidence.
 
 Both streams report NVIDIA2204/10de:147d at segment0,bus8,device0,function0;
 config command bits show memory decode enabled and bus mastering disabled at
