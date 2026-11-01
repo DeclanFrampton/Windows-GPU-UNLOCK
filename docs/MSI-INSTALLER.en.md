@@ -66,3 +66,20 @@ NX/ASLR). Windows PowerShell5.1 checked package inventory/local-state creation,
 existing/nested-state refusal, altered/missing file refusal, duplicate inventory
 refusal and automatic-policy refusal. No hardware execution was performed.
 These are correctness checks, not authenticity signatures or live install proof.
+
+## Prepared attempt identity
+
+Local preparation also writes Attempts/attempt-0001.json with a random immutable
+attempt ID, package/EFI/asset-manifest hashes and the reviewed DIAG14 evidence
+hash. File creation uses CreateNew, exclusive access and a durable Flush(true),
+then reads back its identity/binding. It is PreparedNotArmed and explicitly not
+execution authorization. An existing attempt directory entry blocks another
+plan, including pending, failed or ambiguous state. Records are never overwritten.
+This is the host preparation foundation; EFI STARTED/FINISHED receipt production
+and successful-result-driven creation of attempt2 remain to be implemented.
+No current helper can turn this plan into an arm marker.
+
+Tests additionally verify correct binding, pending-plan refusal and preservation
+of the original file hash after an attempted overwrite. The one-script contributor
+preparation is pinned to the preceding preparation revision; do not silently
+upgrade or replace an existing contributor state to add this newer journal.

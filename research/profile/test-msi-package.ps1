@@ -1,6 +1,7 @@
 param([Parameter(Mandatory)][string]$PackageDirectory)
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'msi-package-lib.ps1')
+. (Join-Path $PSScriptRoot 'msi-attempt-lib.ps1')
 $source=[IO.Path]::GetFullPath($PackageDirectory);$null=Assert-MsiPackage $source
 $temp=Join-Path $env:TEMP ('msi-package-'+[guid]::NewGuid().ToString('N'));[void][IO.Directory]::CreateDirectory($temp)
 $manager=Join-Path $PSScriptRoot 'prepare-msi-install.ps1'
@@ -8,6 +9,12 @@ $state=Join-Path $temp 'state';$null=& $manager -PackageDirectory $source -State
 $plan=Get-Content -LiteralPath (Join-Path $state 'installation-plan.json') -Raw|ConvertFrom-Json
 if($plan.Installed -or $plan.Armed -or $plan.FirmwareWritten -or $plan.AttendedRearm.Enabled -or $plan.Unattended.Enabled -or $plan.Persistence.Proven){throw 'Preparation unexpectedly enabled execution'}
 function Refused([scriptblock]$Action){$blocked=$false;try{& $Action|Out-Null}catch{$blocked=$true};if(!$blocked){throw 'Expected refusal'}}
+$attempt=Get-Content -LiteralPath $plan.AttemptPlan -Raw|ConvertFrom-Json
+if($attempt.State -cne 'PreparedNotArmed' -or $attempt.AuthorizationToExecute -or $attempt.AttemptId -cnotmatch '^[0-9a-f]{32}$' -or $attempt.PackageSha256 -cne $plan.PackageSha256){throw 'Attempt binding failed'}
+$before=Get-MsiPackageHash $plan.AttemptPlan
+Refused {New-MsiAttemptPlan $state (Join-Path $state 'Package') $attempt.PriorEvidenceSha256}
+Refused {Write-MsiNewRecord $plan.AttemptPlan @{State='Modified'}}
+if((Get-MsiPackageHash $plan.AttemptPlan) -cne $before){throw 'Existing attempt changed'}
 Refused {& $manager -PackageDirectory $source -StateDirectory $state}
 Refused {& $manager -PackageDirectory $source -StateDirectory (Join-Path $source 'nested-state')}
 foreach($mode in @('tamper','missing','automatic','duplicate')){
