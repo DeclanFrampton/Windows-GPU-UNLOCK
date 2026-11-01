@@ -181,3 +181,37 @@ Windows 실패가 가능하고 복구는 검증되지 않았으며 자동 복원
 직접 지켜보며 한 번만 부팅합니다. 2분 뒤 Windows가 없으면 전원을 끄고 USB를
 제거한 뒤 정상 Windows Boot Manager로 부팅합니다. 재시도하지 않습니다.
 Collect는 C:\GPU-Unlock\Results의 christian-graphics-result ZIP을 만듭니다.
+
+## DIAG07 그래픽 멤버십 성공과 EDID/NVIDIA 메타데이터 테스트
+DIAG07의 기존 텍스트 단계, 새 그래픽 계획, 그래픽 Stop 반환, 빈 컨트롤러
+목록, GOP 소유권 해제 및 스냅샷 버퍼 할당이 성공했습니다. 진단도 성공입니다.
+검사한 멤버십 전환과 할당의 증거이며 복사 정확성, NVIDIA 해제 또는 잠금
+해제의 증거는 아닙니다. Christian의 실제 GOP에는 EDID 핸들이 하나이며
+EVGA 테스트 머신의 세 핸들과 다릅니다. 소비자는 IMG07, 이미지0x9000, 버전1,
+Stop0x149c, 코드RVA0x1000/14178바이트, SHA256
+333b27054df5e7d197238b860fe04e8e618712b533d1608ee9056e1b2435fcb2입니다.
+
+다음 MsiEdidTest는 검증된 단계를 반복하고 이 소비자 Stop을 자식 0개로
+호출합니다. 변경 전과 호출 직전에 정확한 코드 및 유일한 EDID 소유권을
+요구합니다. 이후 소유권이 없고 드라이버의0x5501 플래그가 0이어야 합니다.
+정상 EDID 존재 경로와 닫기 오류 경로를 격리 에뮬레이션으로 검증했습니다.
+첫 OpenProtocol 실패는 다른 펌웨어 경로에 진입하며 그 경계만 감지하고
+실행/검증하지 않았습니다. 실제 동작의 명시적 위험으로 남습니다.
+
+동일 부팅에서 NVIDIA 코드/메타데이터를 전후로 확인합니다. nvgop-ga1xx는
+이미지0x2b700, 버전0x60009, Stop0x698, 코드RVA0x280/146818바이트, SHA256
+d045cee2113e461c7c678ec21542b1d0f18356765c0fc6a0bf2dcf824088e011입니다.
+실제 GOP로의 유일한 부모 DevicePath BY_CHILD 관계와 일치하는 PCI_IO
+BY_DRIVER 소유권을 요구합니다. NVIDIA Stop이나 새 GPU MMIO/PCI 설정
+읽기는 없습니다. 관찰 결과는 NVIDIA 콜백이나 잠금 해제를 허용하지 않습니다.
+컴파일한 도우미는 EDID 합성 검사10개와 NVIDIA 검사8개를 통과했습니다.
+EFI PE, 고정 소스 다운로드/빌드 및 모의 USB 백업/해시/수집/거부 검사도
+통과했습니다. 실제 EDID 결과는 아직 없습니다.
+
+run-christian-edid.ps1 -Drive G -AcceptRisk는 소비되는 MSI-EDID.ARMED를
+사용합니다. 새 Stop은 검증되지 않은 대체 경로, 화면/입력 영향, 멈춤 또는
+Windows 부팅 실패를 일으킬 수 있습니다. 복구는 검증되지 않았고 자동 복원/
+재시도는 없습니다. 직접 지켜보며 한 번만 부팅하며 키는 필요 없습니다.
+2분 뒤 Windows가 없으면 전원을 끄고 USB를 제거한 뒤 정상 Windows Boot
+Manager로 부팅합니다. 재무장하지 않습니다. Collect는 C:\GPU-Unlock\Results의
+christian-edid-result ZIP을 만듭니다.

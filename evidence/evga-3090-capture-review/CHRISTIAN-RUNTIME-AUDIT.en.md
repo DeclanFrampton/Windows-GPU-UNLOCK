@@ -187,3 +187,38 @@ Windows boot; recovery is unproven and no automatic restoration exists. Boot
 once attended; after two minutes without Windows, power off, remove USB and
 select normal Windows Boot Manager. Do not retry. Collect packages
 christian-graphics-result under C:\GPU-Unlock\Results.
+
+## DIAG07 graphics membership success and EDID/NVIDIA metadata test
+DIAG07 records successful prior text stages, fresh graphics plan, graphics Stop
+return, empty controller list, closed GOP ownership and allocated snapshot buffer.
+Diagnostic result is success. This proves the checked membership transition and
+allocation, not framebuffer-copy correctness, NVIDIA release or unlock.
+
+Christian has one EDID-discovered handle on the physical GOP, not the EVGA test
+machine's three. Its consumer is IMG07, image0x9000, version1, Stop0x149c, code
+RVA0x1000/14178 bytes, SHA256
+333b27054df5e7d197238b860fe04e8e618712b533d1608ee9056e1b2435fcb2.
+The next MsiEdidTest repeats the proven sequence, then invokes this one consumer
+Stop with zero children. Exact code plus unique EDID ownership is required before
+any mutation and again before this call. Afterwards its ownership must be gone
+and the driver's flag at0x5501 must be zero. Normal EDID-present success and
+close-error branches passed isolated emulation. A failing first OpenProtocol
+reaches alternate firmware paths; the emulator detected that boundary but did
+not execute/qualify those paths. Real behavior remains an explicit risk.
+
+The same boot audits NVIDIA code and protocol metadata before/after: exact
+nvgop-ga1xx image0x2b700, version0x60009, Stop0x698, codeRVA0x280/146818 bytes,
+SHA256 d045cee2113e461c7c678ec21542b1d0f18356765c0fc6a0bf2dcf824088e011.
+The audit requires a unique parent DevicePath BY_CHILD relation to the physical
+GOP and matching PCI_IO BY_DRIVER ownership. It calls no NVIDIA Stop and reads
+no new GPU MMIO registers or PCI config offsets. These observations do not qualify
+NVIDIA callback semantics or authorize unlock. Compiled metadata helpers passed
+10 EDID and8 NVIDIA synthetic cases. EFI PE plus fixed-source download/build and
+simulated USB backup/readback/collection/refusal passed. No live EDID result yet.
+
+run-christian-edid.ps1 -Drive G -AcceptRisk uses consumed MSI-EDID.ARMED. The new
+firmware Stop may take unqualified fallback paths, affect display/input, hang or
+prevent Windows boot. Recovery remains unproven; no automatic rollback/retry.
+Boot once attended, no keys. After two minutes without Windows, power off,
+remove USB and choose normal Windows Boot Manager. Do not rearm. Collect returns
+christian-edid-result ZIP in C:\GPU-Unlock\Results.
