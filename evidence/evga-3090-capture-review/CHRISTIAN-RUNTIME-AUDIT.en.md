@@ -490,7 +490,7 @@ New optional -MsiAdmission adds a CPU-only exact admission rule in
 internal-boot/unlock/msi-admission.h: MSI 2204:38811462, bus1/function0, BAR0
 91000000, captured PROM hash, bounded valid PM/PCIe/MSI capability chain, command2,
 FLR capability and inactive MSI, exact known cold engine/feature/memory values.
-SS0 is checked for supported stock values, not pinned across boots. The first
+SS0 rejects all-ones, BADF and already-at-target values; it is not pinned across boots. The first
 cold batch is retained as an immutable per-attempt reference. The second batch
 and a final nine-read sample after mapping must match it; an unexpected change
 holds rather than overwriting that reference. Fresh location and 256-byte PCI
@@ -502,3 +502,5 @@ the proven payload/mapping path, adding nine reads at existing GPU addresses
 decode-off/ownership/payload release and Windows route. A new guard refusal can
 hold; recovery remains unproven. No new GPU MMIO address/write, reset, DMA launch
 or firmware execution is added. The MSI transaction adapter remains unfinished.
+
+Validation: 24 CPU admission cases passed (hash decision mocked), including alternate valid SS0, wrong board/subsystem/BAR/command/capabilities/PROM decision/cold state/location and sentinel refusals. Six compiled full-cold helper cases using real SHA256 and the captured PCI fixture passed: success with262171 reads, changed final SS0 (262169 before hold), PCI read/location failure, wrong MSI subsystem and malformed capability pointer. Existing17 prefix and8 DMA regressions passed after harness changes. Full EFI PE/build passed43008bytes SHA256235c2975979b520965c5dcca6a31fa022dfaabb5b10e3424f1fc003210ff65b3, AMD64EFI,zero imports/IAT/delay imports,NX/ASLR. Fixed-source download/build and simulated USB backup/payload readback/collection/repeat/internal-disk refusal passed; result ZIP excludes ASSETS. No live exact-admission result or transaction execution is claimed.
