@@ -2,7 +2,7 @@
 [CmdletBinding()]
 param([ValidatePattern('^[a-z][a-z0-9-]{0,63}$')][string]$Machine='issue114',
  [ValidatePattern('^[D-Zd-z]$')][string]$Drive,[switch]$Collect,
- [string]$Clang='clang',[string]$LldLink='lld-link',[string]$Python='python',[string]$OutputRoot)
+ [string]$Clang='clang',[string]$LldLink='lld-link',[string]$Python='python',[string]$OutputRoot,[switch]$PackagedProbe)
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'collection-host.ps1')
 function ProbeHash([string]$Path){
@@ -159,11 +159,20 @@ if($windows.Count -ne 1 -or $windows[0].DiskNumber -eq $part.DiskNumber){throw '
 Write-Host 'NEW boundary: PCI resource/attribute/parent reads, 16 fixed target BAR0 DWORDs and full 1 MiB PROM (up to 262160 direct MMIO reads), plus loaded firmware-driver image copies from CPU memory.'
 Write-Host 'No GPU/PCI writes, driver detach, reset, GPU firmware execution/upload or unlock. Reads may have side effects; display/input/firmware or Windows may hang. Recovery is unproven.'
 Write-Host 'Manual power-off/USB removal and normal Windows Boot Manager may be needed. No automatic retry or rollback. Existing USB captures are renamed to a preserved archive.'
+if($PackagedProbe){
+ if($Machine -cne 'issue172' -or (Read-Host 'Only if the reviewed graph run returned directly to Windows without manual recovery, type GRAPH-DIRECT; otherwise stop and report') -cne 'GRAPH-DIRECT'){throw 'Previous graph return is not confirmed direct. No new hardware preparation.'}
+}
 if((Read-Host 'Accept ONE attended capture? Type ACCEPT-MMIO to prepare; anything else stops') -cne 'ACCEPT-MMIO'){throw 'Stopped without staging.'}
-& (Join-Path $PSScriptRoot 'build-probe.ps1') -WindowsEspGuid ([guid]$windows[0].Guid) -TargetBus $configuration.TargetBus -ExpectedDevice $configuration.TargetDevice -ExpectedSubsystem $configuration.TargetSubsystem -Clang $Clang -LldLink $LldLink -Python $Python
-if(!$?){throw 'Probe build failed.'}
+if($PackagedProbe){
+ . (Join-Path $PSScriptRoot 'resource-template.ps1')
+ $built=New-GuResourceTemplate $repo ([guid]$windows[0].Guid) $Machine (Join-Path $repo ('internal-boot/boot/build/probe-pinned-'+[guid]::NewGuid().ToString('N')))
+}else{
+ & (Join-Path $PSScriptRoot 'build-probe.ps1') -WindowsEspGuid ([guid]$windows[0].Guid) -TargetBus $configuration.TargetBus -ExpectedDevice $configuration.TargetDevice -ExpectedSubsystem $configuration.TargetSubsystem -Clang $Clang -LldLink $LldLink -Python $Python
+ if(!$?){throw 'Probe build failed.'}
+ $built=Join-Path $repo 'internal-boot/boot/build/probe-generic'
+}
 . (Join-Path $PSScriptRoot 'probe-manifest.ps1')
-$built=Join-Path $repo 'internal-boot/boot/build/probe-generic';$image=Join-Path $built 'BOOTX64.EFI'
+$image=Join-Path $built 'BOOTX64.EFI'
 $manifest=Get-Content -LiteralPath (Join-Path $built 'manifest.json') -Raw | ConvertFrom-Json
 Assert-GuGenericProbeManifest $repo $manifest $image
 if($manifest.ExpectedDevice -cne $configuration.TargetDevice -or $manifest.ExpectedSubsystem -cne $configuration.TargetSubsystem -or $manifest.ExpectedSegment -ne 0 -or $manifest.TargetBus -ne $configuration.TargetBus){throw 'Probe pins do not match the selected configuration.'}
