@@ -1,6 +1,6 @@
 # Default is offline synthetic testing. Record/Verify only read Windows state.
 [CmdletBinding()]
-param([ValidateSet('SelfTest','Record','Verify')][string]$Mode='SelfTest',[string]$Machine,[string]$Baseline)
+param([ValidateSet('SelfTest','Record','Verify')][string]$Mode='SelfTest',[string]$Machine,[string]$Baseline,[switch]$PassThru)
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'encryption-state.ps1')
 . (Join-Path $PSScriptRoot 'policy-baseline.ps1')
@@ -92,5 +92,6 @@ if($Mode -ceq 'Record'){
 }else{$report=Compare-GuPolicyBaseline $before $current}
 $report|ConvertTo-Json -Depth 6|Set-Content -LiteralPath (Join-Path $out 'policy-check.json') -Encoding utf8
 Write-Host ('Local folder: '+$out+'. Keep baseline.json private/local. Only policy-check.json is shareable after review. No settings changes or EFI authorization.')
+if($PassThru){[pscustomobject]@{OutputFolder=$out;BaselinePath=(Join-Path $out 'baseline.json');ReportPath=(Join-Path $out 'policy-check.json')}}
 
 }catch{Write-Error 'Read-only policy baseline could not be completed. Preserve existing files and settings; do not share raw provider errors or baseline.json.';exit 1}
