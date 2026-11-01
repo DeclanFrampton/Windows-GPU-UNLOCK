@@ -38,3 +38,5 @@ Record는 기존 기준을 덮어쓰지 않습니다. Verify는 원래 기준을
 
 Windows API:
 [Get-SecureBootUEFI](https://learn.microsoft.com/en-us/powershell/module/secureboot/get-securebootuefi?view=windowsserver2025-ps).
+
+캡처된 암호화/보호 해제 fixture는 보고된 Device Encryption 상태를 재생합니다. 공개 변수 조회 전에 거부합니다. 암호화가 자동이었는지 의도적이었는지는 허용 입력이 아닙니다. fixture는 clear-key/보호자 출처나 복구를 검증하지 않습니다.

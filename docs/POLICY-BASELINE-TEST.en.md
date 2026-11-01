@@ -40,3 +40,5 @@ Stop on any unknown/mismatch/error; do not install/change/repair to pass.
 
 Windows API reference:
 [Get-SecureBootUEFI](https://learn.microsoft.com/en-us/powershell/module/secureboot/get-securebootuefi?view=windowsserver2025-ps).
+
+The captured encrypted/protection-off fixture replays a reported Device Encryption state. It is refused before any public-variable query. Whether encryption was automatic or deliberate is not an admission input. The fixture does not verify clear-key/protector provenance or recovery.

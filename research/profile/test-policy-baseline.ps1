@@ -23,6 +23,12 @@ if($Mode -ceq 'SelfTest'){
  $refused=$false;try{New-GuPolicyBaseline 'issue135' ('a'*64) $false $enc $bcd $query}catch{$refused=$true};if(!$refused){throw 'Disabled policy baseline accepted'}
  $enc.ConversionState='fully-encrypted';$refused=$false
  try{New-GuPolicyBaseline 'issue135' ('a'*64) $true $enc $bcd $query}catch{$refused=$true};if(!$refused){throw 'Encrypted baseline accepted'}
+ # Captured numeric-state regression: encrypted/protection-off cannot record a
+ # baseline, regardless of automatic provisioning or the user's intent.
+ $captured=Get-Content -LiteralPath (Join-Path $PSScriptRoot 'fixtures/device-encryption-protection-off.json') -Raw|ConvertFrom-Json
+ $script:VariableReads=0;$refused=$false
+ try{New-GuPolicyBaseline 'issue135' ('a'*64) $true $captured $bcd {param($name) $script:VariableReads++;throw 'Public variable query should not occur'}}catch{$refused=$true}
+ if(!$refused -or $script:VariableReads -ne 0){throw 'Encrypted captured state reached public variable reads'}
  $enc.ConversionState='fully-decrypted';$refused=$false
  try{New-GuPolicyBaseline 'issue135' ('a'*64) $true $enc $bcd {throw 'PRIVATE-ERROR'}}catch{$refused=$true;if($_.Exception.Message.Contains('PRIVATE')){throw 'Provider error leaked'}}
  if(!$refused){throw 'Missing variable accepted'}
@@ -33,7 +39,7 @@ if($Mode -ceq 'SelfTest'){
  $before|ConvertTo-Json -Depth 10|Set-Content -LiteralPath $path -Encoding utf8
  $roundtrip=Get-Content -LiteralPath $path -Raw|ConvertFrom-Json
  if((Compare-GuPolicyBaseline $before $roundtrip).Status -cne 'observations-match'){throw 'Serialized baseline changed'}
- Write-Host 'PASS: public-variable/configuration drift, malformed/disabled/encrypted/unavailable refusals, privacy and file roundtrip. No Windows queries.';exit
+ Write-Host 'PASS: public-variable/configuration drift, malformed/disabled/encrypted/unavailable refusals, privacy, captured-state early stop and file roundtrip. No Windows queries.';exit
 }
 try {
 $repo=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
