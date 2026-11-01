@@ -57,3 +57,5 @@ Windows ESP GUID가 비어 있는 fixture는 절대로 부팅하지 마세요.
 구성의 `KnownNonPciAdapters`는 추가적인 비 PCI Windows 열거자를 제한할 수 있습니다. 각 항목은 정확히 하나 존재하고, 내부 장치 인스턴스 연결 및 공급자/버전이 일치하는 서명된 DISPLAY 드라이버 항목 하나와 연결되어야 합니다. 이는 준비용 신원 관측값이며 펌웨어 소유권이나 신뢰 증명이 아닙니다. issue31은 반환된 Windows 보고서의 LCI/LuminonCore/1.0.2018.1204만 제한적으로 허용합니다. 누락/추가/변경/미서명/연결 불명 항목은 중지됩니다. ROOT/SWD 동작은 유지됩니다. 열거자의 전역 허용이나 해제/잠금 해제 허용은 아닙니다.
 
 issue173은 MSI MEG Z790 ACE (MS-7D86)/BIOS1.G0/i9-13900K, EVGA2216/3842:4897 및 IntelA780/1462:7d86으로 제한됩니다. RTX의 DisplayPort+HDMI 연결과 보고된 TV 꺼짐 상태를 유지하세요. issue185는 ASRock A520M-ITX/ac/P3.90/RyzenPRO4650GE 및 Windows의 유일한 PCI 디스플레이 어댑터 ASUS2507/1043:887c로 제한됩니다. 펌웨어/iGPU 상태나 케이블을 변경하지 마세요. Windows 목록은 펌웨어 iGPU 부재의 증거가 아닙니다. 두 구성은 공통 그래프 전용 테스트를 재사용하며 다른 GPU의 잠금 해제 프로필을 사용하지 않습니다.
+
+issue51은 ASUS TUF GAMING X570-PLUS (WI-FI)/BIOS4002/Ryzen5900X 및 유일한 ASUS RTX3090 2204/1043:87b3으로 제한됩니다. HDMI 모니터 두 개와 현재 설정을 유지하세요. VBIOS94.02.42.00.b4/기본 이력 및 Secure Boot 꺼짐은 기여자의 보고이며 준비 시 현재 정책/Windows 신원을 검사합니다. issue38과 GPU/VBIOS가 같아도 이 보드나 소유권 그래프가 검증되는 것은 아닙니다. 같은 그래프 전용 명령의 `-Machine issue51`과 위 수락/백업/한 번 부팅/중지/복구 및 요약 하나 수집 규칙을 사용합니다. 프로브 MMIO나 다른 머신의 잠금 해제 프로필은 허용되지 않습니다.
