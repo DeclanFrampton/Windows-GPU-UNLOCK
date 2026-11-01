@@ -33,3 +33,22 @@ USB and choose normal Windows Boot Manager. Do not retry a failed run; return
 captures and say whether Windows started automatically. Recovery is unproven.
 The result sought is msi-text-code-match and msi-graphics-code-match in the log,
 not an unlock result.
+
+## Live identity result and next method test
+DIAG02.TXT SHA256: 0a808399aeb1f1826073670e228f62885dd321ba96a6fb61538749d562ae0142.
+Both MSI code-match events and diagnostic-result recorded success. Windows return
+was not explicitly described in the reply; do not infer direct handoff from this log.
+The returned folder includes three captures, not three executions of this new audit.
+
+The optional MsiZeroChildTest requires the identity audit and exactly one match
+for each console implementation. It flushes an enter record, calls only the pinned
+text Stop with zero children once, then records its return. This implementation's
+zero-child path returned success in 22 emulated instructions without any service
+call, global write or controller dereference. All 15 argument cases across the
+three captures passed isolated CPU emulation. This does not qualify one-child
+removal, the controller-present path, recovery or unlock. No live method test yet.
+
+The new EFI compiled and passed PE checks with partition inventory mocked. A Stop
+call is a new live execution boundary even with zero children; unexpected behavior
+may hang or affect display/Windows. No automatic retry. Build/package only is
+the next handoff; review the returned image before staging this method test.

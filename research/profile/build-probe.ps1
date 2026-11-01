@@ -4,8 +4,9 @@
 # Windows. It compiles only as a diagnostic build: no unlock code, GPU writes, driver release,
 # DMA or firmware variable writes. Builds files only.
 param([Parameter(Mandatory)][guid]$WindowsEspGuid,[string]$Clang='clang',[string]$LldLink='lld-link',[string]$Python='python',
-      [ValidateRange(1,255)][int]$TargetBus=1,[switch]$MsiRuntimeAudit)
+      [ValidateRange(1,255)][int]$TargetBus=1,[switch]$MsiRuntimeAudit,[switch]$MsiZeroChildTest)
 $ErrorActionPreference='Stop'
+if($MsiZeroChildTest -and !$MsiRuntimeAudit){throw 'Zero-child test requires the exact MSI runtime audit'}
 $repo=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $boot=Join-Path $repo 'internal-boot/boot'
 function GuidC([guid]$Value){
@@ -27,6 +28,7 @@ try {
  $sources=@('handoff.c','diagnostic.c','../efi_runtime.c','probe.c','../unlock/sha256.c')
  $defines=@('-DGU_DIAGNOSTIC_ONLY','-DGU_DIAGNOSTIC_PROBE','-DGU_PROBE_GENERIC','-DGU_USB_PROBE')
  if($MsiRuntimeAudit){$defines+='-DGU_MSI_RUNTIME_AUDIT'}
+ if($MsiZeroChildTest){$defines+='-DGU_MSI_ZERO_CHILD_TEST'}
  $busMode='auto'
  if($PSBoundParameters.ContainsKey('TargetBus')){
   $defines+=('-DGU_PROBE_BUS=0x{0:x}U' -f $TargetBus);$busMode='explicit'
@@ -44,7 +46,7 @@ try {
  if($LASTEXITCODE -ne 0){throw 'Probe PE verification failed'}
  $manifestInputs=$sources+@('diagnostic.h','media.h','probe.h','../unlock/machine-profile.h','../unlock/gpu-family.h','../unlock/firmware-profile.h')
  if($MsiRuntimeAudit){$manifestInputs+='msi-runtime-audit.h'}
- [ordered]@{Mode='generic-read-only-probe-then-windows-usb';MsiRuntimeAudit=[bool]$MsiRuntimeAudit;CanUnlock=$false;CanDetach=$false;WritesFirmwareVariables=$false;HardwareTested=$false;Defines=$defines
+ [ordered]@{Mode='generic-read-only-probe-then-windows-usb';MsiRuntimeAudit=[bool]$MsiRuntimeAudit;MsiZeroChildTest=[bool]$MsiZeroChildTest;CallsDriverStop=[bool]$MsiZeroChildTest;CanUnlock=$false;CanDetach=$false;WritesFirmwareVariables=$false;HardwareTested=$false;Defines=$defines
   ProbeBusMode=$busMode;TargetBus=$(if($busMode -eq 'explicit'){$TargetBus}else{$null})
   EfiSha256=(Get-FileHash -LiteralPath "$out/BOOTX64.EFI").Hash.ToLowerInvariant();BuiltUtc=[DateTime]::UtcNow.ToString('o')
   Sources=@($manifestInputs | ForEach-Object {[ordered]@{Path=$_;Sha256=(Get-FileHash -LiteralPath $_).Hash.ToLowerInvariant()}})

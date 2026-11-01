@@ -1,4 +1,4 @@
-"""Execute three exact MSI text-Stop argument paths in isolated CPU emulation.
+"""Execute five exact MSI text-Stop argument paths in isolated CPU emulation.
 Requires developer-only unicorn; never executes firmware natively or accesses hardware.
 """
 import argparse
@@ -15,7 +15,10 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('captures', type=Path)
 args = parser.parse_args()
 rows = []
-for log in sorted(args.captures.glob('DIAG??.TXT')):
+logs = sorted(args.captures.glob('DIAG??.TXT'))
+if not 2 <= len(logs) <= 32:
+    raise ValueError('Expected 2 to 32 captures')
+for log in logs:
     role = code.fingerprint(args.captures, log.read_text(encoding='utf-8-sig'))['text_console']
     if (role['code_sha256'], role['stop_rva'], role['version']) != ('3a14de3d645d704fdd327e9e814c7b8928d98ee734d777823d3abe389d628aaa', 4284, 16):
         raise ValueError('Exact MSI text driver differs')
@@ -54,6 +57,6 @@ for log in sorted(args.captures.glob('DIAG??.TXT')):
         if case == 'missing-controller' and bytes(uc.mem_read(base + 0x60f9, 1)) != b'\0':
             raise AssertionError('Expected emulated flag clear was absent')
         rows.append({'capture': log.name, 'case': case, 'children': children, 'null_child_buffer': case not in ('wrong-child', 'missing-controller'), 'status': hex(actual), 'instructions': len(seen)})
-if len(rows) != 10:
-    raise ValueError('Expected two captures and ten emulated cases')
+if len(rows) != 5 * len(logs):
+    raise ValueError('Expected five emulated cases per capture')
 print(json.dumps({'test': 'msi-text-stop-argument-emulation-v1', 'results': rows, 'native_firmware_executed': False, 'hardware_accessed': False, 'one_child_release_qualified': False, 'unlock_proven': False}, indent=2))
