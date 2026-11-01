@@ -222,3 +222,41 @@ prevent Windows boot. Recovery remains unproven; no automatic rollback/retry.
 Boot once attended, no keys. After two minutes without Windows, power off,
 remove USB and choose normal Windows Boot Manager. Do not rearm. Collect returns
 christian-edid-result ZIP in C:\GPU-Unlock\Results.
+
+## DIAG08 EDID success and combined NVIDIA child/parent release
+DIAG08 records successful EDID Stop, closed EDID ownership, cleared driver flag,
+both NVIDIA metadata audits and diagnostic result. This establishes the four
+consumer stages. NVIDIA teardown and unlock remain unproven on this MSI card.
+
+The optional MsiNvidiaRelease repeats those stages, then calls the pinned NVIDIA
+Stop once with the single physical child. Only successful post-checks permit one
+parent Stop with zero children. This is the same exact NVIDIA code as the prior
+EVGA path; different child topology and hardware still require live validation.
+Before mutation and immediately before child Stop, the private interface must
+reside in bounded allocated RAM, store this physical child at0x88 and have flag
+0x98 zero. The flagged parent callback branch is therefore refused.
+
+Child postconditions require only the software virtual GOP (zero framebuffer),
+no EDID handles, the physical child handle absent, no parent DevicePath child
+opens, retained NVIDIA PCI ownership, and a null stored child/zero flag. Parent
+postconditions recheck the console topology, require private-interface absence
+and no NVIDIA parent ownership, and read PCI config offsets0..0x3c to verify
+10de:2204/subsystem38811462/class3. msi-nvidia-pci-command-value stores raw command
+data in its status field, not a UEFI operation result; decoding state is measured,
+not presumed. No code re-enables attributes or performs an unlock transaction.
+
+Eleven compiled private-context and nine ownership guard cases passed CPU
+emulation. Five limited exact-driver dispatcher paths also passed; an empty
+synthetic parent context and refusal paths do not qualify real GPU teardown
+callbacks. Full EFI compile/PE and fixed-source download/build plus simulated
+USB backup/readback/collection/refusal checks passed. Live child/parent teardown,
+hardware side effects and recovery remain unproven on Christian's machine.
+
+run-christian-nvidia-release.ps1 -Drive G -AcceptRisk consumes a new
+MSI-NVIDIA-RELEASE.ARMED before the sequence. NVIDIA callbacks may change GPU/PCI
+state, disable I/O/memory decoding, bus mastering and VGA, lose display/input,
+hang or prevent Windows boot. There is no automatic restoration/retry. Any
+failed check holds, and no explicit ResetSystem is added. Boot once attended.
+After two minutes without Windows, power off, remove USB and choose normal
+Windows Boot Manager. Do not rearm. Collect produces christian-nvidia-release-result
+ZIP under C:\GPU-Unlock\Results. This test still does not attempt unlock.

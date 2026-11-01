@@ -215,3 +215,39 @@ Windows 부팅 실패를 일으킬 수 있습니다. 복구는 검증되지 않�
 2분 뒤 Windows가 없으면 전원을 끄고 USB를 제거한 뒤 정상 Windows Boot
 Manager로 부팅합니다. 재무장하지 않습니다. Collect는 C:\GPU-Unlock\Results의
 christian-edid-result ZIP을 만듭니다.
+
+## DIAG08 EDID 성공과 NVIDIA 자식/부모 통합 해제 테스트
+DIAG08의 EDID Stop, 소유권 해제, 플래그 초기화, NVIDIA 메타데이터 전후 검사
+및 진단 결과가 성공했습니다. 소비자 네 단계의 증거이며 MSI 카드의 NVIDIA
+해제와 잠금 해제는 아직 검증되지 않았습니다. MsiNvidiaRelease는 이를 반복하고
+단일 실제 자식으로 NVIDIA Stop을 한 번 호출합니다. 이후 검사가 성공해야
+자식 0개로 부모 Stop을 한 번 호출합니다. 기존 EVGA 경로와 정확히 같은
+NVIDIA 코드지만 하드웨어와 자식 토폴로지가 달라 실제 검증이 필요합니다.
+
+변경 전과 자식 Stop 직전에 private 인터페이스가 제한된 할당 RAM 안에 있고
+0x88의 자식이 실제 GOP이며0x98 플래그가 0이어야 합니다. 플래그가 설정된
+부모 콜백 경로는 거부합니다. 자식 후 검사는 프레임버퍼 없는 가상 GOP 하나,
+EDID 없음, 실제 자식 핸들 없음, 부모 DevicePath 자식 열기 없음, NVIDIA PCI
+소유권 유지 및 저장된 자식 null/플래그0을 요구합니다. 부모 후에는 콘솔
+토폴로지를 다시 검사하고 private 인터페이스와 NVIDIA 소유권 부재를 확인한
+뒤 기존 PCI 설정0..0x3c를 읽어10de:2204/서브시스템38811462/클래스3을
+확인합니다. msi-nvidia-pci-command-value의 status 필드는 작업 결과가 아닌
+원시 PCI 명령 값입니다. 디코딩 상태를 측정하며 추정하지 않습니다.
+속성 재활성화나 잠금 해제 트랜잭션은 수행하지 않습니다.
+
+컴파일한 private 컨텍스트 검사11개와 소유권 검사9개가 CPU 에뮬레이션을
+통과했습니다. 정확한 드라이버의 제한된 디스패치 경로5개도 통과했지만 빈
+합성 부모 컨텍스트와 거부 경로가 실제 GPU 해제 콜백을 검증하지는 않습니다.
+전체 EFI 컴파일/PE, 고정 소스 다운로드/빌드 및 모의 USB 백업/해시/수집/
+거부 검사가 통과했습니다. 실제 자식/부모 해제, 하드웨어 부작용과 복구는
+Christian 머신에서 검증되지 않았습니다.
+
+run-christian-nvidia-release.ps1 -Drive G -AcceptRisk는 새
+MSI-NVIDIA-RELEASE.ARMED를 실행 전에 소비합니다. NVIDIA 콜백은 GPU/PCI
+상태 변경, I/O/메모리 디코딩/BME/VGA 비활성화, 화면/입력 상실, 멈춤 또는
+Windows 실패를 일으킬 수 있습니다. 자동 복원/재시도는 없습니다. 검사 실패
+시 정지하며 명시적 ResetSystem은 추가하지 않습니다. 직접 지켜보며 한 번만
+부팅합니다. 2분 뒤 Windows가 없으면 전원을 끄고 USB를 제거한 뒤 정상
+Windows Boot Manager로 부팅합니다. 재무장하지 않습니다. Collect는
+C:\GPU-Unlock\Results의 christian-nvidia-release-result ZIP을 만듭니다.
+이 테스트도 잠금 해제 자체를 시도하지 않습니다.
