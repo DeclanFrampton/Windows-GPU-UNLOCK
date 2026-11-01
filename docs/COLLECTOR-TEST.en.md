@@ -43,3 +43,10 @@ attachments match collector SHA-256
 both process exits zero, complete inventory and `can_unlock: false`.
 This confirms that contributor's reported collector run only; other environments
 and GPU unlock remain separate validation.
+
+The [#19 Lenovo 1052 reporter](https://github.com/windows-GPU-UNLOCK/Windows-GPU-UNLOCK/issues/19#issuecomment-6559414071)
+also reported PASS without the previous Unicode error on French Windows 11 IoT
+Enterprise LTSC build 26100, without administrator rights or settings changes.
+Both reviewed attachments match the same collector hash, zero exits, complete
+inventory and the expected `2504 / 1043:881d` GPU tuple. This is a second
+contributor collector confirmation, not EFI or unlock validation.

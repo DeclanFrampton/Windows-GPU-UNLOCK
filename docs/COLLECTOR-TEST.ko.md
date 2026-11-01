@@ -42,3 +42,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\test-collector.ps1
 두 프로세스 종료 코드는 0, 목록 수집은 완료, `can_unlock`은 false였습니다.
 이는 해당 기여자의 수집기 실행 보고만 확인합니다. 다른 환경 및 GPU 언락
 검증은 별도입니다.
+
+[#19의 Lenovo 1052 보고자](https://github.com/windows-GPU-UNLOCK/Windows-GPU-UNLOCK/issues/19#issuecomment-6559414071)도
+프랑스어 Windows 11 IoT Enterprise LTSC 빌드 26100에서 관리자 권한이나 설정
+변경 없이 이전 Unicode 오류 없는 PASS를 보고했습니다. 검토한 두 첨부는 같은
+수집기 해시, 종료 코드 0, 완전한 목록, 예상 GPU `2504 / 1043:881d`와 일치합니다.
+두 번째 기여자 수집기 확인이며 EFI나 언락 검증은 아닙니다.
