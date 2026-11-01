@@ -1,0 +1,34 @@
+# Mock filesystem and inventory only; does not query or stage a real disk.
+$ErrorActionPreference='Stop'
+. (Join-Path $PSScriptRoot 'prepare-x99-graph.ps1')
+function Reject([scriptblock]$Action){$rejected=$false;try {& $Action}catch {$rejected=$true};if(!$rejected){throw 'Expected refusal did not occur.'}}
+$board=[pscustomobject]@{Manufacturer='ASUSTeK COMPUTER INC.';Product='X99-PRO/USB 3.1'}
+$bios=[pscustomobject]@{SMBIOSBIOSVersion='4101'};$cpu=[pscustomobject]@{Name='Intel Core i7-5820K'}
+$video=[pscustomobject]@{PNPDeviceID='PCI\VEN_10DE&DEV_2204&SUBSYS_87AF1043&REV_A1\PRIVATE'}
+Assert-X99GraphMachine $board $bios $cpu $video
+$bios.SMBIOSBIOSVersion='other';Reject {Assert-X99GraphMachine $board $bios $cpu $video};$bios.SMBIOSBIOSVersion='4101'
+Reject {Assert-X99GraphMachine $board $bios $cpu @($video,$video)}
+$part=[pscustomobject]@{IsBoot=$false;IsSystem=$false}
+$disk=[pscustomobject]@{BusType='USB';UniqueId='mock-usb';IsBoot=$false;IsSystem=$false;IsReadOnly=$false;IsOffline=$false}
+$volume=[pscustomobject]@{FileSystem='FAT32';SizeRemaining=64MB}
+Assert-GraphUsb $part $disk $volume
+$disk.BusType='SATA';Reject {Assert-GraphUsb $part $disk $volume};$disk.BusType='USB'
+$part.IsSystem=$true;Reject {Assert-GraphUsb $part $disk $volume};$part.IsSystem=$false
+$volume.FileSystem='NTFS';Reject {Assert-GraphUsb $part $disk $volume}
+$volume.FileSystem='FAT32';$volume.SizeRemaining=1MB;Reject {Assert-GraphUsb $part $disk $volume}
+$temp=Join-Path ([IO.Path]::GetTempPath()) ('graph-prep-'+[guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path (Join-Path $temp 'EFI/BOOT') -Force | Out-Null
+$image=Join-Path $temp 'source.efi';$boot=Join-Path $temp 'EFI/BOOT/BOOTX64.EFI'
+[IO.File]::WriteAllText($image,'mock diagnostic');[IO.File]::WriteAllText($boot,'original boot')
+$old=Get-GraphHash $boot;$hash=Get-GraphHash $image
+Reject {Copy-GraphBoot $temp $image ('0'*64)}
+if((Get-GraphHash $boot) -cne $old){throw 'Rejected copy changed boot file'}
+$receipt=Copy-GraphBoot $temp $image $hash
+if((Get-GraphHash $boot) -cne $hash -or $receipt.PreviousBootSha256 -cne $old){throw 'Staging/readback mismatch'}
+$backup=Join-Path $temp ('EFI/BOOT/BEFORE-GRAPH-'+$old+'.EFI')
+if((Get-GraphHash $backup) -cne $old){throw 'Original boot backup mismatch'}
+[IO.File]::WriteAllText((Join-Path $temp 'RTX3090-UNLOCK/DIAG00.TXT'),'preserved capture')
+Reject {Copy-GraphBoot $temp $image $hash}
+if([IO.File]::ReadAllText((Join-Path $temp 'RTX3090-UNLOCK/DIAG00.TXT')) -cne 'preserved capture'){throw 'Capture was changed'}
+Write-Host 'PASS: exact-machine refusal, secondary GPU refusal, USB/system/filesystem refusal, hash guard, backup/readback, capture preservation.'
+# Keep the tiny mock directory for review; no recursive filesystem cleanup.
