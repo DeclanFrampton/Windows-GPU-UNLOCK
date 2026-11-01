@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import sys
 import tarfile
+import zipfile
 
 PIN = "0ebdb1c6308b6a2072be5bf04513472942541956"
 ROOT = Path(__file__).resolve().parents[2]
@@ -33,18 +34,28 @@ def verify(output):
             raise ValueError(f"Asset mismatch: {path.name}")
     return specs
 
-def prepare(source, output):
+def prepare(source, output, source_zip=None):
     if sys.version_info < (3, 12):
         raise ValueError("Use Python3.12+ for filtered archive extraction")
     if output.exists() and any(output.iterdir()):
         raise ValueError("Output is nonempty; preserve it and use --verify-only or a new output directory")
-    if not source.exists():
-        source.parent.mkdir(parents=True, exist_ok=True)
-        run("git", "clone", "--filter=blob:none", "--no-checkout", "https://github.com/Zagitta/gpu-unlock.git", str(source))
-        run("git", "checkout", "--detach", PIN, cwd=source)
-    if run("git", "rev-parse", "HEAD", cwd=source) != PIN:
-        raise ValueError("Source checkout is not the pinned revision")
-    run("git", "diff", "--exit-code", "HEAD", "--", "firmware", cwd=source)
+    if source_zip is not None:
+        expected = "d0d8ecd989f9cb885d8eb9ab39fb3f36c9c66df2efd9fabaa68f8afc8bbe70fb"
+        if source_zip.is_symlink() or hashlib.sha256(source_zip.read_bytes()).hexdigest() != expected:
+            raise ValueError("Pinned upstream source ZIP hash mismatch")
+        # Only extract the exact verified archive, into a new directory.
+        source.mkdir(parents=True, exist_ok=False)
+        with zipfile.ZipFile(source_zip) as archive:
+            archive.extractall(source)
+        source = source / ("gpu-unlock-" + PIN)
+    else:
+        if not source.exists():
+            source.parent.mkdir(parents=True, exist_ok=True)
+            run("git", "clone", "--filter=blob:none", "--no-checkout", "https://github.com/Zagitta/gpu-unlock.git", str(source))
+            run("git", "checkout", "--detach", PIN, cwd=source)
+        if run("git", "rev-parse", "HEAD", cwd=source) != PIN:
+            raise ValueError("Source checkout is not the pinned revision")
+        run("git", "diff", "--exit-code", "HEAD", "--", "firmware", cwd=source)
     firmware = source / "firmware"
     fetch = load("evga_asset_fetch", firmware / "fetch_artifacts.py")
     manifest = json.loads(fetch.MANIFEST.read_text())
@@ -87,9 +98,10 @@ def main():
     parser.add_argument("--source", type=Path, default=DEFAULT / "source")
     parser.add_argument("--output", type=Path, default=DEFAULT / "output")
     parser.add_argument("--verify-only", action="store_true")
+    parser.add_argument("--source-zip", type=Path, help="Exact hash-pinned upstream ZIP; no Git required")
     args = parser.parse_args()
     try:
-        specs = verify(args.output) if args.verify_only else prepare(args.source.resolve(), args.output.resolve())
+        specs = verify(args.output) if args.verify_only else prepare(args.source.resolve(), args.output.resolve(), args.source_zip.resolve() if args.source_zip else None)
     except (OSError, ValueError, subprocess.CalledProcessError) as error:
         parser.exit(1, f"Asset preparation refused: {error}\n")
     print(json.dumps({"output": str(args.output.resolve()), "verified_assets": specs,
