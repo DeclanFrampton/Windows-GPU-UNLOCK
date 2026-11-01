@@ -386,3 +386,21 @@ will refuse rather than silently execute different source. No global Git install
 USB changes, GPU access or reboot is needed.
 
 Validation passed a complete fresh launcher run with Git deliberately absent from PATH: Python 3.13 private environment, pinned wheel, source ZIP download/hash/extraction, input download, payload generation and five hashes, then report ZIP. A modified source ZIP was rejected before either source/output directory creation. Python compile and PowerShell parse passed. Direct source-ZIP generation passed separately. This is software preparation evidence only.
+
+## Incomplete preparation can now return a report
+
+Christian reported no result ZIP. His screenshot ends after successful helper
+installation, without a returned PowerShell prompt or shown error. It does not
+establish a preparation failure or completion: the existing launcher creates
+its ZIP only after downloads, extraction, generation and verification finish.
+
+New `collect-christian-assets.ps1` independently collects current presence,
+size/hash checks, notice presence and bounded preparation-directory metadata.
+It produces a report-only Results ZIP even when all payloads are missing or
+partial. It does not rerun preparation, install packages, download anything,
+access GPU/USB, arm a run or reboot. Its preparation_complete flag describes
+only the snapshot at collection, not EFI readiness or unlock. Run in a second
+PowerShell window if the original preparation is still busy; do not relaunch it.
+Local checks passed absent, fully verified and corrupt/partial payload cases;
+all three ZIPs contained one report JSON and no firmware. Only the fully
+verified case reported completion. Existing raw payloads were unchanged.
