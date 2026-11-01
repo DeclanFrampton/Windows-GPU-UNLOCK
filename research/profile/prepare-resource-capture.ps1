@@ -2,8 +2,9 @@
 [CmdletBinding()]
 param([ValidatePattern('^[a-z][a-z0-9-]{0,63}$')][string]$Machine='issue114',
  [ValidatePattern('^[D-Zd-z]$')][string]$Drive,[switch]$Collect,
- [string]$Clang='clang',[string]$LldLink='lld-link',[string]$Python='python')
+ [string]$Clang='clang',[string]$LldLink='lld-link',[string]$Python='python',[string]$OutputRoot)
 $ErrorActionPreference='Stop'
+. (Join-Path $PSScriptRoot 'collection-host.ps1')
 function ProbeHash([string]$Path){
  $sha=[Security.Cryptography.SHA256]::Create();$f=[IO.File]::OpenRead($Path)
  try {([BitConverter]::ToString($sha.ComputeHash($f))).Replace('-','').ToLowerInvariant()}
@@ -104,8 +105,7 @@ function Stage-Probe([string]$Root,[string]$Image,[string]$Hash,[string]$Case='i
 function Export-ProbeReport([string]$Repo,[string]$Folder,[string]$Output,[string]$Python,[string]$Case='issue114'){
  $p=New-Object System.Diagnostics.Process
  try {
-  $command=Get-Command $Python -CommandType Application -ErrorAction Stop
-  $p.StartInfo.FileName=$command.Source
+  $p.StartInfo.FileName=Resolve-GuPythonApplication $Python
   $p.StartInfo.Arguments='-I research/profile/check-compatibility.py "'+(Join-Path $folder '.')+'" --json'
   $p.StartInfo.WorkingDirectory=$repo;$p.StartInfo.UseShellExecute=$false;$p.StartInfo.CreateNoWindow=$true
   $p.StartInfo.RedirectStandardOutput=$true;$p.StartInfo.RedirectStandardError=$true
@@ -131,6 +131,7 @@ function Export-ProbeReport([string]$Repo,[string]$Folder,[string]$Output,[strin
  } finally {$p.Dispose()}
 }
 if($MyInvocation.InvocationName -eq '.'){return}
+if($OutputRoot -and !$Collect){throw '-OutputRoot is collection-only.'}
 $repo=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $configurationPath=Join-Path $PSScriptRoot ('probe-configurations/'+$Machine+'.json')
 $configurationHash=ProbeHash $configurationPath
@@ -141,10 +142,8 @@ $part=Get-Partition -DriveLetter $Drive;$disk=Get-Disk -Number $part.DiskNumber;
 Assert-ProbeUsb $part $disk $volume -ReadOnly:$Collect
 $usb=$Drive.ToUpperInvariant()+':\'
 if($Collect){
- $folder=Join-Path $usb 'RTX3090-UNLOCK';$documents=[Environment]::GetFolderPath('MyDocuments')
- if(!$documents){throw 'Documents folder unavailable.'}
- $output=Join-Path $documents ('GPU-Unlock-Zotac-Capture-'+[guid]::NewGuid().ToString('N').Substring(0,8))
- New-Item -ItemType Directory -Path $output | Out-Null
+ $folder=Join-Path $usb 'RTX3090-UNLOCK'
+ $output=New-GuCollectionOutput $OutputRoot 'GPU-Unlock-Resource-Review' $usb
  Export-ProbeReport $repo $folder $output $Python $Machine
  Write-Host ('Return reviewed report.json from '+$output+' and say whether Windows started directly or manual recovery was needed. Keep all PROM/IMG/DIAG files local.')
  exit 0
