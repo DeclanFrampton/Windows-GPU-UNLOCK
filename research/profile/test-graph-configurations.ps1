@@ -13,6 +13,10 @@ foreach($file in Get-ChildItem (Join-Path $PSScriptRoot 'graph-configurations') 
   $drivers += [pscustomobject]@{DeviceID=$id;DriverProviderName=$a.Provider;DriverVersion=$a.Version;IsSigned=$true}
  }
  Assert-GraphMachine $p.Id $board $bios $cpu $video $drivers
+ $oldManufacturer=$board.Manufacturer;$board.Manufacturer='OTHER';Reject {Assert-GraphMachine $p.Id $board $bios $cpu $video $drivers};$board.Manufacturer=$oldManufacturer
+ $oldBoard=$board.Product;$board.Product+='other';Reject {Assert-GraphMachine $p.Id $board $bios $cpu $video $drivers};$board.Product=$oldBoard
+ $oldCpu=$cpu.Name;$cpu.Name='OTHER';Reject {Assert-GraphMachine $p.Id $board $bios $cpu $video $drivers};$cpu.Name=$oldCpu
+ Reject {Assert-GraphMachine $p.Id $board $bios $cpu @() $drivers}
  $bios.SMBIOSBIOSVersion+='other';Reject {Assert-GraphMachine $p.Id $board $bios $cpu $video $drivers};$bios.SMBIOSBIOSVersion=$p.Bios
  Reject {Assert-GraphMachine $p.Id $board $bios $cpu @($video+$video) $drivers}
  Reject {Assert-GraphMachine $p.Id $board $bios $cpu @($video+[pscustomobject]@{PNPDeviceID='USB\PRIVATE'}) $drivers}
