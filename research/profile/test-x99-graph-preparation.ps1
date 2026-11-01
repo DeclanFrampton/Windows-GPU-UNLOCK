@@ -18,7 +18,17 @@ $x570=[pscustomobject]@{Manufacturer='ASUSTeK COMPUTER INC.';Product='PRIME X570
 $x570bios=[pscustomobject]@{SMBIOSBIOSVersion='5013'};$ryzen=[pscustomobject]@{Name='AMD Ryzen 9 5950X 16-Core Processor'}
 $nvidia=[pscustomobject]@{PNPDeviceID='PCI\VEN_10DE&DEV_2204&SUBSYS_147D10DE&REV_A1\PRIVATE'}
 $virtual=[pscustomobject]@{PNPDeviceID='ROOT\DISPLAY\PRIVATE'}
-Assert-GraphMachine 'issue31' $x570 $x570bios $ryzen @($nvidia,$virtual)
+$lci=[pscustomobject]@{PNPDeviceID='LCI\PRIVATE'}
+$lciDriver=[pscustomobject]@{DeviceID='LCI\PRIVATE';DriverProviderName='LuminonCore';DriverVersion='1.0.2018.1204';IsSigned=$true}
+Assert-GraphMachine 'issue31' $x570 $x570bios $ryzen @($nvidia,$virtual,$lci) @($lciDriver)
+Reject {Assert-GraphMachine 'issue31' $x570 $x570bios $ryzen @($nvidia,$virtual)}
+Reject {Assert-GraphMachine 'issue31' $x570 $x570bios $ryzen @($nvidia,$lci) @()}
+Reject {Assert-GraphMachine 'issue31' $x570 $x570bios $ryzen @($nvidia,$lci,$lci) @($lciDriver)}
+$lciDriver.DriverProviderName='other';Reject {Assert-GraphMachine 'issue31' $x570 $x570bios $ryzen @($nvidia,$lci) @($lciDriver)};$lciDriver.DriverProviderName='LuminonCore'
+$lciDriver.DriverVersion='other';Reject {Assert-GraphMachine 'issue31' $x570 $x570bios $ryzen @($nvidia,$lci) @($lciDriver)};$lciDriver.DriverVersion='1.0.2018.1204'
+$lciDriver.IsSigned=$false;Reject {Assert-GraphMachine 'issue31' $x570 $x570bios $ryzen @($nvidia,$lci) @($lciDriver)};$lciDriver.IsSigned=$true
+$lciDriver.DeviceID='OTHER\PRIVATE';Reject {Assert-GraphMachine 'issue31' $x570 $x570bios $ryzen @($nvidia,$lci) @($lciDriver)};$lciDriver.DeviceID='LCI\PRIVATE'
+
 Reject {Assert-GraphMachine 'issue31' $x570 $x570bios $ryzen @($nvidia,$ga104)}
 Reject {Assert-GraphMachine 'issue31' $x570 $x570bios $ryzen @($nvidia,[pscustomobject]@{PNPDeviceID=$null})}
 $b550=[pscustomobject]@{Manufacturer='Gigabyte Technology Co., Ltd.';Product='B550 AORUS ELITE V2'}

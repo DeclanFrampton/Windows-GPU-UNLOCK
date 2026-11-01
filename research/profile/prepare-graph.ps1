@@ -13,7 +13,22 @@ function Read-GraphConfiguration([string]$Id,[string]$Directory=(Join-Path $PSSc
  if($Id -cnotmatch '^[a-z][a-z0-9-]{0,63}$'){throw 'Invalid configuration ID.'}
  $p=Get-Content -LiteralPath (Join-Path $Directory ($Id+'.json')) -Raw | ConvertFrom-Json
  $keys=@('SchemaVersion','Id','Scope','Board','ManufacturerPrefix','ManufacturerMatch','Bios','CpuToken','Adapters')
- if(@($p.PSObject.Properties).Count -ne $keys.Count -or @($p.PSObject.Properties | Where-Object {$_.Name -cnotin $keys}).Count){throw 'Unexpected graph configuration fields.'}
+ $optional=@('KnownNonPciAdapters')
+ if(@($p.PSObject.Properties | Where-Object {$_.Name -cnotin ($keys+$optional)}).Count -or
+    @($keys | Where-Object {$_ -cnotin @($p.PSObject.Properties.Name)}).Count){throw 'Unexpected graph configuration fields.'}
+ if($p.PSObject.Properties.Name -contains 'KnownNonPciAdapters'){
+  if($p.KnownNonPciAdapters -isnot [array] -or $p.KnownNonPciAdapters.Count -gt 4){throw 'Invalid non-PCI adapter list.'}
+  $enumSeen=@{}
+  foreach($a in $p.KnownNonPciAdapters){
+   $fields=@('Enumerator','Provider','Version')
+   if(@($a.PSObject.Properties).Count -ne 3 -or @($a.PSObject.Properties | Where-Object {$_.Name -cnotin $fields}).Count -or
+      $a.Enumerator -isnot [string] -or $a.Enumerator -cnotmatch '^[A-Z][A-Z0-9_-]{0,31}$' -or $a.Enumerator -cin @('PCI','ROOT','SWD') -or
+      $a.Provider -isnot [string] -or $a.Provider -notmatch '^[A-Za-z0-9 .,-]{1,128}$' -or
+      $a.Version -isnot [string] -or $a.Version -notmatch '^[0-9]+(?:\.[0-9]+){1,5}$' -or $enumSeen.ContainsKey($a.Enumerator)){throw 'Invalid non-PCI adapter pin.'}
+   $enumSeen[$a.Enumerator]=$true
+  }
+ }
+
  if($p.SchemaVersion -isnot [int] -or $p.SchemaVersion -ne 1 -or $p.Id -cne $Id -or $p.Scope -cne 'graph-only'){throw 'Invalid graph configuration identity or scope.'}
  foreach($key in @('Board','ManufacturerPrefix','Bios','CpuToken')) {
   if($p.$key -isnot [string] -or [string]::IsNullOrWhiteSpace($p.$key) -or $p.$key.Length -gt 128 -or $p.$key -match '[\x00-\x1f]'){throw 'Invalid graph identity field.'}
@@ -31,12 +46,22 @@ function Read-GraphConfiguration([string]$Id,[string]$Directory=(Join-Path $PSSc
  }
  return $p
 }
-function Assert-GraphMachine([string]$Id,$Board,$Bios,$Cpu,$Video) {
+function Assert-GraphMachine([string]$Id,$Board,$Bios,$Cpu,$Video,$Drivers=@()) {
  $p=Read-GraphConfiguration $Id
  # Software adapters do not establish firmware ownership. Unknown identity
  # formats remain a refusal, rather than being silently discarded.
  $pciVideo=@($Video | Where-Object {$_.PNPDeviceID -match '^PCI\\'})
- if(@($Video | Where-Object {$_.PNPDeviceID -notmatch '^(PCI|ROOT|SWD)\\'}).Count){throw 'Ambiguous display inventory; stop and report.'}
+ $other=@($Video | Where-Object {$_.PNPDeviceID -notmatch '^(PCI|ROOT|SWD)\\'})
+ $expectedOther=@($p.KnownNonPciAdapters | Where-Object {$_})
+ if($other.Count -ne $expectedOther.Count){throw 'Ambiguous display inventory; stop and report.'}
+ foreach($a in $expectedOther){
+  $matchesAdapter=@($other | Where-Object {$_.PNPDeviceID -cmatch ('^'+[regex]::Escape($a.Enumerator)+'\\')})
+  if($matchesAdapter.Count -ne 1){throw 'Non-PCI display enumerator mismatch; stop and report.'}
+  $driver=@($Drivers | Where-Object {$_.DeviceID -and $_.DeviceID -ceq $matchesAdapter[0].PNPDeviceID})
+  if($driver.Count -ne 1 -or $driver[0].DriverProviderName -cne $a.Provider -or
+     $driver[0].DriverVersion -cne $a.Version -or $driver[0].IsSigned -ne $true){throw 'Non-PCI display driver metadata mismatch; stop and report.'}
+ }
+
  $displayOk=$pciVideo.Count -eq $p.Adapters.Count
  foreach($adapter in $p.Adapters){
   $identity='^PCI\\VEN_'+$adapter.Vendor+'&DEV_'+$adapter.Device+'&SUBSYS_'+$adapter.Subsystem+'(?:&|\\|$)'
@@ -105,7 +130,10 @@ if($Collect){
 }
 $configurationPath=Join-Path $PSScriptRoot ('graph-configurations/'+$Machine+'.json')
 $configurationHash=Get-GraphHash $configurationPath
-Assert-GraphMachine $Machine (Get-CimInstance Win32_BaseBoard) (Get-CimInstance Win32_BIOS) (Get-CimInstance Win32_Processor) @(Get-CimInstance Win32_VideoController)
+$configuration=Read-GraphConfiguration $Machine
+$drivers=@()
+if(@($configuration.KnownNonPciAdapters | Where-Object {$_}).Count){$drivers=@(Get-CimInstance Win32_PnPSignedDriver -Filter "DeviceClass='DISPLAY'")}
+Assert-GraphMachine $Machine (Get-CimInstance Win32_BaseBoard) (Get-CimInstance Win32_BIOS) (Get-CimInstance Win32_Processor) @(Get-CimInstance Win32_VideoController) $drivers
 try {$secure=Confirm-SecureBootUEFI} catch {throw 'Secure Boot state could not be verified. Stop and report; do not change settings.'}
 if($secure -ne $false){throw 'Secure Boot must already be off for this unsigned test. Do not change it for this script.'}
 $windows=@(Get-Partition | Where-Object {$_.IsSystem -and $_.Guid})
@@ -127,6 +155,10 @@ Assert-GraphUsb $fresh $freshDisk (Get-Volume -DriveLetter $Drive)
 if($fresh.DiskNumber -ne $part.DiskNumber -or $fresh.Offset -ne $part.Offset -or $fresh.Size -ne $part.Size -or
    $freshDisk.UniqueId -cne $disk.UniqueId){throw 'USB partition changed; do not stage.'}
 if((Get-GraphHash $configurationPath) -cne $configurationHash){throw 'Configuration changed during preparation; do not stage.'}
+# Driver metadata can change while building. Do not retain stale exceptions.
+if(@($configuration.KnownNonPciAdapters | Where-Object {$_}).Count){
+ Assert-GraphMachine $Machine (Get-CimInstance Win32_BaseBoard) (Get-CimInstance Win32_BIOS) (Get-CimInstance Win32_Processor) @(Get-CimInstance Win32_VideoController) @(Get-CimInstance Win32_PnPSignedDriver -Filter "DeviceClass='DISPLAY'")
+}
 $receipt=Copy-GraphBoot $usb (Join-Path $built 'GRAPH-ONLY.EFI') $manifest.EfiSha256 $Machine
 $receipt['ConfigurationSha256']=$configurationHash
 $receipt | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $usb 'RTX3090-UNLOCK/graph-stage.json') -Encoding utf8

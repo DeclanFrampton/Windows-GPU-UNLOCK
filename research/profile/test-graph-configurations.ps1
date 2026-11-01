@@ -7,10 +7,15 @@ foreach($file in Get-ChildItem (Join-Path $PSScriptRoot 'graph-configurations') 
  $board=[pscustomobject]@{Manufacturer=$p.ManufacturerPrefix;Product=$p.Board}
  $bios=[pscustomobject]@{SMBIOSBIOSVersion=$p.Bios};$cpu=[pscustomobject]@{Name=$p.CpuToken}
  $video=@($p.Adapters|ForEach-Object{[pscustomobject]@{PNPDeviceID=('PCI\VEN_'+$_.Vendor+'&DEV_'+$_.Device+'&SUBSYS_'+$_.Subsystem+'\PRIVATE')}})
- Assert-GraphMachine $p.Id $board $bios $cpu $video
- $bios.SMBIOSBIOSVersion+='other';Reject {Assert-GraphMachine $p.Id $board $bios $cpu $video};$bios.SMBIOSBIOSVersion=$p.Bios
- Reject {Assert-GraphMachine $p.Id $board $bios $cpu @($video+$video)}
- Reject {Assert-GraphMachine $p.Id $board $bios $cpu @($video+[pscustomobject]@{PNPDeviceID='USB\PRIVATE'})}
+ $drivers=@()
+ foreach($a in @($p.KnownNonPciAdapters | Where-Object {$_})){
+  $id=$a.Enumerator+'\PRIVATE';$video += [pscustomobject]@{PNPDeviceID=$id}
+  $drivers += [pscustomobject]@{DeviceID=$id;DriverProviderName=$a.Provider;DriverVersion=$a.Version;IsSigned=$true}
+ }
+ Assert-GraphMachine $p.Id $board $bios $cpu $video $drivers
+ $bios.SMBIOSBIOSVersion+='other';Reject {Assert-GraphMachine $p.Id $board $bios $cpu $video $drivers};$bios.SMBIOSBIOSVersion=$p.Bios
+ Reject {Assert-GraphMachine $p.Id $board $bios $cpu @($video+$video) $drivers}
+ Reject {Assert-GraphMachine $p.Id $board $bios $cpu @($video+[pscustomobject]@{PNPDeviceID='USB\PRIVATE'}) $drivers}
 }
 Reject {Read-GraphConfiguration '../issue33'}
 Reject {Read-GraphConfiguration 'missing'}
@@ -27,6 +32,11 @@ foreach($bad in @(
 )) {
  [IO.File]::WriteAllText((Join-Path $temp 'issue33.json'),$bad)
  Reject {Read-GraphConfiguration 'issue33' $temp}
+}
+$known=Get-Content (Join-Path $PSScriptRoot 'graph-configurations/issue31.json') -Raw
+foreach($bad in @($known.Replace('"LCI"','"PCI"'),$known.Replace('"LuminonCore"','".*"'),$known.Replace('"1.0.2018.1204"','"*"'))){
+ [IO.File]::WriteAllText((Join-Path $temp 'issue31.json'),$bad)
+ Reject {Read-GraphConfiguration 'issue31' $temp}
 }
 # Legacy dot-source entry point must expose functions without executing a run.
 . (Join-Path $PSScriptRoot 'prepare-x99-graph.ps1')

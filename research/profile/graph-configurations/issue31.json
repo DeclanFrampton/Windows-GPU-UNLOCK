@@ -13,5 +13,12 @@
       "Subsystem": "147D10DE"
     }
   ],
-  "ManufacturerMatch": "prefix"
+  "ManufacturerMatch": "prefix",
+  "KnownNonPciAdapters": [
+    {
+      "Enumerator": "LCI",
+      "Provider": "LuminonCore",
+      "Version": "1.0.2018.1204"
+    }
+  ]
 }
