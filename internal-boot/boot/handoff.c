@@ -10,6 +10,9 @@
 #endif
 #include "media.h"
 #include "flow.h"
+#ifdef GU_MSI_RUNTIME_AUDIT
+#include "msi-runtime-audit.h"
+#endif
 #ifdef GU_EVGA_STOP_ONLY
 #include "evga-text-stop.h"
 #ifdef GU_EVGA_PROBE_RESOURCES
@@ -516,6 +519,9 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE Image,EFI_SYSTEM_TABLE *St) {
     s=GuCaptureGraphOnVolume(Table,Log,Root);
     /* Partial observations never authorize unlock. Normal Windows boot is
      * permitted because this separate image has not touched GPU state. */
+#ifdef GU_MSI_RUNTIME_AUDIT
+    if(s==EFI_SUCCESS)s=GuMsiRuntimeAudit(Table,Record);
+#endif
     EFI_STATUS recorded=Record(NULL,"diagnostic-result",s);
     if(recorded==EFI_SUCCESS)s=Windows(NULL);
     else s=recorded;
