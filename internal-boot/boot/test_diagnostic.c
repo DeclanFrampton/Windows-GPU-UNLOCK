@@ -118,6 +118,9 @@ static EFI_STATUS Run(int scenario) {
 }
 int main(void) {
   Check(Run(0)==EFI_SUCCESS,"shared console graph succeeds");
+#ifdef GU_GRAPH_ONLY
+  Check(strstr(Output,"capture-scope=graph-only no-gpu-mmio no-prom no-image-dump")!=NULL,"graph-only scope recorded");
+#endif
   Check(strstr(Output,"capture-complete=1")!=NULL,"complete marker");
   Check(strstr(Output,"attributes=0x0000000000000008")!=NULL,"child edge retained");
   Check(strstr(Output,"path-node raw=7f010400")!=NULL,"multi-instance separator retained");
