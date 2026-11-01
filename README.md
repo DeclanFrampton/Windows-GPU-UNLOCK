@@ -1,231 +1,144 @@
-# Windows GPU UNLOCK
+**Русская версия** | [English version](README_EN.md)
 
-**English** | [한국어](README.ko.md)
+---
 
-Experimental UEFI GPU unlock and direct Windows handoff, expanded through
-community contributions.
+# Универсальный Multi-GPU порт разблокировки для Windows — Ampere & Ada Lovelace
 
-[![Join our Discord community](https://img.shields.io/badge/Join%20Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/WjKsjEqxF)
-[![View compatibility and supported configurations](https://img.shields.io/badge/Compatibility-455A64?style=for-the-badge)](docs/COMPATIBILITY.en.md)
-[![Contribute research and improvements](https://img.shields.io/badge/Contribute-37474F?style=for-the-badge&logo=github&logoColor=white)](docs/CONTRIBUTING.en.md)
+Автономный UEFI-загрузчик для одновременной энергозависимой разблокировки видеокарт NVIDIA архитектур **Ada Lovelace (RTX 40xx)** и **Ampere (RTX 30xx)** под управлением **Windows 10/11 x64 (NVIDIA Drivers)**.
 
-## Community
+Проект базируется на исследованиях [JustAResearcher/gpu-unlock-ada](https://github.com/JustAResearcher/gpu-unlock-ada) и [impacifist/Windows-GPU-UNLOCK](https://github.com/impacifist/Windows-GPU-UNLOCK). Загрузчик отрабатывает в фазе ранней инициализации UEFI до старта видеодрайвера Windows, исключает ошибку «Код 43» и открывает полный аппаратный доступ к тензорным ядрам на максимальной кремниевой скорости.
 
-Join our [Discord community](https://discord.gg/WjKsjEqxF) for conversations,
-work-in-progress findings, and collaborative development and research.
-Keep substantial research results, reproducible test reports, code reviews,
-and project decisions in [GitHub issues](https://github.com/impacifist/Windows-GPU-UNLOCK/issues)
-and pull requests so everyone can find and review them. Please read the
-[community rules](docs/DISCORD-RULES.en.md).
+100% Volatile In-RAM — загрузчик **никогда не прошивает физическую микросхему SPI Flash**. Все модификации происходят исключительно в оперативной памяти хоста и MMIO BAR0. При перезагрузке без флешки видеокарты остаются в 100% заводском стоковом состоянии.
 
-## GPU support
+---
 
-**Success reports apply to specific cards and systems, not every card of the same
-GPU model.** Check the linked motherboard, BIOS and card requirements before building.
+## Сравнение производительности: Сток vs UEFI-Анлок (cuBLAS GEMM)
 
-| GPU | Current status | Details |
-|---|---|---|
-| **RTX 3060 12GB (GA104 / GA106)** | Hardware success reported; headless USB only | [GA104](docs/COMPATIBILITY.en.md#profile-4-asus-prime-b660-plus-d4--rtx-3060-12gb-headless-usb) · [GA106](docs/COMPATIBILITY.en.md#profile-5-gigabyte-h610m-h--rtx-3060-12gb-ga106-headless-usb) |
-| **RTX 3060 Ti 8GB (24c9 / GA104)** | Contributor LOCAL USB success reported; experimental automatic profile | [Exact conditions](docs/COMPATIBILITY.en.md#reported-local-profile-success) |
-| **RTX 3070 8GB (2484 / GA104)** | Contributor LOCAL USB success reported; experimental automatic profile | [Exact conditions](docs/COMPATIBILITY.en.md#reported-local-profile-success) |
-| **RTX 3070 Ti 8GB** | Hardware success reported; internal headless | [Supported configuration](docs/COMPATIBILITY.en.md#profile-2-asus-tuf-b660m-e-d4--rtx-3070-ti-aggregate-console) |
-| **RTX 3080 12GB (220a / GA102)** | Contributor USB success; narrow experimental LOCAL admission, with reported DP recovery limitation | [Exact setup and evidence](evidence/b550-3080-12gb-local/README.md) |
-| **Other RTX 3080 / RTX 3080 Ti** | Private/research success reports; not general upstream profile support | [Setup audit](docs/CONFIRMED-SETUPS.en.md) |
-| **RTX 3090 FE 24GB** | Hardware success recorded; internal headless; default profile | [Supported configuration](docs/COMPATIBILITY.en.md#profile-1-asus-tuf-b650m--rtx-3090-fe-original) |
-| **RTX 3090 Ti 24GB** | Hardware success reported; route depends on exact system | [X870 USB](docs/COMPATIBILITY.en.md#profile-3-gigabyte-x870-aorus-elite-wifi7--rtx-3090-ti-headless-usb) · [B660M internal](docs/COMPATIBILITY.en.md#profile-6-asus-tuf-b660m-e-d4--colorful-rtx-3090-ti-internal) |
+Тестирование проводилось на физическом оборудовании в среде **Windows 11 x64** на двухсокетной платформе **Dual Xeon E5-2696 v3 (X99)** при **одновременной работе обеих видеокарт (Ada Lovelace + Ampere)** с помощью скрипта [`tools/benchmark_dual_gpu.py`](tools/benchmark_dual_gpu.py):
 
-The [compatibility guide](docs/COMPATIBILITY.en.md) lists exact build profiles and
-distinguishes maintainer tests from contributor reports. Results concern their
-recorded builds; later main-branch hardening has host/build checks, **not a new
-physical boot or recovery test**.
+| Видеокарта & Архитектура | Тест (cuBLAS GEMM) | СТОК (Завод) | С НАШИМ UEFI-АНЛОКОМ | Прирост / Разница | Селекторы в RAM |
+| :--- | :--- | :---:| :---:| :---:| :---:|
+| **GPU 0: RTX 4070 Ti 12GB** <br>*(Ada Lovelace AD104, 60 SM)* | **BF16 Tensor Cores** <br>**FP16 Tensor Cores** <br>**FP32 CUDA Cores** | 75.0 TFLOPS <br>74.0 TFLOPS <br>28.0 TFLOPS | **146.94 TFLOPS** <br>**142.22 TFLOPS** <br>**28.30 TFLOPS** | **+95.9% (В 2 РАЗА БЫСТРЕЕ!)** 🔥 <br>**+92.2% прирост** 🔥 <br>Паритет (CUDA-ядра не зажаты) | `SS0=0x88888888` <br>`SS1=0x8` |
+| **GPU 1: RTX 3060 12GB** <br>*(Ampere GA106, 28 SM)* | **BF16 Tensor Cores** <br>**FP16 Tensor Cores** <br>**FP32 CUDA Cores** | 25.6 TFLOPS <br>25.6 TFLOPS <br>9.6 TFLOPS | **49.57 TFLOPS** <br>**48.07 TFLOPS** <br>**9.65 TFLOPS** | **+93.6% (В 2 РАЗА БЫСТРЕЕ!)** 🔥 <br>**+87.8% прирост** 🔥 <br>Паритет (CUDA-ядра не зажаты) | `SS0=0x88888888` <br>`SS1=0x8` |
 
-The latest tagged release, **v0.3.1, is a source-only pre-release**. This source
-tree has changes beyond that tag, including the USB route and X870 profile; those
-are not a newly published release. Build locally with your own partition GUIDs.
-Firmware assets and private, partition-specific EFI binaries are not bundled.
+> [!NOTE]
+> **Физика процесса и снятие дросселирования (SS0 / SS1)**:
+> - **На поколении Ada Lovelace (RTX 4070 Ti)** в заводском режиме драйвер выставляет делитель `1/2 Rate` (`SS0=0x40145131` / `0x60145131`), искусственно срезая вдвое темп тензорных операций с FP32-аккумуляцией. Наш анлок (`SS0=0x88888888`) снимает делитель, удваивая скорость до **146.9 TFLOPS** при потреблении до **284 Вт** (TDP 100%).
+> - **На поколении Ampere (RTX 3060)** в стоковом режиме (`SS0=0x20111021`) поля `FMLA16 / FMLA32` также принудительно зажаты в `1/2 Rate` (паспортные плотные 25.6 TFLOPS без разреженности). Анлок в `0x88888888` переводит все 8 суб-полей в `Full Rate`, раскрывая полную плотную вычислительную силу чипа GA106 в **49.6 TFLOPS**!
+> - В режиме **FP32 (обычные CUDA-шейдеры)** обе видеокарты и в стоке, и с анлоком работают на одинаковой паспортной скорости, так как стандартные векторные ALU NVIDIA не блокирует.
 
-[All reported working setups and profile coverage](docs/CONFIRMED-SETUPS.en.md) · [Complete issue audit](docs/ISSUE-AUDIT.en.md).
+---
 
-## Choose the correct boot path
+## Физически протестированный стенд
 
-| Path | Display and input | Instructions |
-|---|---|---|
-| **Internal headless** | B650M/3090 FE or B660M/3070 Ti / 3090 Ti profile; monitors on RTX; display temporarily removed; no T/U/Enter | [Internal headless guide](docs/HEADLESS.en.md) |
-| **Headless USB** | Reported RTX 3060 / 3090 Ti configurations; profile-specific wrapper and child on a FAT32 USB stick | [Headless USB guide](docs/HEADLESS-USB.en.md) |
-| Internal AMD-display manual / Auto | Original B650M profile, motherboard/iGPU display preserved; manual variant requires U | [Existing internal guide](docs/INTERNAL-BOOT.en.md) |
-| Legacy USB manual | Original AMD/iGPU display profile; U once, then Boot Override to Windows without reset | [Legacy USB guide](docs/GUIDE.en.md) |
+- **Платформа**: Huananzhi X99-F8D Plus (Dual LGA2011-3, чипсет Intel C612 / X99, UEFI AMI Aptio V).
+- **Процессоры**: 2 × Intel Xeon E5-2696 v3 (Haswell-EP, суммарно 36 ядер / 72 потока).
+- **Оперативная память**: 128 ГБ DDR4 (8 × 16 ГБ, 4-канальный режим по 64 ГБ на каждый сокет CPU).
+- **Видеокарта 0 (Слот PCIe / Bus 3:00.0, Socket 0)**: Gigabyte GeForce RTX 4070 Ti WINDFORCE OC (AD104-400, `10de:2782`, Subsystem `1458:40e8`, ревизия A1).
+- **Видеокарта 1 (Слот PCIe / Bus 130:00.0, Socket 1)**: Gigabyte GeForce RTX 3060 EAGLE OC (GA106-300, `10de:2504`, Subsystem `1458:40e2`, ревизия A1).
+- **ОС и драйвер**: Windows 11 Pro x64 (Build 26100), NVIDIA Driver 572.70 / 617.xx (оба устройства функционируют штатно).
 
-X870, B660-PLUS and H610M are not wired into `Configure.ps1` or `Headless.ps1`; use the USB guide.
-USB packages can also be built for the first two profiles, but their recorded
-internal boots do not validate those USB routes. The legacy USB EFI retains its
-AMD display requirement. BIOS priority `USB → Windows` alone does not implement
-direct handoff.
+---
 
-## Internal headless quick start
+## Архитектура универсального загрузчика
 
-**This example is for the default B650M / RTX 3090 FE profile.** For B660M,
-select `-HardwareProfile b660m-3070ti` in both configuration and build as described
-in [compatibility](docs/COMPATIBILITY.en.md). X870 uses the separate USB route.
+1. **Одновременный Multi-GPU & Cross-Architecture анлок**:
+   - Полное динамическое сканирование всех шин PCIe (сегменты 0..255), независимое от сокетов процессора (Dual Xeon, Threadripper, EPYC).
+   - Поддержка разнородных связок (Ada + Ampere в одной системе).
+   - Корректная изоляция микрокода: автоматический выбор контейнеров Booter/V67 (`AD102` для Ada и `GA102` для Ampere).
+2. **Безопасное высвобождение GOP-дисплея**:
+   - `DisconnectController()` с последующим гарантированным восстановлением регистра `PCI_COMMAND` (`0x3`: IO + Memory Space декодирование включено, Bus Master временно снят перед отправкой claim-транзакции). Экран гаснет всего на 1–2 секунды перед бесшовным стартом Windows Boot Manager.
+3. **Строгая адресация VBIOS по аппаратному Hardware ID**:
+   - Дампы VBIOS сопоставляются по PCI Subsystem ID: `\EFI\VBIOS\<VENDOR>_<DEVICE>_<SUBVENDOR>_<SUBDEVICE>.rom` (например, `10de_2782_1458_40e8.rom` и `10de_2504_1458_40e2.rom`). Исключены любые конфликты имён.
+4. **Прямое постраничное выделение памяти (AllocatePages)**:
+   - Большой блоб прошивки `gsp_ga10x.bin` (84.3 МБ) загружается в непрерывные физические страницы памяти, исключая сбои из-за фрагментации пула UEFI.
 
-Read the [full guide and recovery procedure](docs/HEADLESS.en.md) before changing
-boot settings. Use the exact supported hardware, Secure Boot disabled, a fully
-decrypted Windows C: with BitLocker protection off, and a connected keyboard.
-The tools do not disable encryption.
+---
 
-Preserve the **existing Windows ESP and recovery partition**. Prepare a separate
-GPT FAT32 **EFI System Partition of at least 1 GiB**, with a letter such as U:.
-Tools do not create, shrink, delete or format partitions. An ordinary FAT32 data
-partition alone is not the required ESP.
+## Сборка бинарника
 
-You need Python 3.9+, clang/lld-link **20.1.8**, the pinned repository dependencies
-and five locally obtained [firmware assets](docs/ASSETS.en.md).
-Host integration tests additionally need MSVC/Windows SDK and private fixtures.
-
-From an administrator PowerShell in the repository root:
+Для сборки используется автономный кросс-компилятор w64devkit (GCC 16.2.0):
 
 ```powershell
-# Replace the GUID and tool paths with your own values.
-.\internal-boot\Configure.ps1 -UnlockDriveLetter U `
-  -WindowsEspGuid 'YOUR-WINDOWS-ESP-GUID'
-.\research\headless\build-unlock.ps1 `
-  -Clang 'C:\TOOLS\LLVM20\bin\clang.exe' `
-  -LldLink 'C:\TOOLS\LLVM20\bin\lld-link.exe'
-
-# Stage and append a separate F8 test entry; retain existing boot priority.
-.\internal-boot\Headless.ps1 -Assets '.\assets' -Register
+python build.py
 ```
 
-Without an action switch, `Headless.ps1 -Assets '.\assets'` only stages files.
-Configuration and build do not register a boot entry.
+Скрипт компилирует все модули C с оптимизацией `-O2`, собирает исполняемый файл и автоматически обнуляет таблицу импорта PE для исключения динамических зависимостей в среде UEFI ImageLoader.
 
-1. Save work and fully power off. On the tested ASUS firmware, select
-   **F8 → GPU Headless UNLOCK - EXPERIMENTAL**.
-2. **Wait without T, U or Enter.** Initial Esc within five seconds skips release
-   and unlock and boots Windows directly.
-3. The screen becomes black while the RTX GOP is removed. The child attempts
-   once and the wrapper starts Windows directly. Do not reset between unlock and
-   Windows. Confirm display recovery and [measure](docs/BENCHMARK.en.md).
-4. Only after that F8 test succeeds, enable default automatic boot:
+Результат сборки: `dist/EFI/BOOT/BOOTX64.EFI` (~116 КБ, чистый PE32+).
 
-   ```powershell
-   .\internal-boot\Headless.ps1 -EnableAutomatic -ConfirmedSuccess
-   ```
+---
 
-That explicit action places headless first and Windows Boot Manager second and
-disables Windows Fast Startup. Test registration alone does not. Publishing this
-release does not change the research PC's current default boot selection.
+## Подготовка флешки и запуск
 
-**The two Esc windows differ:** initial wrapper Esc boots Windows without release;
-the later three-second child Esc window is after release and cancels into a stop.
-It does not restore the display or continue to Windows. On failure or if Windows
-does not return, fully power off and choose **F8 → Windows Boot Manager**.
+1. Отформатируйте USB-флешку в файловую систему **FAT32**.
+2. Скопируйте файлы согласно структуре:
+```text
+USB_ROOT/
+├── EFI/
+│   ├── BOOT/
+│   │   └── BOOTX64.EFI              <-- Скомпилированный загрузчик
+│   ├── ASSETS/
+│   │   ├── booter_load_ad102.bin    (57 672 байт)
+│   │   ├── booter_load_ga102.bin    (61 256 байт)
+│   │   ├── gsp_boot_ad102.bin       (36 864 байт)
+│   │   ├── gsp_boot_desc_ad102.bin  (84 байт)
+│   │   ├── gsp_boot_desc_ga102.bin  (84 байт)
+│   │   ├── gsp_boot_ga102.bin       (24 576 байт)
+│   │   ├── gsp_ga10x.bin            (84 277 400 байт)
+│   │   ├── v67-ad102-610.43.03-four-plm.bin (64 000 байт)
+│   │   ├── v67-ga102-610.43.03.bin  (64 000 байт)
+│   │   └── NVIDIA-LICENSE
+│   └── VBIOS/
+│       ├── 10de_2782_1458_40e8.rom  <-- Дамп GPU 0 (RTX 4070 Ti)
+│       └── 10de_2504_1458_40e2.rom  <-- Дамп GPU 1 (RTX 3060)
+├── copy_to_usb.bat                  <-- Быстрое копирование в 1 клик
+```
+3. Снять дамп VBIOS своих видеокарт можно прямо из Windows в один клик через скрипт `dump_vbios.bat`.
+4. Вставьте флешку в ПК и выберите её в Boot Menu BIOS (F11 / F12).
+5. Загрузчик покажет найденные видеокарты и через 30 секунд (или по нажатию клавиши `U`) разлочит карты в RAM и передаст управление Windows.
 
+---
+
+## Опциональные флаги управления (TXT-файлы в корне флешки)
+
+По умолчанию загрузчик оптимизирован для максимальной стабильности на современных материнских платах и чипсетах:
+
+| Имя файла в корне флешки | Назначение и поведение |
+| :--- | :--- |
+| *(По умолчанию, без файлов)* | **Безопасный режим (Рекомендуется)**. Загрузчик отключает UEFI GOP перед аппаратным сбросом (FLR), подготавливает `PCI Command = 0x0007` (Bus Master DMA) и сразу передаёт управление в `bootmgfw.efi`. Исключает дедлоки прошивок NVIDIA Option ROM на современных чипсетах (Z790/X670/B650). Windows и драйвер `nvlddmkm.sys` сами нативно поднимают картинку. |
+| **`tx-force-reconnect.txt`** | **Принудительное переподключение UEFI GOP**. Если создать этот пустой текстовый файл в корне флешки, загрузчик вызовет `gBS->ConnectController` после разблокировки, чтобы восстановить текстовую консоль и вывод на экран ещё до старта Windows (работает стабильно на платах постарше, например Z370/B660/X99). |
+| **`tx-reconnect-recursive.txt`** | **Рекурсивное переподключение**. Используется совместно с `tx-force-reconnect.txt`. Принудительно подключает все дочерние узлы выходов дисплея и сбрасывает атрибуты системной консоли `gST->ConsoleOutHandle`. |
+
+---
+
+## Проверка производительности (Бенчмарк)
+
+В репозиторий включен универсальный бенчмарк для автоматического тестирования любого количества видеокарт (от 1 до 8+ GPU):
 ```powershell
-.\internal-boot\Headless.ps1 -RestoreWindowsFirst
+python tools/benchmark_multi_gpu.py
 ```
+*(Также поддерживается вызов по старому имени `python tools/benchmark_dual_gpu.py`).*
 
-Windows-first recovery is independent of experimental EFI/build artifacts and
-still works without saved state. Restoring the prior Fast Startup setting needs
-that state; retain it and backups. [Recovery details](docs/HEADLESS.en.md#recovery).
+Скрипт автоматически:
+1. Определяет все установленные GPU, их имена, объём VRAM и поколение Compute Capability.
+2. Проверяет аппаратную поддержку BF16 (Compute Capability $\ge$ 8.0).
+3. Измеряет чистую скорость cuBLAS GEMM в BF16, FP16 и FP32, а также тактовую частоту SM и энергопотребление.
+4. При наличии 2 и более видеокарт динамически строит сравнительную матрицу скоростей с расчётом коэффициента ускорения.
+5. Поддерживает параметры запуска: `--sizes 2048,4096,8192` и `--iters 15`.
 
-## Original B650M results and limits
+---
 
-The original B650M hardware run's successful child reported SS0 `0x88888888`, SS1 `0x8`, BME disabled, zero
-remaining mappings, completed cleanup and one FLR. The wrapper verified the released
-topology before Windows entry. Windows display recovery was observed by the operator.
+## Поддержка игровых ноутбуков (Hybrid / Optimus / MSHybrid)
 
-| CUDA 12.6 / cuBLAS 12.6, 4096 × 4096 | Three-run median |
-|---|---:|
-| FP32 pedantic | 22.85 TFLOPS |
-| FP16 Tensor / FP32 accumulation | 124.97 TFLOPS |
-| BF16 Tensor / FP32 accumulation | 128.93 TFLOPS |
+*(Исследование и открытие механизма D3cold: **Mayhem50** в upstream [JustAResearcher/gpu-unlock-ada#117](https://github.com/JustAResearcher/gpu-unlock-ada/issues/117))*
 
-Future runs of the [benchmark tool](docs/BENCHMARK.en.md) also measure TF32 separately.
-The historical measurements above predate that addition and have no TF32 result.
+На ноутбуках с гибридной графикой (экран подключен к Intel UHD или AMD Radeon, а NVIDIA работает как ведомый dGPU) Windows 11 через 500–600 мс после старта переводит видеокарту NVIDIA в глубокий энергосберегающий сон **RTD3 (D3cold)**. При последующем пробуждении чип аппаратно сбрасывает регистры анлока обратно в заводской сток (`SS0=0x04003025`).
 
-There is **no contemporary controlled locked baseline** for this headless boot,
-so these values do not establish an unlock percentage. They do not establish game
-or ComfyUI gains, long-term stability, sleep/hibernate resume or repeated automatic
-cold-boot reliability. [Sanitized measurements](evidence/headless-handoff/summary.json)
-and [earlier results](docs/RESULTS.en.md) describe separate experiments.
+Для решения этой проблемы в наш репозиторий добавлен скрипт автоматической настройки реестра:
+👉 **`enable_laptop_hybrid.bat`** (Запуск от имени Администратора):
+1. Автоматически сканирует реестр Windows (`{4d36e968-e325-11ce-bfc1-08002be10318}`) и находит точный ключ видеокарты NVIDIA (независимо от того, `0000`, `0001` или `0002`).
+2. Прописывает `EnableRuntimePowerManagement = 0` (DWORD), предотвращая обесточивание чипа.
+3. Сохраняет нативную работу экрана через процессор Intel/AMD и полную регулировку яркости.
+*(Для возврата к заводским настройкам запустите: `powershell -File tools\enable_laptop_hybrid.ps1 -Restore`).*
 
-For the other machines' measurements, see [B660M Profile 2](docs/COMPATIBILITY.en.md),
-[X870 USB evidence](evidence/x870-3090ti-usb/README.md) and
-[B660-PLUS / 3060 USB evidence](evidence/b660plus-3060-usb/README.md) (controlled locked
-baseline: FP16 1.88–1.92×, BF16 1.92–1.95×, TF32 1.93–1.94× over two boots). Those results are tied
-to their reported builds; a later successful build or host test does not extend
-the physical test record.
-
-## Check existing captures
-
-An [offline compatibility checker](docs/CHECK-COMPATIBILITY.en.md) explains whether
-existing probe captures fit the automatic local-profile route and what is missing.
-It needs only Python 3.10+ and runs no probe or unlock:
-
-```powershell
-python -I research/profile/check-compatibility.py "D:\RTX3090-UNLOCK"
-```
-
-A candidate still needs profile generation, host tests and hardware validation.
-An out-of-scope result does not rule out an exact existing fixed profile.
-Use `--json` for a reviewed-shareable report with limited model/topology observations;
-paste it into the optional offline report field in a [compatibility issue](https://github.com/impacifist/Windows-GPU-UNLOCK/issues/new?template=compatibility.yml).
-The guide also covers comparing two reports to investigate common differences.
-
-## Implementation and boundaries
-
-The [GPU family layer](docs/GPU-FAMILIES.en.md) shares reviewed GA102/GA104/GA106
-traits and identical firmware templates, while exact card/platform pins remain
-separate. Existing profile names and support scope are unchanged.
-
-Headless is a separate compile-time profile. Exact GPU/PROM/PCI state, firmware
-driver code, ownership, cold state, immutable selectors and cleanup checks remain.
-The child logs to files only and rejects physical GOP reappearance or changed
-console/input interfaces. Ordinary builds retain their AMD display guards.
-Do not remove checks or substitute a PROM hash to force another machine through.
-
-| Path | Purpose |
-|---|---|
-| `internal-boot/`, `research/headless/` | Internal/headless source, local build, installation and host tests |
-| `unlock/`, `release/` | Preserved legacy USB manual implementation and historical artifacts |
-| `benchmark/`, `evidence/` | Measurement tools and selected public evidence |
-| `docs/` | Compatibility, assets, boot guides and limitations |
-
-No VBIOS flashing or Windows driver replacement is part of the procedure.
-Driver 617.14 was unchanged in the documented run. Host mock tests do not add hardware
-support. New systems require [compatibility reporting](docs/CONTRIBUTING.en.md) and
-[portability validation](docs/PORTABILITY.en.md). A machine inside the hardware-proven envelope
-can build and test its own local profile with the [new-machine pipeline](docs/NEW-MACHINE.en.md).
-This experimental workflow inventories NVIDIA display devices, but deep capture is
-limited to one reviewed RTX 3090 / 3090 Ti, RTX 3060 12GB, RTX 3060 Ti `24c9` or RTX 3070 `2484` identity in the reviewed PCI/BAR state.
-The generic probe also records optional parent PCI information when its observation
-conditions match, helping investigate motherboard differences. This does not enable an unlock or correct PCI state. A generated local
-profile does not add another verified machine profile. USB write builds require all
-22 host jobs, including fresh PCI identity checks, input policy and the topology-specific complete driver-release replay, and unchanged profile,
-fixtures and build inputs; hardware validation is still required. Within this envelope
-the generic probe discovers the bus automatically and the generated profile pins it per
-machine. An optional `-TargetBus` constrains discovery and resumed captures.
-LOCAL discovery also accepts captured PNP0A03/PNP0A08 root identities and up to 16 PCI
-path nodes, pinning the complete ancestry and checking the exact PCI parent. This
-experimental bridge-chain support still requires per-machine validation.
-LOCAL discovery and generation can pin a unique target on any 16-bit PCI segment.
-Prepare, release and PCI access must match that segment as well as the captured bus;
-nonzero-segment operation is experimental and still needs physical validation.
-Single-RTX systems may have no iGPU or separate EDID driver on the non-aggregate path.
-Without a separate EDID driver, non-aggregate LOCAL generation/replay accepts one
-to four unique NVIDIA display children. Three/four-child paths remain experimental;
-four-child coverage is host-only. EDID-driver and aggregate generation retain a two-child limit.
-Recognized AMI aggregate consoles with one or
-two display children can generate an experimental local profile and require their own
-prepare/release replay; this does not establish another hardware success. Multiple NVIDIA GPUs are not generated.
-Staging the unlock package needs `-StageUnlock`.
-
-## License and attribution
-
-The port and reused core are **GPL-2.0-only**; EDK2 and separately attributed
-components retain their licenses. Based on
-[rough2515-hub/rtx3080-unlock-public](https://github.com/rough2515-hub/rtx3080-unlock-public/tree/a08254d269af30ace9e57237abd3d8e6c261e8f5)
-and [Zagitta/gpu-unlock](https://github.com/Zagitta/gpu-unlock/tree/0ebdb1c6308b6a2072be5bf04513472942541956).
-Preserve [LICENSE](LICENSE), [third-party notices](THIRD_PARTY_NOTICES.md) and
-[change history](CHANGES.md). NVIDIA firmware, PROM/BIOS images, drivers and CUDA
-DLLs are not redistributed in this source release.
