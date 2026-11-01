@@ -604,3 +604,41 @@ Windows PowerShell 5.1 CPU-stub checks passed: warning+exit0, exit2+partial ZIP,
 reuse of an existing measurement and refusal of a second invocation. These
 checks did not execute CUDA. Christian's next action is Windows-only performance
 verification without another reboot; no further firmware writes are requested.
+
+## 2026-11-01 post-unlock throughput observed; final continuity report
+
+Christian returned message 1566596849719185539 with
+`christian-post-unlock-4017e8825f1a47f2aa0f424eba1f6819.zip`.
+Benchmark source SHA256 matches the original unchanged source:
+`6a80b3d42de7af14f864a90a957229c44142b97e950eeb0a60bb88a210d11e9a`.
+Measurements SHA256:
+`92bcfe1fb9b422cb97128f939e8b9eb7299d37d4e42f4b6f15a46355299ff365`.
+Python exited0, report error=null, no EFI repeat/install. The NumPy warning is
+recorded on stderr but did not interrupt the corrected invocation. All four
+128x128 reference checks and final finite-output checks completed under the
+unchanged benchmark. This is not exhaustive numerical qualification.
+
+| Mode | Before TFLOPS | After TFLOPS | Ratio | Change |
+|---|---:|---:|---:|---:|
+| FP32 | 23.4893 | 23.3159 | 0.9926x | -0.74% |
+| FP16 output | 67.2944 | 125.7364 | 1.8685x | +86.85% |
+| BF16 output | 68.3738 | 127.9025 | 1.8706x | +87.06% |
+| TF32 | 33.8468 | 56.0291 | 1.6554x | +65.54% |
+
+These are the same PyTorch2.14.1+cu126/4096 settings, using medians of three
+trials of ten samples. FP16/BF16 trial3 was lower (107.1171/110.1048), so record
+variability rather than promise fixed throughput. Reduced-precision output is
+not directly comparable to the repository's cuBLAS FP32-output benchmark. FP32
+was essentially unchanged. Together with DIAG14 this establishes a successful
+EFI transaction and observed Windows tensor-throughput uplift; automatic boot
+continuity and any intervening reboot are still contributor-report gaps.
+
+Added metadata-only `profiles/msi-h510-3090-usb.json` for the exact guarded
+attended development profile; it does not enroll this board in generic installers,
+rearm it, qualify shared ESP or establish permanence/unattended compatibility.
+The final `complete-christian-evidence.ps1` reads the existing known hashes,
+collects current Windows boot time and asks two continuity questions. It performs
+no GPU workload, firmware/USB write, reboot or installation. Windows PowerShell5.1
+checks passed against the actual returned files and a deliberately mismatched
+fixture (partial ZIP with error). Final report and maintainer/reusable-package
+review remain outstanding; no additional EFI run is needed to answer these gaps.

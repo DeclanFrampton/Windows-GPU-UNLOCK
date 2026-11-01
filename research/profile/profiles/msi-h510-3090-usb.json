@@ -1,0 +1,23 @@
+{
+  "schema": "msi-attended-development-profile-v1",
+  "id": "msi-h510-3090-usb",
+  "layout": "Usb",
+  "machine_profile": "GU_PROFILE_MSI_H510_3090",
+  "pci_id": "220410de",
+  "subsystem_id": "38811462",
+  "chip": "b72000a1",
+  "bar0": "91000000",
+  "prom_sha256": "de78e145e527059faec711a9a320b6dca6a88dc4de0fed882d1688ba2dd1aad1",
+  "status": "live-transaction-and-performance-observed-awaiting-boot-continuity-review",
+  "live_transaction_passed": true,
+  "performance_observed": true,
+  "automatic_unlock": false,
+  "permanent_unlock": false,
+  "shared_esp_qualified": false,
+  "reusable_rearm_package_qualified": false,
+  "general_hardware_compatibility": false,
+  "requires_fresh_informed_attended_choice": true,
+  "entrypoint": "research/profile/run-christian-unlock.ps1",
+  "evidence": "evidence/evga-3090-capture-review/CHRISTIAN-RUNTIME-AUDIT.en.md",
+  "scope": "Exact captured MSI RTX3090 / ASUS PRIME H510M-K R2.0. Runtime graph/code pins remain mandatory. Metadata only: does not authorize rearm or enable generic/internal installers."
+}
