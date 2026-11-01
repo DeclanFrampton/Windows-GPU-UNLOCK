@@ -12,8 +12,10 @@ data=Path(sys.argv[1]).read_bytes();prefix=Path(sys.argv[2]).read_bytes()[:10485
 pe=struct.unpack_from('<I',data,60)[0];opt=pe+24;entry=struct.unpack_from('<I',data,opt+16)[0];table=opt+struct.unpack_from('<H',data,pe+20)[0]
 offsets={0x118128,0x118234,0x110100,0x1fa828,0x823804,0x82381c,0x823820,0x1183a4}
 cases=['success','volatile-ss0','claim-failure','initial-command-set','forbidden-saved-attrs','bad-bar-size','enable-failure','enabled-attrs-bme','bad-chip','bad-register','read-failure','prefix-mismatch','disable-failure','restore-mismatch','close-failure','stale-owner','log-failure']
+dma='--dma' in sys.argv
 full='--full-prom' in sys.argv
 if full:cases=['success','prefix-mismatch','late-prom-mismatch']
+if dma:cases=['success','allocate-failure','map-failure','short-map','high-map','mapped-bme','unmap-failure','free-failure']
 rows=[]
 for case in cases:
     u=Uc(UC_ARCH_X86,UC_MODE_64);image,ram,stubs=0x10000000,0x20000000,0x30000000
@@ -27,9 +29,11 @@ for case in cases:
     put(system+0x60,services)
     for at in (0x118,0x120,0x128,0x48):put(services+at,stubs+at)
     for at,stub in [(0x10,0x500),(0x30,0x530),(0x78,0x578),(0x80,0x580)]:put(pci+at,stubs+stub)
+    if dma:
+        for at in (0x48,0x50,0x58,0x60):put(pci+at,stubs+0x600+at)
     sp=ram+0x18008;put(sp,stubs+0x1000)
     for reg,value in [(UC_X86_REG_RSP,sp),(UC_X86_REG_RCX,system),(UC_X86_REG_RDX,0),(UC_X86_REG_R8,0),(UC_X86_REG_R9,stubs+0x200)]:u.reg_write(reg,value)
-    state={'enabled':False,'disabled':False,'claimed':False};reads=[];calls=[];events=[]
+    state={'enabled':False,'disabled':False,'claimed':False};reads=[];calls=[];events=[];dma_state={'allocated':False,'mapped':False}
     def hook(engine,address,size,user):
         if image<=address<image+0x200000:return
         off=address-stubs;rcx,rdx,r8,r9=[engine.reg_read(r) for r in (UC_X86_REG_RCX,UC_X86_REG_RDX,UC_X86_REG_R8,UC_X86_REG_R9)]
@@ -48,6 +52,25 @@ for case in cases:
             else:put(r8,0);put(r9,0)
         elif off==0x48:
             if rcx not in (bar,opens):raise AssertionError('Unexpected pool free')
+        elif off==0x658:
+            assert state['enabled'] and state['claimed'] and rdx==0 and r8==4 and r9==20576 and get(rsp+0x30)==0
+            if case=='allocate-failure':status=0x8000000000000009
+            else:put(get(rsp+0x28),ram+0x8000);dma_state['allocated']=True
+        elif off==0x648:
+            assert dma_state['allocated'] and rdx==2 and r8==ram+0x8000 and get(r9)==20576*4096
+            if case=='map-failure':status=0x8000000000000003
+            else:
+                if case=='short-map':put(r9,4096)
+                put(get(rsp+0x28),0x100000000 if case=='high-map' else 0x40000000)
+                put(get(rsp+0x30),0x76540000);dma_state['mapped']=True
+        elif off==0x650:
+            assert dma_state['mapped'] and rdx==0x76540000
+            if case=='unmap-failure':status=0x8000000000000007
+            else:dma_state['mapped']=False
+        elif off==0x660:
+            assert dma_state['allocated'] and not dma_state['mapped'] and rdx==20576 and r8==ram+0x8000
+            if case=='free-failure':status=0x8000000000000007
+            else:dma_state['allocated']=False
         elif off==0x530:
             if rdx!=2 or r8!=0 or r9!=16:raise AssertionError('Unexpected config read')
             cfg=[0]*16;cfg[0]=0x220410de;cfg[1]=2 if state['enabled'] else 1 if case=='initial-command-set' else 0
@@ -58,6 +81,7 @@ for case in cases:
                 value=0x200 if state['enabled'] else 0
                 if case=='forbidden-saved-attrs' and not state['enabled']:value=0x400
                 if case=='enabled-attrs-bme' and state['enabled']:value|=0x400
+                if case=='mapped-bme' and dma_state['mapped']:value|=0x400
                 if case=='restore-mismatch' and state['disabled']:value=0x80
                 put(r9,value)
             elif rdx in (2,3):
@@ -94,5 +118,7 @@ for case in cases:
     if (status==0)!=success or u.reg_read(UC_X86_REG_RSP)!=sp+8:raise AssertionError(f'Wrong result {case}: {status:x}')
     if success and (len(reads)!=(262162 if full else 146) or state['enabled'] or state['claimed']):raise AssertionError('Incomplete normal completion')
     if case in ('bad-chip','bad-register','read-failure','prefix-mismatch','late-prom-mismatch','disable-failure','log-failure') and not state['enabled']:raise AssertionError('Unexpected automatic error rollback')
-    rows.append({'case':case,'status':hex(status),'mmio_reads':len(reads),'state_at_return':state})
+    if dma and success:assert not dma_state['mapped'] and not dma_state['allocated']
+    if dma and not success:assert state['enabled'] and state['claimed']
+    rows.append({'dma_resources':dma_state,'case':case,'status':hex(status),'mmio_reads':len(reads),'state_at_return':state})
 print(json.dumps({'cases':rows,'hardware_accessed':False,'native_firmware_executed':False,'live_recovery_proven':False},indent=2))

@@ -5,7 +5,7 @@
 # DMA or firmware variable writes in default mode. MsiOneChildTest explicitly
 # permits one text-child removal after fresh guards. Builds files only.
 param([Parameter(Mandatory)][guid]$WindowsEspGuid,[string]$Clang='clang',[string]$LldLink='lld-link',[string]$Python='python',
-      [ValidateRange(1,255)][int]$TargetBus=1,[switch]$MsiRuntimeAudit,[switch]$MsiZeroChildTest,[switch]$MsiMembershipAudit,[switch]$MsiOneChildTest,[switch]$MsiVirtualTextTest,[switch]$MsiGraphicsTest,[switch]$MsiEdidTest,[switch]$MsiNvidiaRelease,[switch]$MsiColdProbe,[switch]$MsiColdFullProm)
+      [ValidateRange(1,255)][int]$TargetBus=1,[switch]$MsiRuntimeAudit,[switch]$MsiZeroChildTest,[switch]$MsiMembershipAudit,[switch]$MsiOneChildTest,[switch]$MsiVirtualTextTest,[switch]$MsiGraphicsTest,[switch]$MsiEdidTest,[switch]$MsiNvidiaRelease,[switch]$MsiColdProbe,[switch]$MsiColdFullProm,[switch]$MsiAssetsDma)
 $ErrorActionPreference='Stop'
 if($MsiZeroChildTest -and !$MsiRuntimeAudit){throw 'Zero-child test requires the exact MSI runtime audit'}
 if($MsiMembershipAudit -and (!$MsiRuntimeAudit -or $MsiZeroChildTest)){throw 'Membership audit requires identity audit and excludes method calls'}
@@ -16,6 +16,7 @@ if($MsiEdidTest -and !$MsiGraphicsTest){throw 'EDID test requires graphics membe
 if($MsiNvidiaRelease -and !$MsiEdidTest){throw 'NVIDIA release requires the complete consumer sequence'}
 if($MsiColdProbe -and !$MsiNvidiaRelease){throw 'Cold probe requires verified child/parent release'}
 if($MsiColdFullProm -and !$MsiColdProbe){throw 'Full cold PROM requires cold probe'}
+if($MsiAssetsDma -and !$MsiColdFullProm){throw 'Assets and DMA qualification requires the full cold PROM stage'}
 $repo=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $boot=Join-Path $repo 'internal-boot/boot'
 function GuidC([guid]$Value){
@@ -46,6 +47,7 @@ try {
  if($MsiNvidiaRelease){$defines+='-DGU_MSI_NVIDIA_RELEASE'}
  if($MsiColdProbe){$defines+='-DGU_MSI_COLD_PROBE'}
  if($MsiColdFullProm){$defines+='-DGU_MSI_COLD_FULL_PROM'}
+ if($MsiAssetsDma){$defines+='-DGU_MSI_ASSETS_DMA'}
  $busMode='auto'
  if($PSBoundParameters.ContainsKey('TargetBus')){
   $defines+=('-DGU_PROBE_BUS=0x{0:x}U' -f $TargetBus);$busMode='explicit'
@@ -66,9 +68,10 @@ try {
  if($MsiEdidTest){$manifestInputs+='msi-edid-audit.h'}
  if($MsiNvidiaRelease){$manifestInputs+='msi-nvidia-release.h'}
  if($MsiColdProbe){$manifestInputs+='msi-cold-probe.h'}
+ if($MsiAssetsDma){$manifestInputs+=@('msi-assets.h','msi-dma-probe.h','../unlock/asset-reader.h')}
  [ordered]@{Mode=$(if($MsiNvidiaRelease){'msi-nvidia-child-parent-release-then-windows-usb'}elseif($MsiOneChildTest){'msi-one-child-removal-then-windows-usb'}else{'generic-read-only-probe-then-windows-usb'});MsiRuntimeAudit=[bool]$MsiRuntimeAudit;MsiZeroChildTest=[bool]$MsiZeroChildTest;MsiMembershipAudit=[bool]$MsiMembershipAudit;MsiOneChildTest=[bool]$MsiOneChildTest;MsiVirtualTextTest=[bool]$MsiVirtualTextTest;MsiGraphicsTest=[bool]$MsiGraphicsTest;CallsDriverStop=([bool]$MsiZeroChildTest -or [bool]$MsiOneChildTest);CanUnlock=$false;CanDetach=[bool]$MsiOneChildTest;WritesFirmwareVariables=$false;HardwareTested=$false;Defines=$defines
   MsiEdidTest=[bool]$MsiEdidTest;MsiNvidiaRelease=[bool]$MsiNvidiaRelease;NvidiaStopCalled=[bool]$MsiNvidiaRelease
-  MsiColdProbe=[bool]$MsiColdProbe;MsiColdFullProm=[bool]$MsiColdFullProm;ColdMmioReads=$(if($MsiColdFullProm){262162}elseif($MsiColdProbe){146}else{0});PciMemoryEnableDisable=[bool]$MsiColdProbe
+  MsiColdProbe=[bool]$MsiColdProbe;MsiColdFullProm=[bool]$MsiColdFullProm;MsiAssetsDma=[bool]$MsiAssetsDma;DmaMappingQualification=[bool]$MsiAssetsDma;ColdMmioReads=$(if($MsiColdFullProm){262162}elseif($MsiColdProbe){146}else{0});PciMemoryEnableDisable=[bool]$MsiColdProbe
   ProbeBusMode=$busMode;TargetBus=$(if($busMode -eq 'explicit'){$TargetBus}else{$null})
   EfiSha256=(Get-FileHash -LiteralPath "$out/BOOTX64.EFI").Hash.ToLowerInvariant();BuiltUtc=[DateTime]::UtcNow.ToString('o')
   Sources=@($manifestInputs | ForEach-Object {[ordered]@{Path=$_;Sha256=(Get-FileHash -LiteralPath $_).Hash.ToLowerInvariant()}})

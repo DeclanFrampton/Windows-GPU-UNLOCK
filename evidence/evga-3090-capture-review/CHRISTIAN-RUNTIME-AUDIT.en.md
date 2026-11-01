@@ -444,3 +444,32 @@ Only the small pinned repository source ZIP is downloaded, not NVIDIA inputs.
 No packages, Git, Python upgrade, GPU access, EFI staging or reboot is involved.
 
 Validation passed actual offline generation from the complete pinned cache, Windows PowerShell 5.1 finalization into a fresh output directory, existing-output verification, missing-input failure reporting and an active-worker refusal fixture. ZIP inspection confirmed report/log only and five verified assets on success. No worker was stopped, cached inputs were not overwritten, and no EFI/hardware execution occurred.
+
+## 2026-11-01: Windows payload verification passed; combined EFI resource test
+
+Christian returned `christian-assets-finish-90fa54d505ee43129b813162f2742b38.zip`
+(archive SHA256 bc4602e7e1ff99ee899ea7ac8e05414948ae4d2d89008481296d2b9bf23db150).
+The report has preparation_complete=true, no error and all five expected sizes
+and SHA256 values. It used the complete existing cache with no payload download.
+This proves Windows file preparation, not EFI loading or unlock execution.
+
+New optional -MsiAssetsDma combines the remaining payload-residency and host
+common-buffer checks with the already demonstrated release/full-PROM/decode-off
+sequence. After consuming the one-shot marker, EFI reads and hashes all five
+USB payloads (84427316 CPU bytes), retaining them through the resource checks.
+No payload is uploaded or executed. After cold reads, with exclusive ownership,
+command2 and memory-only attributes, it allocates 20576 pages (84279296 bytes),
+maps them once with BusMasterCommonBuffer, requires an aligned nonzero complete
+32-bit device range, rechecks BME/IO/VGA remain off, then unmaps and frees.
+It does not launch DMA, enable BME, reset or unlock. This qualifies one mapping,
+not GPU DMA behavior or the complete transaction's allocation pattern.
+
+Normal completion follows existing memory-disable, saved-state and ownership
+checks, then frees the five CPU payloads before Windows. Errors hold without
+automatic rollback; CPU buffers or mappings may remain allocated and memory
+decoding enabled until manual recovery. Firmware allocation/mapping may hang
+or fail display/input/Windows. Recovery is unproven. Attend one boot only;
+after five minutes without Windows, power off, remove USB, select normal
+Windows Boot Manager. Do not repeat/rearm. The staging script verifies local
+and USB payload hashes, preserves backups, and excludes ASSETS from result ZIPs.
+The 262162 cold MMIO read count is unchanged; no new GPU MMIO addresses/writes.

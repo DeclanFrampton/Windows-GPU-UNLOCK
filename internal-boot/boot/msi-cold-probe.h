@@ -10,6 +10,9 @@ static EFI_STATUS GuMsiColdConfig(EFI_PCI_IO_PROTOCOL *pci,UINT16 command,UINT32
 static EFI_STATUS GuMsiColdRecord(GU_MSI_RECORD record,const char *name,EFI_STATUS status){
  EFI_STATUS io=record(NULL,name,status);return io==EFI_SUCCESS?status:io;
 }
+#ifdef GU_MSI_ASSETS_DMA
+#include "msi-dma-probe.h"
+#endif
 static EFI_STATUS GuMsiColdProbe(EFI_SYSTEM_TABLE *t,EFI_HANDLE parent,EFI_HANDLE self,GU_MSI_RECORD record){
  EFI_GUID pciGuid=EFI_PCI_IO_PROTOCOL_GUID;EFI_PCI_IO_PROTOCOL *pci=NULL;
  if(!self)return EFI_INVALID_PARAMETER;
@@ -72,6 +75,9 @@ static EFI_STATUS GuMsiColdProbe(EFI_SYSTEM_TABLE *t,EFI_HANDLE parent,EFI_HANDL
  s=GuMsiColdRecord(record,"msi-cold-prom-prefix-match",matched?EFI_SUCCESS:EFI_UNSUPPORTED);if(s!=EFI_SUCCESS)return s;
  s=pci->Mem.Read(pci,EfiPciIoWidthUint32,0,0,1,&chip);if(s!=EFI_SUCCESS)return s;
  s=record(NULL,"msi-cold-chip-after-value",chip);if(s!=EFI_SUCCESS)return s;if(chip!=baselineChip)return EFI_UNSUPPORTED;
+#ifdef GU_MSI_ASSETS_DMA
+ s=GuMsiDmaProbe(pci,record);if(s!=EFI_SUCCESS)return s;
+#endif
  s=record(NULL,"msi-cold-memory-disable-enter",EFI_SUCCESS);if(s!=EFI_SUCCESS)return s;
  s=pci->Attributes(pci,EfiPciIoAttributeOperationDisable,EFI_PCI_IO_ATTRIBUTE_MEMORY,NULL);
  s=GuMsiColdRecord(record,"msi-cold-memory-disable-return",s);if(s!=EFI_SUCCESS)return s;

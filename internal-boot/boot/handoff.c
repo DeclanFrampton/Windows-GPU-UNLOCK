@@ -12,6 +12,9 @@
 #include "flow.h"
 #ifdef GU_MSI_RUNTIME_AUDIT
 #include "msi-runtime-audit.h"
+#ifdef GU_MSI_ASSETS_DMA
+#include "msi-assets.h"
+#endif
 #endif
 #ifdef GU_EVGA_STOP_ONLY
 #include "evga-text-stop.h"
@@ -546,7 +549,13 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE Image,EFI_SYSTEM_TABLE *St) {
       ResearchOutputDisabled=TRUE;
     }
 #endif
+#ifdef GU_MSI_ASSETS_DMA
+    if(s==EFI_SUCCESS)s=GuMsiAssetsPrepare(Table,Root,Record);
+#endif
     if(s==EFI_SUCCESS)s=GuMsiRuntimeAudit(Table,Self,Record);
+#ifdef GU_MSI_ASSETS_DMA
+    if(s==EFI_SUCCESS)s=GuMsiAssetsRelease(Table,Record);
+#endif
 #endif
     EFI_STATUS recorded=Record(NULL,"diagnostic-result",s);
 #ifdef GU_MSI_ONE_CHILD_TEST
