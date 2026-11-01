@@ -55,3 +55,5 @@ builds and PE/source manifests. The X570 synthetic-GUID image is31744bytes,
 SHA25632dda2435ba4d61c20e262717bc128e43c5ba2e1c1d0937a811cc796ffa55d6c.
 NEVER boot fixture images; preparation builds with the owner's actual Windows
 ESP. Local mocks/builds do not establish physical MMIO or Windows return.
+
+Preparation now requires an observed fully decrypted system volume before build and immediately before staging. Protection off alone is insufficient. Encrypted/transitional/unknown/provider-failure states stop without settings changes. Do not suspend or decrypt for this test. Collection of existing files remains available.

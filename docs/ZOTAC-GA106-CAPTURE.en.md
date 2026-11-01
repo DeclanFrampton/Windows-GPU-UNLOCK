@@ -82,3 +82,5 @@ separately scoped profile stage, not automatic unlock.
 Maintainer CPU/mock checks, in a fresh source folder and developer compiler
 environment: `research/profile/test-zotac-probe.ps1` (optional `-VcVars` path).
 Its fixture Windows GUID is synthetic: never stage or boot that test artifact.
+
+Preparation now requires an observed fully decrypted system volume before build and immediately before staging. Protection off alone is insufficient. Encrypted/transitional/unknown/provider-failure states stop without settings changes. Do not suspend or decrypt for this test. Collection of existing files remains available.

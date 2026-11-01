@@ -76,3 +76,5 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\research\profile\prepare-z
 유지관리자 CPU/모의 검사는 새 소스 폴더와 개발자 컴파일 환경에서
 `research/profile/test-zotac-probe.ps1`로 실행합니다(선택적 `-VcVars` 경로).
 테스트용 Windows GUID는 가짜이므로 해당 산출물을 준비하거나 부팅하지 마세요.
+
+준비 과정은 빌드 전과 USB 기록 직전에 시스템 볼륨의 완전 복호화를 확인합니다. 보호 해제만으로 충분하지 않습니다. 암호화/전환/알 수 없는 상태 또는 공급자 실패이면 설정 변경 없이 중단합니다. 테스트를 위해 보호 일시 중지나 복호화를 하지 마세요. 기존 파일 수집은 계속 가능합니다.

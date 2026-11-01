@@ -151,6 +151,8 @@ if($Collect){
 }
 $drivers=@();if($configuration.NonPci.Count){$drivers=@(Get-CimInstance Win32_PnPSignedDriver -Filter "DeviceClass='DISPLAY'")}
 Assert-PinnedProbe $configuration (Get-CimInstance Win32_BaseBoard) (Get-CimInstance Win32_BIOS) (Get-CimInstance Win32_Processor) @(Get-CimInstance Win32_VideoController) $drivers
+. (Join-Path $PSScriptRoot 'encryption-state.ps1')
+Assert-GuDecryptedVolume
 try {$secure=Confirm-SecureBootUEFI}catch{throw 'Secure Boot state cannot be verified. Stop; do not change settings.'}
 if($secure -isnot [bool] -or $secure -ne $false){throw 'Secure Boot must already be off. Do not change it for this test.'}
 $windows=@(Get-Partition | Where-Object {$_.IsSystem -and $_.Guid})
@@ -174,6 +176,7 @@ if($freshDisk.UniqueId -cne $disk.UniqueId -or $fresh.DiskNumber -ne $part.DiskN
 if((ProbeHash $configurationPath) -cne $configurationHash){throw 'Configuration changed; do not stage.'}
 $drivers=@();if($configuration.NonPci.Count){$drivers=@(Get-CimInstance Win32_PnPSignedDriver -Filter "DeviceClass='DISPLAY'")}
 Assert-PinnedProbe $configuration (Get-CimInstance Win32_BaseBoard) (Get-CimInstance Win32_BIOS) (Get-CimInstance Win32_Processor) @(Get-CimInstance Win32_VideoController) $drivers
+Assert-GuDecryptedVolume
 try{$freshSecure=Confirm-SecureBootUEFI}catch{throw 'Secure Boot recheck failed; do not stage.'}
 if($freshSecure -isnot [bool] -or $freshSecure -ne $false){throw 'Secure Boot is not verified disabled; keep policy unchanged and stop.'}
 Stage-Probe $usb $image $manifest.EfiSha256 $Machine $configurationHash

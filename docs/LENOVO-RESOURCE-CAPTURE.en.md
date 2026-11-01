@@ -51,3 +51,5 @@ staging mocks and source/PE verification. Lenovo synthetic-GUID fixture31744B,
 AMD64,zeroimports,NX/dynamicbase,SHA256fd3f4f105d6a3bdcec72dc350bff6169a163e8f4db9674a7f56dd70440573183.
 Never boot fixture images. Preparation builds with the actual current Windows
 ESP. No physical MMIO or Windows return was tested locally for this case.
+
+Preparation also requires a live observed fully decrypted system volume before build and again before staging. Protection off with encrypted data, unknown/provider failures or changed state is refused. Do not suspend/decrypt/change settings for this test. Existing-file collection remains available without this staging gate.
