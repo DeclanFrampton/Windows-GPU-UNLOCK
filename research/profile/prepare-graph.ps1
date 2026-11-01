@@ -2,7 +2,7 @@
 [CmdletBinding()]
 param([ValidatePattern('^[D-Zd-z]$')][string]$Drive, [switch]$Collect,
       [ValidatePattern('^[a-z][a-z0-9-]{0,63}$')][string]$Machine='issue33',
-      [string]$Clang='clang', [string]$LldLink='lld-link', [string]$Python='python',[string]$OutputRoot)
+      [string]$Clang='clang', [string]$LldLink='lld-link', [string]$Python='python',[string]$OutputRoot,[switch]$PackagedGraph)
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'collection-host.ps1')
 function Get-GraphHash([string]$Path) {
@@ -144,9 +144,14 @@ Write-Host 'ONE attended EFI graph test: firmware protocol/GOP metadata and PCI-
 Write-Host 'No GPU MMIO/PROM, driver release, unlock or firmware-variable writes. Firmware/display/input may hang; Windows may fail to start.'
 Write-Host 'Recovery is unproven: power off, remove this USB, and choose your normal Windows Boot Manager. No automatic retry or rollback.'
 if((Read-Host 'If you accept this boundary, type PREPARE (anything else stops)') -cne 'PREPARE'){throw 'Stopped without staging.'}
-& (Join-Path $PSScriptRoot 'build-graph-only.ps1') -WindowsEspGuid ([guid]$windows[0].Guid) -Clang $Clang -LldLink $LldLink -Python $Python
-if(!$?){throw 'Graph build failed; do not boot.'}
-$built=Join-Path $repo 'internal-boot/boot/build/graph-only'
+if($PackagedGraph){
+ . (Join-Path $PSScriptRoot 'graph-template.ps1')
+ $built=New-PinnedGraphFromTemplate $repo ([guid]$windows[0].Guid) (Join-Path $repo ('internal-boot/boot/build/graph-pinned-'+[guid]::NewGuid().ToString('N')))
+}else{
+ & (Join-Path $PSScriptRoot 'build-graph-only.ps1') -WindowsEspGuid ([guid]$windows[0].Guid) -Clang $Clang -LldLink $LldLink -Python $Python
+ if(!$?){throw 'Graph build failed; do not boot.'}
+ $built=Join-Path $repo 'internal-boot/boot/build/graph-only'
+}
 $manifest=Get-Content -LiteralPath (Join-Path $built 'manifest.json') -Raw | ConvertFrom-Json
 if($manifest.FixtureOnly -ne $false -or $manifest.Mode -cne 'graph-only-build' -or
    $manifest.CanUnlock -ne $false -or $manifest.CanDetach -ne $false -or $manifest.ReadsGpuMmio -ne $false){throw 'Unexpected graph build manifest.'}
