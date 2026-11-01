@@ -2,6 +2,9 @@
  * Errors hold; never restore speculatively after an unexpected hardware result. */
 #pragma once
 #include <IndustryStandard/Acpi.h>
+#ifdef GU_MSI_ADMISSION
+#include "../unlock/msi-admission.h"
+#endif
 static EFI_STATUS GuMsiColdConfig(EFI_PCI_IO_PROTOCOL *pci,UINT16 command,UINT32 cfg[16]){
  EFI_STATUS s=pci->Pci.Read(pci,EfiPciIoWidthUint32,0,16,cfg);
  if(s!=EFI_SUCCESS)return s;
@@ -47,6 +50,9 @@ static EFI_STATUS GuMsiColdProbe(EFI_SYSTEM_TABLE *t,EFI_HANDLE parent,EFI_HANDL
  s=record(NULL,"msi-cold-chip-before-value",chip);if(s!=EFI_SUCCESS)return s;
  if(chip!=0xb72000a1U)return EFI_UNSUPPORTED;baselineChip=chip;
  static const UINT32 offsets[]={0x118128,0x118234,0x110100,0x1fa828,0x823804,0x82381c,0x823820,0x1183a4};
+#ifdef GU_MSI_ADMISSION
+ UINT32 entry[9]={0};entry[0]=baselineChip;
+#endif
  for(UINTN pass=0;pass<2;pass++){
   s=record(NULL,"msi-cold-pass-value",pass);if(s!=EFI_SUCCESS)return s;
   for(UINTN i=0;i<8;i++){
@@ -54,7 +60,11 @@ static EFI_STATUS GuMsiColdProbe(EFI_SYSTEM_TABLE *t,EFI_HANDLE parent,EFI_HANDL
    s=pci->Mem.Read(pci,EfiPciIoWidthUint32,0,offsets[i],1,&value);if(s!=EFI_SUCCESS)return s;
    s=record(NULL,"msi-cold-register-value",value);if(s!=EFI_SUCCESS)return s;
    if(value==0xffffffffU || (value>>16)==0xbadfU)return EFI_UNSUPPORTED;
-   /* These are observations, not fixed cross-boot or same-boot SS0 pins. */
+#ifdef GU_MSI_ADMISSION
+   if(!pass)entry[i+1]=value;
+   else if(value!=entry[i+1])return EFI_UNSUPPORTED;
+#endif
+   /* Observation mode accepts variation; admission keeps the first batch immutable within this attempt. */
   }
  }
 #if defined(GU_MSI_COLD_FULL_PROM)
@@ -77,6 +87,23 @@ static EFI_STATUS GuMsiColdProbe(EFI_SYSTEM_TABLE *t,EFI_HANDLE parent,EFI_HANDL
  s=record(NULL,"msi-cold-chip-after-value",chip);if(s!=EFI_SUCCESS)return s;if(chip!=baselineChip)return EFI_UNSUPPORTED;
 #ifdef GU_MSI_ASSETS_DMA
  s=GuMsiDmaProbe(pci,record);if(s!=EFI_SUCCESS)return s;
+#endif
+#ifdef GU_MSI_ADMISSION
+ if(!pci->GetLocation)return EFI_UNSUPPORTED;
+ UINT32 final[9]={0},config[64];UINTN segment=0,bus=0,device=0,function=0;GU_CAPS caps;
+ s=record(NULL,"msi-admission-enter",EFI_SUCCESS);if(s!=EFI_SUCCESS)return s;
+ for(UINTN i=0;i<9;i++){
+  s=pci->Mem.Read(pci,EfiPciIoWidthUint32,0,i?offsets[i-1]:0,1,&final[i]);if(s!=EFI_SUCCESS)return s;
+  if(final[i]!=entry[i])return GuMsiColdRecord(record,"msi-admission-entry-changed",EFI_UNSUPPORTED);
+ }
+ s=pci->GetLocation(pci,&segment,&bus,&device,&function);if(s!=EFI_SUCCESS)return s;
+ s=pci->Pci.Read(pci,EfiPciIoWidthUint32,0,64,config);if(s!=EFI_SUCCESS)return s;
+ BOOLEAN admitted=GuMsiAdmit(config,segment,bus,device,function,entry,prefix,sizeof(prefix),&caps);
+ s=GuMsiColdRecord(record,"msi-exact-profile-admission",admitted?EFI_SUCCESS:EFI_UNSUPPORTED);if(s!=EFI_SUCCESS)return s;
+ s=record(NULL,"msi-admission-pm-value",caps.pm);if(s!=EFI_SUCCESS)return s;
+ s=record(NULL,"msi-admission-pcie-value",caps.pcie);if(s!=EFI_SUCCESS)return s;
+ s=record(NULL,"msi-admission-msi-value",caps.msi);if(s!=EFI_SUCCESS)return s;
+ s=record(NULL,"msi-admission-complete-no-unlock",EFI_SUCCESS);if(s!=EFI_SUCCESS)return s;
 #endif
  s=record(NULL,"msi-cold-memory-disable-enter",EFI_SUCCESS);if(s!=EFI_SUCCESS)return s;
  s=pci->Attributes(pci,EfiPciIoAttributeOperationDisable,EFI_PCI_IO_ATTRIBUTE_MEMORY,NULL);

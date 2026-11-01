@@ -475,3 +475,30 @@ and USB payload hashes, preserves backups, and excludes ASSETS from result ZIPs.
 The 262162 cold MMIO read count is unchanged; no new GPU MMIO addresses/writes.
 
 Validation: eight compiled helper cases passed with the real SHA256 and full 262162 cold reads: success, allocation failure, map failure, short/high mapping, unexpected mapped BME, unmap and free failures. Four mocked payload-lifetime cases and six actual reader/hash-vector cases passed; the existing 17 prefix regressions passed. EFI compiled/linked and passed PE checks: 40448 bytes, SHA256 e4f98d2026b5846226555b989a920129a83df72cb5434fa6134adaaab9b3156f, AMD64 EFI, zero imports/IAT/delay imports, NX/ASLR. Fixed-source download/build plus simulated USB backup, all payload hash readbacks, collection, repeat and internal-disk refusal passed. Returned ZIP inspection confirmed ASSETS exclusion. These are software/mocked checks, not live common-buffer or recovery proof.
+
+## 2026-11-01: live payload/common-buffer stage passed; exact admission preflight
+
+`christian-assets-dma-result-532e8f115cce402da7d15cd236e47866.zip` contains DIAG12
+SHA256 f72fa99df1daac2c28f84540e0447ffcbd779ff88343c01698cdb8a5896d4208.
+All five EFI payload checks and releases, common-buffer allocation/map/state/
+unmap/free checks, cold PROM, decode-off, exact saved-state and final parent
+checks passed. The mapped device address was 7b48c000 for 05060000 bytes. No
+payload was executed, DMA launched or unlock attempted. One mapping succeeds
+on this run; it does not prove future transaction allocations or GPU execution.
+
+New optional -MsiAdmission adds a CPU-only exact admission rule in
+internal-boot/unlock/msi-admission.h: MSI 2204:38811462, bus1/function0, BAR0
+91000000, captured PROM hash, bounded valid PM/PCIe/MSI capability chain, command2,
+FLR capability and inactive MSI, exact known cold engine/feature/memory values.
+SS0 is checked for supported stock values, not pinned across boots. The first
+cold batch is retained as an immutable per-attempt reference. The second batch
+and a final nine-read sample after mapping must match it; an unexpected change
+holds rather than overwriting that reference. Fresh location and 256-byte PCI
+config are checked before reporting msi-exact-profile-admission.
+
+The preflight does not invoke a transaction or authorize GPU writes. It repeats
+the proven payload/mapping path, adding nine reads at existing GPU addresses
+(262171 cold reads total) and fresh PCI reads. Normal completion keeps the same
+decode-off/ownership/payload release and Windows route. A new guard refusal can
+hold; recovery remains unproven. No new GPU MMIO address/write, reset, DMA launch
+or firmware execution is added. The MSI transaction adapter remains unfinished.
