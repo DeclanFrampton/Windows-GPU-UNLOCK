@@ -1,23 +1,26 @@
 # Offline only: reads existing files, never starts EFI or accesses GPU hardware.
 [CmdletBinding()]
-param([string]$Captures)
+param([string]$Captures, [string]$Python='python.exe')
 $ErrorActionPreference = 'Stop'
 if (!$Captures) { $Captures = Read-Host 'Enter the folder containing your existing DIAG00.TXT / DIAG01.TXT' }
 $source = (Resolve-Path -LiteralPath $Captures).Path
 if (!(Test-Path -LiteralPath $source -PathType Container)) { throw 'Select a folder, not a file.' }
 $root = Split-Path -Parent $PSScriptRoot
-$python = Get-Command python.exe -ErrorAction Stop
+$pythonCommand = Get-Command $Python -CommandType Application -ErrorAction Stop
+if($pythonCommand.Source -match '\\Microsoft\\WindowsApps\\python(?:3)?\.exe$') {
+    throw 'Python resolves to a Windows app alias. Use -Python with your known-good python.exe path; do not change PATH.'
+}
 $documents = [Environment]::GetFolderPath('MyDocuments')
 if (!$documents) { throw 'Documents folder is unavailable.' }
 $output = Join-Path $documents ('GPU-Unlock-Capture-Check-' + [Guid]::NewGuid().ToString('N').Substring(0, 8))
 New-Item -ItemType Directory -Path $output | Out-Null
 $utf8 = New-Object System.Text.UTF8Encoding($false)
-$result = [ordered]@{ test = 'existing-capture-refusal-v1'; checker_exit = $null; status = 'FAILED' }
+$result = [ordered]@{ test = 'existing-capture-refusal-v1'; checker_exit = $null; status = 'FAILED'; phase = 'python-check' }
 $process = New-Object System.Diagnostics.Process
 try {
-    $process.StartInfo.FileName = $python.Source
+    $process.StartInfo.FileName = $pythonCommand.Source
     # Windows filenames cannot contain a quote. The folder is one quoted argument.
-    $process.StartInfo.Arguments = '-I research/profile/check-compatibility.py "' + (Join-Path $source '.') + '" --json'
+    $process.StartInfo.Arguments = '-I -c "import sys; print(''graph-python-''+str(sys.version_info[0]))"'
     $process.StartInfo.WorkingDirectory = $root
     $process.StartInfo.UseShellExecute = $false
     $process.StartInfo.CreateNoWindow = $true
@@ -25,6 +28,14 @@ try {
     $process.StartInfo.RedirectStandardError = $true
     $process.StartInfo.StandardOutputEncoding = $utf8
     $process.StartInfo.StandardErrorEncoding = $utf8
+    if (!$process.Start()) { throw 'Python did not start.' }
+    $probeOut = $process.StandardOutput.ReadToEndAsync()
+    $probeErr = $process.StandardError.ReadToEndAsync()
+    if (!$process.WaitForExit(10000)) { $process.Kill(); throw 'Python check timed out.' }
+    if ($process.ExitCode -ne 0 -or $probeOut.Result.Trim() -cne 'graph-python-3') { throw 'Not a working Python 3 interpreter.' }
+    $process.Close()
+    $result.phase = 'checker'
+    $process.StartInfo.Arguments = '-I research/profile/check-compatibility.py "' + (Join-Path $source '.') + '" --json'
     if (!$process.Start()) { throw 'Python did not start.' }
     $stdout = $process.StandardOutput.ReadToEndAsync()
     $stderr = $process.StandardError.ReadToEndAsync()
@@ -36,10 +47,12 @@ try {
         $report.hardware_tested -ne $false) { throw 'Unexpected report.' }
     [IO.File]::WriteAllText((Join-Path $output 'report.json'), $stdout.Result, $utf8)
     $result.status = $report.status
+    $result.phase = 'done'
     Write-Host ('Report status: ' + $report.status)
     foreach ($check in $report.checks) { Write-Host ($check.capture + ': ' + $check.code) }
 } catch {
     Write-Host 'The offline check failed. Send result.json; do not collect new EFI logs.'
+    if($result.phase -eq 'python-check') { Write-Host 'Use -Python with the known-good Python 3 executable you already use. Do not change PATH or settings.' }
 } finally {
     $process.Dispose()
     [IO.File]::WriteAllText((Join-Path $output 'result.json'), ($result | ConvertTo-Json), $utf8)

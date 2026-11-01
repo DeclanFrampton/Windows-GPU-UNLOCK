@@ -14,6 +14,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\test-existing-captur
 
 When prompted, enter the folder containing your existing `DIAG00.TXT` and
 `DIAG01.TXT`. If script policy blocks execution, report it; do not change policy.
+If `python.exe` resolves to a stub/alias, add `-Python "C:\path\to\python.exe"`
+using the same known-good Python 3 executable you already use. The launcher
+checks that interpreter before running the checker; no PATH edits are needed.
 
 For the exact refusal markers reported in these issues, expect
 `probe_envelope_refused` instead of `invalid_graph`. The overall status stays

@@ -14,6 +14,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\test-existing-captur
 
 메시지가 표시되면 기존 `DIAG00.TXT`, `DIAG01.TXT`가 있는 폴더를 입력하세요.
 실행 정책으로 차단되면 정책을 바꾸지 말고 알려주세요.
+`python.exe`가 stub/별칭이면 기존에 사용하는 정상 Python 3 실행 파일의 경로로
+`-Python "C:\path\to\python.exe"`를 추가하세요. 검사기를 실행하기 전 인터프리터를
+확인하며 PATH 변경은 필요하지 않습니다.
 
 해당 이슈에 보고된 정확한 거부 표식이 있으면 `invalid_graph` 대신
 `probe_envelope_refused`가 표시되어야 합니다. 전체 상태는 `invalid_data`,
