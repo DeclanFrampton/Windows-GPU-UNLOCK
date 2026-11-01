@@ -369,3 +369,20 @@ cp313 SHA256 1f830a0dac88719af0ae43b8b2d6aef487d437036468ef3c2ea59c51f9d55fd5.
 Compiled-code behavior and live unlock remain outside this preparation step.
 
 Validation: Python 3.13.15 passed complete fresh preparation through the actual launcher: pinned source download, private environment creation, hash-checked wheel installation, upstream clone/download/extraction and all five final payload hashes, then report ZIP generation. Direct fallback generation also passed. Python compile and PowerShell parse passed. The two wheel hashes were checked against official PyPI metadata. Python 3.12 compatibility is implemented but not executed in this check; prior native 3.14 validation remains separate.
+
+## Git-free preparation correction
+
+Christian's next screenshot confirms Python 3.13 and the pinned zstd helper
+installation succeeded; the next refusal was Git not found. The launcher now
+fetches the exact upstream source ZIP instead of requiring Git. Before any
+extraction or importing downloaded code, the generator requires archive SHA256
+`d0d8ecd989f9cb885d8eb9ab39fb3f36c9c66df2efd9fabaa68f8afc8bbe70fb`
+from `https://github.com/Zagitta/gpu-unlock/archive/0ebdb1c6308b6a2072be5bf04513472942541956.zip`.
+Extraction uses a new directory; an altered archive is refused before extraction
+or output creation. The existing clone-based developer path remains available.
+Pinned NVIDIA input hashes, parsing, five payload output hashes and licensing
+checks remain unchanged. An upstream archive regeneration that changes bytes
+will refuse rather than silently execute different source. No global Git install,
+USB changes, GPU access or reboot is needed.
+
+Validation passed a complete fresh launcher run with Git deliberately absent from PATH: Python 3.13 private environment, pinned wheel, source ZIP download/hash/extraction, input download, payload generation and five hashes, then report ZIP. A modified source ZIP was rejected before either source/output directory creation. Python compile and PowerShell parse passed. Direct source-ZIP generation passed separately. This is software preparation evidence only.

@@ -1,7 +1,7 @@
 # Prepare payload files on Windows only. No GPU access, USB staging or reboot.
 param([string]$Root='C:\GPU-Unlock',[string]$Assets)
 $ErrorActionPreference='Stop'
-$revision='4e7cef178a52465cfd0a20396839bf6203f096f7'
+$revision='39258530474e3a4eeef69727b0cd9dc7b8f6b14c'
 if(!$Assets){$Assets=Join-Path $Root 'Assets/ga102'}
 $python=Get-Command python -ErrorAction Stop
 $version=& $python.Source -c 'import sys; print(sys.version_info.major*100+sys.version_info.minor)'
@@ -26,8 +26,9 @@ if([int]$version -lt 314 -and !(Test-Path -LiteralPath $Assets)){
 if(Test-Path -LiteralPath $Assets){
  & $runner -I $generator --verify-only --output $Assets
 }else{
- if(!(Get-Command git -ErrorAction SilentlyContinue)){throw 'Git not found. Send this error.'}
- & $runner -I $generator --source (Join-Path $work 'payload-source') --output $Assets
+ $sourceZip=Join-Path $work 'payload-source.zip'
+ Invoke-WebRequest -UseBasicParsing 'https://github.com/Zagitta/gpu-unlock/archive/0ebdb1c6308b6a2072be5bf04513472942541956.zip' -OutFile $sourceZip
+ & $runner -I $generator --source (Join-Path $work 'payload-source') --source-zip $sourceZip --output $Assets
 }
 if($LASTEXITCODE -ne 0){throw 'Payload preparation/verification failed. Preserve files and send this error; do not boot USB.'}
 $specs=Get-Content -LiteralPath (Join-Path $repo 'internal-boot/unlock/assets.json') -Raw | ConvertFrom-Json
