@@ -325,3 +325,27 @@ can hang or have side effects, and manual power-off/USB removal may be required.
 No new GPU MMIO writes, DMA, firmware upload/execution, reset or unlock is added.
 
 Validation: the compiled full-PROM helper with actual SHA256 passed success (262162 reads), first-byte corruption and last-DWORD corruption cases. Both mismatch cases held with decoding enabled, as designed; they do not prove recovery. The rebuilt 512-byte helper passed all 17 regression cases. The full EFI compiled and passed AMD64 EFI PE checks (37376 bytes; SHA256 ce4b90b292e311b2a0ddf3a98fe5e1b8bae2a685791744fb21bb9ef1b4c904e9). These are software/emulated checks, not a live full-cold-PROM result. Event names retain prom-prefix for compatibility; the full-mode build manifest identifies the 1 MiB comparison.
+
+## 2026-11-01: complete cold PROM matched; prepare transaction payloads
+
+Returned archive `christian-cold-full-prom-result-e5e2e25a6d644a6d8beaa4f3bbef0e3d.zip`
+contains DIAG11 SHA256 `975df662493236986e209a274d0927f6961cc3a4fcfa8f10a13dd94299b5b061`.
+The full-mode stage receipt pins source 4c2b7e140c9793bdcf083680dd462d3b4f4bd2d2.
+All release, full 1 MiB hash comparison, decode-off, saved-state, ownership and
+final parent checks passed. SS0 is now 70232144, versus 30232144 in DIAG10;
+therefore a fixed cross-boot SS0 value would reject this otherwise passing run.
+Keep an immutable per-attempt entry reference for a future transaction; do not
+weaken the expected transition checks. No unlock has run. Windows return follows
+the existing reporting convention, not a new log-only proof.
+
+The next runnable step is Windows-only `prepare-christian-assets.ps1`: prepare
+and verify the five pinned GA102 payloads using the existing provenance-checked
+asset generator, retain licensing notices locally, and return only a hash/size
+report ZIP. Defaults: C:\GPU-Unlock\Assets\ga102 and C:\GPU-Unlock\Results.
+It neither touches USB nor stages an EFI, accesses the GPU, runs firmware or
+reboots. Existing directories are verified rather than regenerated; partial or
+mismatched output is refused. This supplies actual transaction prerequisites
+while the MSI-specific transaction adapter remains unfinished; the EVGA adapter
+cannot be reused unchanged because its subsystem, BAR base and PROM differ.
+
+Local validation passed both an existing verified payload directory and a fresh upstream clone/download/extraction/generation run using Python 3.14. A deliberately corrupted descriptor was refused. Report ZIP inspection confirmed one JSON file with five asset records and no firmware. This validates Windows preparation only, not firmware behavior or MSI unlock.
