@@ -14,6 +14,12 @@
 #include <Protocol/SimpleTextOut.h>
 #include "../unlock/sha256.h"
 typedef EFI_STATUS (*GU_MSI_RECORD)(VOID *,const char *,EFI_STATUS);
+#ifdef GU_MSI_EDID_TEST
+#ifndef GU_MSI_GRAPHICS_TEST
+#error EDID test requires the complete prior MSI console sequence
+#endif
+#include "msi-edid-audit.h"
+#endif
 #ifdef GU_MSI_GRAPHICS_TEST
 #ifndef GU_MSI_VIRTUAL_TEXT_TEST
 #error Graphics membership removal requires both text removal stages
@@ -153,6 +159,9 @@ static EFI_STATUS GuMsiRuntimeAudit(EFI_SYSTEM_TABLE *t,GU_MSI_RECORD record){
  EFI_GUID binding=EFI_DRIVER_BINDING_PROTOCOL_GUID,loaded=EFI_LOADED_IMAGE_PROTOCOL_GUID;
  EFI_HANDLE *handles=NULL;UINTN count=0,text=0,gfx=0;
  EFI_DRIVER_BINDING_PROTOCOL *textBinding=NULL;
+#ifdef GU_MSI_EDID_TEST
+ EFI_DRIVER_BINDING_PROTOCOL *edidBinding=NULL,*nvidiaBinding=NULL;VOID *edidBase=NULL;UINTN edidMatches=0,nvidiaMatches=0;
+#endif
 #ifdef GU_MSI_GRAPHICS_TEST
  EFI_DRIVER_BINDING_PROTOCOL *graphicsBinding=NULL;VOID *graphicsBase=NULL;UINTN graphicsSize=0;
 #endif
@@ -171,6 +180,10 @@ static EFI_STATUS GuMsiRuntimeAudit(EFI_SYSTEM_TABLE *t,GU_MSI_RECORD record){
   UINTN base=(UINTN)image->ImageBase;
   if(image->ImageSize>~(UINTN)0-base || (UINTN)d->Stop<base)continue;
   UINTN stop=(UINTN)d->Stop-base;
+#ifdef GU_MSI_EDID_TEST
+  if(d->Version==1 && stop==0x149c && image->ImageSize==0x9000 && GuHashMatches((UINT8 *)image->ImageBase+0x1000,14178,"333b27054df5e7d197238b860fe04e8e618712b533d1608ee9056e1b2435fcb2")){edidBinding=d;edidBase=image->ImageBase;edidMatches++;}
+  if(d->Version==0x60009 && stop==0x698 && image->ImageSize==0x2b700 && GuHashMatches((UINT8 *)image->ImageBase+0x280,146818,"d045cee2113e461c7c678ec21542b1d0f18356765c0fc6a0bf2dcf824088e011")){nvidiaBinding=d;nvidiaMatches++;}
+#endif
   if(d->Version==16 && stop==0x10bc && image->ImageSize>=0x2a0+21904 && GuHashMatches((UINT8 *)image->ImageBase+0x2a0,21904,"3a14de3d645d704fdd327e9e814c7b8928d98ee734d777823d3abe389d628aaa")){text++;textBinding=d;}
   if(d->Version==17 && stop==0x768 && image->ImageSize>=0x2a0+6112 && GuHashMatches((UINT8 *)image->ImageBase+0x2a0,6112,"bbfbb62cb30815f58b751879b431fff7d0a2021568b448f873407221728fb246"))gfx++;
 #ifdef GU_MSI_GRAPHICS_TEST
@@ -187,6 +200,11 @@ static EFI_STATUS GuMsiRuntimeAudit(EFI_SYSTEM_TABLE *t,GU_MSI_RECORD record){
  EFI_STATUS a=record(NULL,"msi-text-code-match",text==1?EFI_SUCCESS:EFI_UNSUPPORTED);
  EFI_STATUS b=record(NULL,"msi-graphics-code-match",gfx==1?EFI_SUCCESS:EFI_UNSUPPORTED);
  if(a!=EFI_SUCCESS || b!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
+#ifdef GU_MSI_EDID_TEST
+ if(record(NULL,"msi-edid-code-match",edidMatches==1?EFI_SUCCESS:EFI_UNSUPPORTED)!=EFI_SUCCESS ||
+    record(NULL,"msi-nvidia-code-match",nvidiaMatches==1?EFI_SUCCESS:EFI_UNSUPPORTED)!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
+ if(edidMatches!=1 || nvidiaMatches!=1 || !edidBinding || !edidBase || !nvidiaBinding)return EFI_UNSUPPORTED;
+#endif
 #ifdef GU_MSI_VIRTUAL_TEXT_TEST
  if(record(NULL,"msi-virtual-text-code-match",virtualMatches==1?EFI_SUCCESS:EFI_UNSUPPORTED)!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
  if(virtualMatches!=1 || !virtualBinding)return EFI_UNSUPPORTED;
@@ -207,6 +225,14 @@ static EFI_STATUS GuMsiRuntimeAudit(EFI_SYSTEM_TABLE *t,GU_MSI_RECORD record){
  s=GuMsiGraphicsOwner(t,physical,controller,graphicsBinding->DriverBindingHandle,TRUE);
  if(record(NULL,"msi-graphics-owner-before",s)!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
  if(s!=EFI_SUCCESS)return s;
+#ifdef GU_MSI_EDID_TEST
+ s=GuMsiEdidState(t,physical,edidBinding->DriverBindingHandle,TRUE);
+ if(record(NULL,"msi-edid-owner-before",s)!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
+ if(s!=EFI_SUCCESS)return s;
+ s=GuMsiNvidiaAudit(t,physical,nvidiaBinding->DriverBindingHandle);
+ if(record(NULL,"msi-nvidia-metadata-before",s)!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
+ if(s!=EFI_SUCCESS)return s;
+#endif
 #endif
 #ifdef GU_MSI_VIRTUAL_TEXT_TEST
  s=GuMsiVirtualOwner(t,controller,virtualBinding->DriverBindingHandle,TRUE);
@@ -265,6 +291,23 @@ static EFI_STATUS GuMsiRuntimeAudit(EFI_SYSTEM_TABLE *t,GU_MSI_RECORD record){
  BOOLEAN snapshotAllocated=*(UINTN *)((UINT8 *)graphicsBase+0x1c50)!=0;
  if(record(NULL,"msi-graphics-snapshot-buffer-present",snapshotAllocated?EFI_SUCCESS:EFI_UNSUPPORTED)!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
  if(!snapshotAllocated)return EFI_UNSUPPORTED; /* Presence does not prove Blt succeeded. */
+#ifdef GU_MSI_EDID_TEST
+ s=GuMsiEdidState(t,physical,edidBinding->DriverBindingHandle,TRUE);
+ if(record(NULL,"msi-edid-owner-fresh",s)!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
+ if(s!=EFI_SUCCESS)return s;
+ if(record(NULL,"msi-edid-stop-enter",EFI_SUCCESS)!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
+ s=edidBinding->Stop(edidBinding,physical,0,NULL);
+ if(record(NULL,"msi-edid-stop-return",s)!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
+ if(s!=EFI_SUCCESS)return s;
+ s=GuMsiEdidState(t,physical,edidBinding->DriverBindingHandle,FALSE);
+ if(record(NULL,"msi-edid-opens-closed",s)!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
+ if(s!=EFI_SUCCESS)return s;
+ BOOLEAN flagClear=*((UINT8 *)edidBase+0x5501)==0;
+ if(record(NULL,"msi-edid-flag-cleared",flagClear?EFI_SUCCESS:EFI_UNSUPPORTED)!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
+ if(!flagClear)return EFI_UNSUPPORTED;
+ s=GuMsiNvidiaAudit(t,physical,nvidiaBinding->DriverBindingHandle);
+ if(record(NULL,"msi-nvidia-metadata-after",s)!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
+#endif
 #endif
  return s;
 #else
