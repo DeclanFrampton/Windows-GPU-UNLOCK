@@ -1,5 +1,11 @@
 # Christian Windows 기준 정보 검사
 
+## 반환 결과 — 2026-11-01
+
+기여자 ZIP은 ASUS PRIME H510M-K R2.0, AMI BIOS 0802, RTX3090 서브시스템 38811462, 드라이버 596.49와 24576MiB를 보고합니다. NVIDIA 조회가 성공했고 두 진단 해시는 이전 캡처와 일치합니다. P0, 350W 제한과 최대 SM/메모리 2130/9751MHz는 관찰값이며 권장 설정이나 성능 증거가 아닙니다. GPU 부하나 잠금 해제는 실행하지 않았습니다.
+
+다음 `test-christian-benchmark-readiness.ps1`는 기존 nvcc/Python/NVIDIA 명령과 CUDA 헤더/라이브러리 및 Python의 torch 패키지 발견 여부를 검사하고 `C:\GPU-Unlock\Results`에 ZIP을 만듭니다. torch를 불러오거나 GPU 부하를 실행하지 않습니다. 도구 부재도 유효한 결과이며 설치 요청이 아닙니다. 드라이버 검토 중 잠금 해제 전 벤치마크 경로를 선택하기 위한 검사이며 Stop 경로를 검증하지 않습니다. PS7/5.1의 도구 부재/존재 모의 검사가 통과했습니다.
+
 [English](CHRISTIAN-BASELINE.en.md)
 
 `research/profile/collect-christian-baseline.ps1`를 실행합니다. 기본 캡처 위치는 `C:\GPU-Unlock\Captures`, 고유 출력 폴더/ZIP은 `C:\GPU-Unlock\Results` 아래입니다. 표시된 ZIP을 보내세요. 관리자 권한이나 재부팅은 필요하지 않습니다.
