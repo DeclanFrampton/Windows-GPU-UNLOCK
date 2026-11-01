@@ -29,6 +29,12 @@ Assert-GraphMachine 'issue180' $b550 $f19 $apu @($rtxTi,$amd,$virtual)
 Reject {Assert-GraphMachine 'issue180' $b550 $f19 $apu @($rtxTi)}
 Reject {Assert-GraphMachine 'issue180' $b550 $f19 $apu @($rtxTi,$nvidia)}
 Reject {Assert-GraphMachine 'issue180' $b550 $f19 $apu @($rtxTi,$amd,$nvidia)}
+$lenovo=[pscustomobject]@{Manufacturer='LENOVO';Product='1052'}
+$lenovoBios=[pscustomobject]@{SMBIOSBIOSVersion='S0AKT48A'};$i9=[pscustomobject]@{Name='11th Gen Intel Core i9-11900K'}
+$ga106=[pscustomobject]@{PNPDeviceID='PCI\VEN_10DE&DEV_2504&SUBSYS_881D1043&REV_A1\PRIVATE'}
+Assert-GraphMachine 'issue19' $lenovo $lenovoBios $i9 $ga106
+Reject {Assert-GraphMachine 'issue19' $lenovo $lenovoBios $i9 $rtxTi}
+Reject {Assert-GraphMachine 'issue19' $lenovo $lenovoBios $i9 @($ga106,$amd)}
 $part=[pscustomobject]@{IsBoot=$false;IsSystem=$false}
 $disk=[pscustomobject]@{BusType='USB';UniqueId='mock-usb';IsBoot=$false;IsSystem=$false;IsReadOnly=$false;IsOffline=$false}
 $volume=[pscustomobject]@{FileSystem='FAT32';SizeRemaining=64MB}

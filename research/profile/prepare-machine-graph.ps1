@@ -1,6 +1,6 @@
 # Shared launcher; machine IDs select exact reviewed preparation pins only.
 [CmdletBinding()]
-param([Parameter(Mandatory)][ValidateSet('issue33','issue109','issue31','issue180')][string]$Machine,
+param([Parameter(Mandatory)][ValidateSet('issue33','issue109','issue31','issue180','issue19')][string]$Machine,
       [ValidatePattern('^[D-Zd-z]$')][string]$Drive,[switch]$Collect,
       [string]$Clang='clang',[string]$LldLink='lld-link',[string]$Python='python')
 $ErrorActionPreference='Stop'

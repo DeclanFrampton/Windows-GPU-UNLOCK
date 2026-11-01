@@ -1,7 +1,7 @@
 # Exact-machine attended graph tests. No automatic boot, format or retry.
 [CmdletBinding()]
 param([ValidatePattern('^[D-Zd-z]$')][string]$Drive, [switch]$Collect,
-      [ValidateSet('issue33','issue109','issue31','issue180')][string]$Machine='issue33',
+      [ValidateSet('issue33','issue109','issue31','issue180','issue19')][string]$Machine='issue33',
       [string]$Clang='clang', [string]$LldLink='lld-link', [string]$Python='python')
 $ErrorActionPreference='Stop'
 function Get-GraphHash([string]$Path) {
@@ -15,6 +15,7 @@ function Assert-GraphMachine([string]$Id,$Board,$Bios,$Cpu,$Video) {
   issue109=@{Board='B560M DS3H V2';Maker='^Gigabyte';Bios='F7 RB';Cpu='\bi5-11400F\b';Pci='2487';Subsys='40721458'}
   issue31=@{Board='PRIME X570-PRO';Maker='^ASUSTeK';Bios='5013';Cpu='\b5950X\b';Pci='2204';Subsys='147D10DE'}
   issue180=@{Board='B550 AORUS ELITE V2';Maker='^Gigabyte';Bios='F19';Cpu='\b5600G\b';Pci='2489';Subsys='153C10DE';Other='^PCI\\VEN_1002&DEV_1638&SUBSYS_D0001458(?:&|\\|$)'}
+  issue19=@{Board='1052';Maker='^LENOVO$';Bios='S0AKT48A';Cpu='\bi9-11900K\b';Pci='2504';Subsys='881D1043'}
  }
  if(!$pins.ContainsKey($Id)){throw 'Unknown graph test machine.'};$p=$pins[$Id]
  # Known software-enumerated adapters do not establish firmware ownership.
