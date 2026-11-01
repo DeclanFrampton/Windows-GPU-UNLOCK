@@ -78,4 +78,4 @@ for case in ['other-state-present', 'cleanup-empty-buffers', 'close-failure', 'f
     rows.append({'case': case, 'status': hex(status), 'list_empty': True, 'calls': calls})
 print(json.dumps({'cases': rows, 'hardware_accessed': False, 'native_firmware_executed': False,
                   'live_removal_qualified': False,
-                  'finding': 'CloseProtocol and OpenProtocol errors do not determine Stop return; post-call ownership checks are required.'}, indent=2))
+                  'finding': 'CloseProtocol and UninstallMultipleProtocolInterfaces errors do not determine Stop return; post-call ownership checks are required.'}, indent=2))

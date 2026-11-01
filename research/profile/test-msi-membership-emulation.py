@@ -19,7 +19,7 @@ unsupported = 0x8000000000000003
 rows = []
 cases = ['success', 'wrong-child', 'two-nodes', 'mmio-node', 'out-of-range',
          'unaligned-node', 'map-error', 'short-stride', 'overflow-pages',
-         'physical-gop', 'missing-gop', 'record-error', 'read-protected', 'wrong-count', 'wrong-tail']
+         'physical-gop', 'missing-gop', 'record-error', 'read-protected', 'wrong-count', 'wrong-tail', 'wrong-previous']
 for case in cases:
     u = Uc(UC_ARCH_X86, UC_MODE_64)
     image, stack, stubs, ram = 0x10000000, 0x20000000, 0x30000000, 0x40000000
@@ -43,6 +43,7 @@ for case in cases:
     put(base + 0x6280, 2 if case == 'wrong-count' else 1)
     put(base + 0x6290, node + 8 if case == 'wrong-tail' else node)
     put(node, 0 if case != 'two-nodes' else node + 0x40)
+    put(node+8, node+0x40 if case == 'wrong-previous' else 0)
     put(node + 24, controller)
     for offset in (0x38, 0x40, 0x48, 0x98):
         put(services + offset, stubs + offset)

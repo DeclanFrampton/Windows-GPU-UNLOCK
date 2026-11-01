@@ -528,7 +528,11 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE Image,EFI_SYSTEM_TABLE *St) {
     if(s==EFI_SUCCESS){
       EFI_FILE_PROTOCOL *arm=NULL;
       s=Table->BootServices->SetWatchdogTimer(0,0,0,NULL);
+#ifdef GU_MSI_VIRTUAL_TEXT_TEST
+      if(s==EFI_SUCCESS)s=Root->Open(Root,&arm,L"MSI-VIRTUAL-TEXT.ARMED",EFI_FILE_MODE_READ|EFI_FILE_MODE_WRITE,0);
+#else
       if(s==EFI_SUCCESS)s=Root->Open(Root,&arm,L"MSI-ONE-CHILD.ARMED",EFI_FILE_MODE_READ|EFI_FILE_MODE_WRITE,0);
+#endif
       if(s==EFI_SUCCESS)s=arm->Delete(arm);
       if(s==EFI_SUCCESS)s=Record(NULL,"msi-one-child-arm-consumed",EFI_SUCCESS);
       ResearchOutputDisabled=TRUE;

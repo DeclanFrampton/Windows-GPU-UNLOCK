@@ -14,6 +14,45 @@
 #include <Protocol/SimpleTextOut.h>
 #include "../unlock/sha256.h"
 typedef EFI_STATUS (*GU_MSI_RECORD)(VOID *,const char *,EFI_STATUS);
+#ifdef GU_MSI_VIRTUAL_TEXT_TEST
+#if !defined(GU_MSI_ONE_CHILD_TEST)
+#error Virtual text removal requires the one-child removal sequence
+#endif
+static EFI_STATUS GuMsiVirtualOwner(EFI_SYSTEM_TABLE *t,EFI_HANDLE controller,EFI_HANDLE agent,BOOLEAN present){
+ EFI_GUID gop=EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID;
+ EFI_OPEN_PROTOCOL_INFORMATION_ENTRY *opens=NULL;UINTN n=0,matches=0;
+ EFI_STATUS s=t->BootServices->OpenProtocolInformation(controller,&gop,&opens,&n);
+ if(s!=EFI_SUCCESS)return s;
+ BOOLEAN ok=n<=256 && (!n || opens);
+ if(ok)for(UINTN i=0;i<n;i++)if(opens[i].Attributes&0x18){
+  if(opens[i].AgentHandle!=agent || opens[i].Attributes!=0x10 || opens[i].ControllerHandle!=controller || opens[i].OpenCount!=1)ok=FALSE;
+  matches++;
+ }
+ if(opens && t->BootServices->FreePool(opens)!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
+ return ok && matches==(present?1U:0U)?EFI_SUCCESS:EFI_UNSUPPORTED;
+}
+static EFI_STATUS GuMsiVirtualInterfaces(EFI_SYSTEM_TABLE *t,EFI_HANDLE controller){
+ EFI_GUID text=EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL_GUID,gop=EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID;
+ EFI_GUID extra={0xe1e4a857,0xc970,0x4075,{0xa4,0xda,0xe9,0xc4,0x1b,0x69,0xad,0xfc}};
+ EFI_GUID **list=NULL;UINTN n=0,removed=0,gops=0;
+ EFI_STATUS s=t->BootServices->ProtocolsPerHandle(controller,&list,&n);
+ if(s!=EFI_SUCCESS)return s;
+ BOOLEAN ok=list && n<=256;
+ if(ok)for(UINTN i=0;i<n;i++){
+  if(!list[i]){ok=FALSE;break;}
+  BOOLEAN a=TRUE,b=TRUE,c=TRUE;
+  for(UINTN j=0;j<sizeof(EFI_GUID);j++){
+   UINT8 v=((UINT8 *)list[i])[j];
+   if(v!=((UINT8 *)&text)[j])a=FALSE;
+   if(v!=((UINT8 *)&extra)[j])b=FALSE;
+   if(v!=((UINT8 *)&gop)[j])c=FALSE;
+  }
+  removed+=a||b;gops+=c;
+ }
+ if(list && t->BootServices->FreePool(list)!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
+ return ok && !removed && gops==1?EFI_SUCCESS:EFI_UNSUPPORTED;
+}
+#endif
 #ifdef GU_MSI_MEMBERSHIP_AUDIT
 /* Pinned text Stop uses image+0x6110 as child and image+0x6288 as a
  * singly-linked list. Read one node only, in allocated RAM, never MMIO. */
@@ -36,15 +75,15 @@ static EFI_STATUS GuMsiMembership(EFI_SYSTEM_TABLE *t,VOID *base,UINTN size,GU_M
    }
   }
  }
- UINTN next=1;EFI_HANDLE controller=NULL;
- if(readable){next=*(UINTN *)node;controller=*(EFI_HANDLE *)(node+24);}
+ UINTN next=1,previous=1;EFI_HANDLE controller=NULL;
+ if(readable){next=*(UINTN *)node;previous=*(UINTN *)(node+8);controller=*(EFI_HANDLE *)(node+24);}
  EFI_STATUS freed=t->BootServices->FreePool(map);if(freed!=EFI_SUCCESS)return freed;
  if(!readable)return record(NULL,"msi-text-controller-memory",EFI_UNSUPPORTED)==EFI_SUCCESS?EFI_UNSUPPORTED:EFI_DEVICE_ERROR;
  EFI_GUID gop=EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID,path=EFI_DEVICE_PATH_PROTOCOL_GUID;
  VOID *g=NULL,*p=NULL;
  BOOLEAN virtualGop=controller && t->BootServices->HandleProtocol(controller,&gop,&g)==EFI_SUCCESS && g &&
   t->BootServices->HandleProtocol(controller,&path,&p)==EFI_UNSUPPORTED;
- BOOLEAN childOk=child && child==(UINTN)t->ConsoleOutHandle,single=next==0 &&
+ BOOLEAN childOk=child && child==(UINTN)t->ConsoleOutHandle,single=next==0 && previous==0 &&
   *(UINTN *)((UINT8 *)base+0x6280)==1 && *(UINTN *)((UINT8 *)base+0x6290)==node;
  if(record(NULL,"msi-text-child-is-console",childOk?EFI_SUCCESS:EFI_UNSUPPORTED)!=EFI_SUCCESS ||
     record(NULL,"msi-text-single-controller",single?EFI_SUCCESS:EFI_UNSUPPORTED)!=EFI_SUCCESS ||
@@ -57,6 +96,9 @@ static EFI_STATUS GuMsiRuntimeAudit(EFI_SYSTEM_TABLE *t,GU_MSI_RECORD record){
  EFI_GUID binding=EFI_DRIVER_BINDING_PROTOCOL_GUID,loaded=EFI_LOADED_IMAGE_PROTOCOL_GUID;
  EFI_HANDLE *handles=NULL;UINTN count=0,text=0,gfx=0;
  EFI_DRIVER_BINDING_PROTOCOL *textBinding=NULL;
+#ifdef GU_MSI_VIRTUAL_TEXT_TEST
+ EFI_DRIVER_BINDING_PROTOCOL *virtualBinding=NULL;UINTN virtualMatches=0;
+#endif
 #ifdef GU_MSI_MEMBERSHIP_AUDIT
  VOID *textBase=NULL;UINTN textSize=0;
 #endif
@@ -71,6 +113,9 @@ static EFI_STATUS GuMsiRuntimeAudit(EFI_SYSTEM_TABLE *t,GU_MSI_RECORD record){
   UINTN stop=(UINTN)d->Stop-base;
   if(d->Version==16 && stop==0x10bc && image->ImageSize>=0x2a0+21904 && GuHashMatches((UINT8 *)image->ImageBase+0x2a0,21904,"3a14de3d645d704fdd327e9e814c7b8928d98ee734d777823d3abe389d628aaa")){text++;textBinding=d;}
   if(d->Version==17 && stop==0x768 && image->ImageSize>=0x2a0+6112 && GuHashMatches((UINT8 *)image->ImageBase+0x2a0,6112,"bbfbb62cb30815f58b751879b431fff7d0a2021568b448f873407221728fb246"))gfx++;
+#ifdef GU_MSI_VIRTUAL_TEXT_TEST
+  if(d->Version==16 && stop==0xa08 && image->ImageSize==0x39a0 && GuHashMatches((UINT8 *)image->ImageBase+0x2a0,7232,"654ca7fec19bf03dabe804d0d81d47dc810788be59dea03d8c24c727281494ac")){virtualBinding=d;virtualMatches++;}
+#endif
 #ifdef GU_MSI_MEMBERSHIP_AUDIT
   if(textBinding==d){textBase=image->ImageBase;textSize=(UINTN)image->ImageSize;}
 #endif
@@ -79,6 +124,10 @@ static EFI_STATUS GuMsiRuntimeAudit(EFI_SYSTEM_TABLE *t,GU_MSI_RECORD record){
  EFI_STATUS a=record(NULL,"msi-text-code-match",text==1?EFI_SUCCESS:EFI_UNSUPPORTED);
  EFI_STATUS b=record(NULL,"msi-graphics-code-match",gfx==1?EFI_SUCCESS:EFI_UNSUPPORTED);
  if(a!=EFI_SUCCESS || b!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
+#ifdef GU_MSI_VIRTUAL_TEXT_TEST
+ if(record(NULL,"msi-virtual-text-code-match",virtualMatches==1?EFI_SUCCESS:EFI_UNSUPPORTED)!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
+ if(virtualMatches!=1 || !virtualBinding)return EFI_UNSUPPORTED;
+#endif
 #ifdef GU_MSI_MEMBERSHIP_AUDIT
  if(text!=1 || gfx!=1 || !textBase)return EFI_UNSUPPORTED;
  (void)textBinding;
@@ -86,6 +135,11 @@ static EFI_STATUS GuMsiRuntimeAudit(EFI_SYSTEM_TABLE *t,GU_MSI_RECORD record){
  s=GuMsiMembership(t,textBase,textSize,record,&controller);
 #ifdef GU_MSI_ONE_CHILD_TEST
  if(s!=EFI_SUCCESS || !textBinding || !controller)return EFI_UNSUPPORTED;
+#ifdef GU_MSI_VIRTUAL_TEXT_TEST
+ s=GuMsiVirtualOwner(t,controller,virtualBinding->DriverBindingHandle,TRUE);
+ if(record(NULL,"msi-virtual-text-owner-before",s)!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
+ if(s!=EFI_SUCCESS)return s;
+#endif
  EFI_HANDLE child=t->ConsoleOutHandle;
  if(record(NULL,"msi-text-one-child-enter",EFI_SUCCESS)!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
  s=textBinding->Stop(textBinding,controller,1,&child);
@@ -103,7 +157,23 @@ static EFI_STATUS GuMsiRuntimeAudit(EFI_SYSTEM_TABLE *t,GU_MSI_RECORD record){
  if(closed)for(UINTN i=0;i<opened;i++)if(opens[i].AgentHandle==textBinding->DriverBindingHandle && (opens[i].Attributes&0x18))closed=FALSE;
  if(opens && t->BootServices->FreePool(opens)!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
  if(record(NULL,"msi-text-opens-closed",closed?EFI_SUCCESS:EFI_UNSUPPORTED)!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
- return closed?EFI_SUCCESS:EFI_UNSUPPORTED;
+ if(!closed)return EFI_UNSUPPORTED;
+#ifdef GU_MSI_VIRTUAL_TEXT_TEST
+ s=GuMsiVirtualOwner(t,controller,virtualBinding->DriverBindingHandle,TRUE);
+ if(s!=EFI_SUCCESS)return s;
+ if(record(NULL,"msi-virtual-text-stop-enter",EFI_SUCCESS)!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
+ s=virtualBinding->Stop(virtualBinding,controller,0,NULL);
+ if(record(NULL,"msi-virtual-text-stop-return",s)!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
+ if(s!=EFI_SUCCESS)return s;
+ s=GuMsiVirtualOwner(t,controller,virtualBinding->DriverBindingHandle,FALSE);
+ if(record(NULL,"msi-virtual-text-opens-closed",s)!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
+ if(s!=EFI_SUCCESS)return s;
+ s=GuMsiVirtualInterfaces(t,controller);
+ if(record(NULL,"msi-virtual-text-interfaces-removed",s)!=EFI_SUCCESS)return EFI_DEVICE_ERROR;
+ return s;
+#else
+ return EFI_SUCCESS;
+#endif
 #else
  return s;
 #endif
