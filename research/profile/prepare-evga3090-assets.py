@@ -34,7 +34,7 @@ def verify(output):
             raise ValueError(f"Asset mismatch: {path.name}")
     return specs
 
-def prepare(source, output, source_zip=None):
+def prepare(source, output, source_zip=None, input_cache=None):
     if sys.version_info < (3, 12):
         raise ValueError("Use Python3.12+ for filtered archive extraction")
     if output.exists() and any(output.iterdir()):
@@ -59,7 +59,8 @@ def prepare(source, output, source_zip=None):
     firmware = source / "firmware"
     fetch = load("evga_asset_fetch", firmware / "fetch_artifacts.py")
     manifest = json.loads(fetch.MANIFEST.read_text())
-    source_archive, package = [fetch.fetch(item, source / "inputs") for item in fetch.inputs(manifest)]
+    source_archive, package = [fetch.fetch(item, input_cache if input_cache is not None else source / "inputs",
+                                            offline=input_cache is not None) for item in fetch.inputs(manifest)]
     # New extraction directory each time; no recursive deletion or replacement.
     import tempfile
     extraction = Path(tempfile.mkdtemp(prefix="source-", dir=source))
@@ -99,9 +100,10 @@ def main():
     parser.add_argument("--output", type=Path, default=DEFAULT / "output")
     parser.add_argument("--verify-only", action="store_true")
     parser.add_argument("--source-zip", type=Path, help="Exact hash-pinned upstream ZIP; no Git required")
+    parser.add_argument("--input-cache", type=Path, help="Verify and reuse these complete inputs offline; never download replacements")
     args = parser.parse_args()
     try:
-        specs = verify(args.output) if args.verify_only else prepare(args.source.resolve(), args.output.resolve(), args.source_zip.resolve() if args.source_zip else None)
+        specs = verify(args.output) if args.verify_only else prepare(args.source.resolve(), args.output.resolve(), args.source_zip.resolve() if args.source_zip else None, args.input_cache.resolve() if args.input_cache else None)
     except (OSError, ValueError, subprocess.CalledProcessError) as error:
         parser.exit(1, f"Asset preparation refused: {error}\n")
     print(json.dumps({"output": str(args.output.resolve()), "verified_assets": specs,
