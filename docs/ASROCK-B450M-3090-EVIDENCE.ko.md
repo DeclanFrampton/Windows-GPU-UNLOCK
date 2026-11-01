@@ -53,9 +53,39 @@ PROM을 포함한 기존 fixture는 해시를 위해 로컬에서만 읽고 업�
 테스트 재생성 또는 하드웨어 반복을 하지 마세요. 원본이 없으면 없다고 알려주세요.
 
 로컬 신뢰된 헤더 파서, 중복/형식 오류 조건, 누락 증거 거부,22작업 형식/개인정보
-및 출력 호스트 테스트가 통과했습니다. 소유자 원본의 전체 검사는 아직 대기 중이며
+및 출력 호스트 테스트가 통과했습니다. 소유자 원본의 검사는 아래와 같이 반환되었으며
 허용/프로필 실행 코드는 변경하지 않습니다. 다음 검토는 재캡처가 아닌 조건/소스 연결입니다.
 
 출처: [issue38](https://github.com/windows-GPU-UNLOCK/Windows-GPU-UNLOCK/issues/38),
 [기존 증거 댓글](https://github.com/windows-GPU-UNLOCK/Windows-GPU-UNLOCK/issues/38#issuecomment-6562835517),
 [소유자 데이터](https://gist.github.com/AiInfluenceGr/e551b2986888f3dde76fc86496f18ccd).
+
+## 반환된 소스 검사 및 검토 단계
+
+[반환된 검사](https://github.com/windows-GPU-UNLOCK/Windows-GPU-UNLOCK/issues/38#issuecomment-6563360698)는
+원본 소스에서 HostEvidenceBindingsMatch=true,845개 입력 및22개 호스트 작업을
+보고합니다. 헤더/프로필/PROM/트리 해시는 이전 파일과 같습니다. 숫자 조건은
+bus1, BAR0 fb000000..fbffffff, 루트 포트 장치1/함수1입니다. 이 사례 헤더의 관찰이며
+다른3090/보드에 재사용하지 않습니다. 첫 출력 폴더 거부 후 쓰기 가능한 빈 로컬
+폴더를 만들었으며 소유자는 원본 변경/원본 코드 실행이 없었다고 보고했습니다.
+
+새 로컬 문서 연결 검사는 제공된 프로필의 실제 바이트 해시, 해시 연결,
+소스 행 트리 해시, 의도된 거부 작업, 재생 ID 및 숫자 범위를 확인합니다.
+프로필/해시/트리/작업/개수/중복/숫자/범위 불일치 거부 테스트가 통과했습니다.
+이는 제공된 문서 사이 관계를 검증하며 원본845개 소스나 하드웨어를 여기서
+독립적으로 읽거나 재실행한 증거는 아닙니다.
+
+재현용으로만 기존 profile-review.json, profile.json,
+host-test-receipt-Format2.json을 함께 둔 폴더에 대해 실행할 수 있습니다:
+```powershell
+python -I -B .\research\profile\review-evidence-bindings.py C:\path\to\existing-evidence
+```
+예상 JSON은 status=consistent,845입력/22작업, 허용/하드웨어/쓰기 플래그 false입니다.
+소유자 재실행이나 새 파일을 요청하지 않습니다. 재현 결과가 다르면 검토한 작은
+출력이나 개인정보 제거 오류만 반환하고 중지합니다. 원본을 보존하며 프로필/테스트
+재생성, 재캡처, 부팅 또는 설정 변경을 하지 않습니다.
+
+현재 단계는 정확한 기기의 보고된 하드웨어 성공, 검토된 문서 연결 및 소유자 실행
+소스 검사이며 관리자 프로필 허용 검토로 진행합니다. 이 결과로 추가 캡처/벤치마크/
+인벤토리는 정당화되지 않습니다. PR188은 공유 쓰기 프로필을 설치/허용하거나
+영구/무인/복구 지원을 증명하지 않습니다.

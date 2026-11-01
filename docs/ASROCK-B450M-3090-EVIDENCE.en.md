@@ -36,7 +36,7 @@ Protocol is a transcription:3warmups/10timediterations,PyTorch2.13.0+cu130,
 The LLM-prefill/NVMe observation is excluded from unlock-attributed evidence.
 No permanent/unattended/restart/sleep/hibernate qualification.
 
-## Remaining source-bound audit, existing files only
+## Source-bound audit procedure (completed; retained for reference)
 
 Use a fresh pinned source folder OUTSIDE the original tested checkout. Do not
 copy new files into that checkout or regenerate its profile/test receipt.
@@ -58,9 +58,40 @@ If original files are unavailable, report that; no replacement artifact required
 
 Local tool checks: actual trusted header parser, duplicate/malformed pins,
 missing-evidence refusal,22job shape/privacy and shared output-host cases pass.
-Full audit on this owner's original checkout is pending; no qualification/admission
-code is changed. Next review uses the pin summary and source binding, not recapture.
+The owner has now returned the completed audit below; no qualification/admission
+code is changed. No recapture is requested.
 
 Sources: [issue38](https://github.com/windows-GPU-UNLOCK/Windows-GPU-UNLOCK/issues/38),
 [existing receipt comment](https://github.com/windows-GPU-UNLOCK/Windows-GPU-UNLOCK/issues/38#issuecomment-6562835517),
 [owner's supplied data](https://gist.github.com/AiInfluenceGr/e551b2986888f3dde76fc86496f18ccd).
+
+## Returned source audit and review stage
+
+[Returned audit](https://github.com/windows-GPU-UNLOCK/Windows-GPU-UNLOCK/issues/38#issuecomment-6563360698)
+reports HostEvidenceBindingsMatch=true against the original checkout,845 source inputs
+and22 host jobs. Header/profile/PROM/tree hashes agree with the earlier supplied files.
+Numeric pins: bus1, BAR0 fb000000..fbffffff, root-port device1/function1. These are
+exact-case header observations; do not borrow them for another3090/board.
+Initial output-root refusal was followed by creating a writable empty local directory;
+owner reports originals unchanged and no tested-checkout code executed.
+
+A new local cross-document check on the supplied profile/audit/receipt confirms the
+profile's actual byte hash, hash links, source-row tree digest, intended-refusal job
+outcomes, replay identity and numeric bounds. Negative mixed-profile/hash/tree/job/
+count/duplicate/pin/scope tests pass. This validates relationships in supplied documents;
+the original845 source bytes and hardware were not independently read/rerun here.
+
+Optional reproducibility only, using existing copies named profile-review.json,
+profile.json and host-test-receipt-Format2.json together in a folder:
+```powershell
+python -I -B .\research\profile\review-evidence-bindings.py C:\path\to\existing-evidence
+```
+Expected JSON: status=consistent,845inputs/22jobs and all admission/hardware/write flags
+false. No owner repeat/new artifact requested. If reproduced and different, return only
+that reviewed small output or short sanitized error, stop, preserve originals. Do not
+regenerate tests/profile, recapture, boot or change settings.
+
+Review stage is now exact-machine reported hardware success with reviewed document
+bindings and an owner-run source audit, ready for maintainer review of profile admission.
+No additional capture/benchmark/inventory is justified by these results. PR188 does not
+install/admit a shared write profile or establish permanent/unattended/recovery support.
