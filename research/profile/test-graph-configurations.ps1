@@ -1,6 +1,6 @@
 # Pure configuration/inventory mocks; no hardware or disk staging.
 [CmdletBinding()]
-param([switch]$Report,[ValidateSet('151','196','200')][string]$Case='151')
+param([switch]$Report,[ValidateSet('42','151','196','200')][string]$Case='151')
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'prepare-graph.ps1')
 function Reject([scriptblock]$Action){$failed=$false;try{& $Action}catch{$failed=$true};if(!$failed){throw 'Expected refusal.'}}
@@ -66,6 +66,20 @@ for($omit=0;$omit -lt $pci196.Count;$omit++){
  Reject {Assert-GraphMachine 'issue196' $board196 $bios196 $cpu196 $remaining}
 }
 $temp=Join-Path ([IO.Path]::GetTempPath()) ('graph-config-'+[guid]::NewGuid().ToString('N'))
+$case42=Read-GraphConfiguration 'issue42'
+$board42=[pscustomobject]@{Manufacturer='ASUSTeK COMPUTER INC.';Product=$case42.Board}
+$bios42=[pscustomobject]@{SMBIOSBIOSVersion='4505'};$cpu42=[pscustomobject]@{Name='Intel Core i9-14900K'}
+$pci42=@($case42.Adapters|ForEach-Object{[pscustomobject]@{PNPDeviceID=('PCI\VEN_'+$_.Vendor+'&DEV_'+$_.Device+'&SUBSYS_'+$_.Subsystem+'\PRIVATE')}})
+Assert-GraphMachine 'issue42' $board42 $bios42 $cpu42 @($pci42[2],$pci42[1],$pci42[0])
+for($omit=0;$omit -lt $pci42.Count;$omit++){
+ $remaining=@(for($at=0;$at -lt $pci42.Count;$at++){if($at -ne $omit){$pci42[$at]}})
+ Reject {Assert-GraphMachine 'issue42' $board42 $bios42 $cpu42 $remaining}
+}
+foreach($id in @($null,'ROOT\PRIVATE','SWD\PRIVATE')){
+ $remote=[pscustomobject]@{Name='Microsoft Remote Display Adapter';PNPDeviceID=$id}
+ $rd=[pscustomobject]@{DeviceID=$id;DriverProviderName='Microsoft';DriverVersion='test';IsSigned=$true}
+ Reject {Assert-GraphMachine 'issue42' $board42 $bios42 $cpu42 @($pci42+$remote) @($rd)}
+}
 # Issue200's Meta name/version cannot identify a firmware adapter. Even signed
 # ROOT/SWD metadata stays unknown; another card's board/subsystem cannot match.
 $case200=Read-GraphConfiguration 'issue200'
@@ -111,6 +125,7 @@ if($Report){
  $summary=[ordered]@{Test='graph-configuration-v2';Passed=$true;Case='151';FixtureOnly=$true;PhysicalAdapterPins=2;UnknownDisplayCasesRefused=6;MissingDisplayRefused=$true;Other2216SubsystemRefused=$true;HardwareInventoryRead=$false;HardwareUnlockTested=$false;VirtualAdapterAdmissionGranted=$false;WriteEligible=$false}
  if($Case -ceq '196'){$summary=[ordered]@{Test='graph-configuration-v3';Passed=$true;Case='196';FixtureOnly=$true;PhysicalAdapterPins=3;MissingPhysicalAdapterCasesRefused=3;A4000Required=$true;DisabledIgpuProvesPrebootGop=$false;HardwareInventoryRead=$false;HardwareUnlockTested=$false;VirtualAdapterAdmissionGranted=$false;WriteEligible=$false}}
  if($Case -ceq '200'){$summary=[ordered]@{Test='graph-configuration-v4';Passed=$true;Case='200';FixtureOnly=$true;PhysicalAdapterPins=1;UnknownMetaCasesRefused=3;OtherBiosRefused=$true;OtherSubsystemRefused=$true;HardwareInventoryRead=$false;HardwareUnlockTested=$false;VirtualAdapterAdmissionGranted=$false;WriteEligible=$false}}
+ if($Case -ceq '42'){$summary=[ordered]@{Test='graph-configuration-v5';Passed=$true;Case='42';FixtureOnly=$true;PhysicalAdapterPins=3;NvidiaCandidates=2;MissingAdapterCasesRefused=3;UnknownRemoteCasesRefused=3;AdapterOrderIndependent=$true;IndexBasedTargetSelectionAuthorized=$false;UnlockSequenceEstablished=$false;HardwareInventoryRead=$false;HardwareUnlockTested=$false;VirtualAdapterAdmissionGranted=$false;WriteEligible=$false}}
  $path=Join-Path $folder 'graph-configuration.json'
  $summary|ConvertTo-Json|Set-Content -LiteralPath $path -Encoding UTF8
  Write-Host ('Return only '+$path+'. This tests fixtures, not your hardware. No EFI, settings changes or reboot.')
