@@ -16,7 +16,7 @@ $exe=Join-Path $out 'port-host.exe'
 if($LASTEXITCODE -ne 0){throw 'Host compile failed. Stop without installing/changing settings or booting hardware.'}
 & $exe
 if($LASTEXITCODE -ne 0){throw 'Host port regression failed. No hardware repeat.'}
-$r=[ordered]@{Test='dma32-rounded-boundary-v1';ActualProductionPortMocked=$true;Exact32BitEndAccepted=$true;RoundedCrossingRefused=$true;HardwareAccess=$false;EfiExecuted=$false;WriteEligible=$false}
+$r=[ordered]@{Test='dma32-rounded-boundary-v2';ActualProductionPortMocked=$true;Exact32BitEndAccepted=$true;RoundedCrossingRefused=$true;InvalidMapCleanupFailureCases=6;RetainedMappingRetryRefused=$true;HardwareAccess=$false;EfiExecuted=$false;WriteEligible=$false}
 $path=Join-Path $out 'dma-boundary.json'
 $r|ConvertTo-Json|Set-Content -LiteralPath $path -Encoding utf8
 Write-Host ('PASS: actual GuDmaAllocate boundary/unwind mocks; return only reviewed '+$path+'. No physical experiment requested.')
