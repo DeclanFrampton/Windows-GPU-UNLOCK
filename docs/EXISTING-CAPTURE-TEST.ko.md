@@ -42,3 +42,8 @@ SS0/SS1 쌍에서 구조 pin을 유지하고 route drift를 거부합니다. 소
 실제 캡처 통과나 레지스터 변화의 무해함을 증명하지 않습니다. 저장된 캡처와
 이미지에 같은 offline checker를 사용하세요. 새 cold-monitor 캡처, BIOS/드라이버
 변경, 다른 프로필 차용 또는 하드웨어 실행은 요청하지 않습니다.
+
+#52의 non-aggregate 생성기는 ConOut 기록 누락, EFI_NOT_FOUND/경로 없음,
+중복 기록, 존재하지만 불일치하는 경로를 구분합니다. 인식된 aggregate는 기존
+전체 live ownership 계약을 사용하며 NVRAM 변수를 만들지 않습니다. NVRAM 부재만으로
+승인하지 않고 잘못된 combo ID는 계속 거부합니다. 기존 캡처만 재검사하세요.

@@ -45,3 +45,9 @@ structural pins, while route drift still fails. This is source behavior,
 not proof the actual captures pass or the register differences are harmless.
 Use the already saved captures/images with this same offline checker. No new
 cold-monitor capture, BIOS/driver change, profile borrowing or hardware run.
+
+For #52, the non-aggregate generator now distinguishes a missing ConOut record,
+EFI_NOT_FOUND/no path, ambiguous records and a present mismatching route.
+Recognized aggregate graphs use the existing full live ownership contract and
+do not synthesize NVRAM output variables. Missing NVRAM alone is not admission;
+a wrong combo identity still refuses. Recheck existing captures only.

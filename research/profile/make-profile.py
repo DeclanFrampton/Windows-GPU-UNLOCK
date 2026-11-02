@@ -549,8 +549,17 @@ def analyze(diag, image_dir, envelope):
     # Aggregate uses the same table/interfaces/ownership contract as the runtime;
     # NVRAM ConOut is not used by prepare/release and is not guessed here.
     if topology is None:
-        conout = re.search(r'^variable name=ConOut .*\n((?:(?!variable name=).*\n)*)', text, re.M)
-        rows = re.findall(r'^path-node raw=([0-9a-f]+)$', conout[1], re.M) if conout else []
+        conouts = list(re.finditer(r'^variable name=ConOut .*\n((?:(?!variable name=).*\n)*)', text, re.M))
+        if not conouts:
+            fail('ConOut variable record is missing; the non-aggregate RTX output path is unverified')
+        if len(conouts) != 1:
+            fail('ConOut variable records are ambiguous; the non-aggregate RTX output path is unverified')
+        conout = conouts[0]
+        rows = re.findall(r'^path-node raw=([0-9a-f]+)$', conout[1], re.M)
+        if not rows:
+            if re.match(r'variable name=ConOut initial-status=0x0*800000000000000e\b', conout[0]):
+                fail('ConOut variable is unavailable (EFI_NOT_FOUND); no non-aggregate RTX output path was captured')
+            fail('ConOut has no captured path; the non-aggregate RTX output path is unverified')
         if b''.join(bytes.fromhex(r) for r in rows) != rtx_path:
             fail('ConOut is not exactly the RTX GOP path; multi-device consoles are not generated')
 
