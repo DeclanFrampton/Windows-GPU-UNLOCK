@@ -51,3 +51,10 @@ EFI_NOT_FOUND/no path, ambiguous records and a present mismatching route.
 Recognized aggregate graphs use the existing full live ownership contract and
 do not synthesize NVRAM output variables. Missing NVRAM alone is not admission;
 a wrong combo identity still refuses. Recheck existing captures only.
+
+For #20, the published sanitized capture was read as data: one physical GOP,
+2206/161210de, GA102/10240MiB. A regression preserves outside_scope/gpu_scope
+without borrowing3090 admission; one saved capture also retains capture_count.
+The diagnostic compile flag GU_CONSOLE_AGGREGATE does not establish an observed
+aggregate graph. Do not collect another boot just to clear count; existing
+complete evidence is the next source-review input, not an armed profile.

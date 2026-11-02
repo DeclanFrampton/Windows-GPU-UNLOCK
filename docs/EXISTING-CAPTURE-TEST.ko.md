@@ -47,3 +47,9 @@ SS0/SS1 쌍에서 구조 pin을 유지하고 route drift를 거부합니다. 소
 중복 기록, 존재하지만 불일치하는 경로를 구분합니다. 인식된 aggregate는 기존
 전체 live ownership 계약을 사용하며 NVRAM 변수를 만들지 않습니다. NVRAM 부재만으로
 승인하지 않고 잘못된 combo ID는 계속 거부합니다. 기존 캡처만 재검사하세요.
+
+#20의 공개된 정제 캡처를 데이터로 읽었습니다. 물리 GOP1개,2206/161210de,
+GA102/10240MiB이며 회귀는3090 승인을 차용하지 않고 outside_scope/gpu_scope를
+유지합니다. 저장 캡처1개이면 capture_count도 유지합니다. 진단 컴파일 플래그
+GU_CONSOLE_AGGREGATE는 관측된 aggregate graph의 증거가 아닙니다. count를 없애려고
+새 부팅을 하지 마세요. 기존 증거가 소스 검토 입력이며 armed profile은 아닙니다.

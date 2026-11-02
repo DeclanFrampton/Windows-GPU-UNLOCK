@@ -100,6 +100,19 @@ class CompatibilityTests(unittest.TestCase):
         self.populate(count=1)
         self.assert_reason('needs_data', 'capture_count')
 
+    def test_issue20_3080_fe_observation_does_not_borrow_ga102_admission(self):
+        # Reported identity/VRAM in a synthetic graph, not supplied PROM/images.
+        text=self.populate(count=1,board=0x220610de,chip=0xb72000a1,memory=0x2800,
+                           no_edid=False,children=1).replace('38811462','161210de')
+        (self.folder/'DIAG00.TXT').write_text(text,encoding='ascii')
+        self.assert_reason('outside_scope','gpu_scope')
+        result=self.result()
+        self.assertIn('capture_count',[c['code'] for c in result['checks']])
+        observation=result['observations'][0]
+        self.assertTrue(observation['available'])
+        self.assertEqual(observation['display_controllers'][0]['pci_id'],'220610de')
+        self.assertEqual(observation['device_memory_size_mib'],10240)
+
     def test_explicit_envelope_refusal_is_explained_without_profile_analysis(self):
         text = ('incomplete reason=probe-unreviewed-envelope status=0x8000000000000003\n'
                 'capture-complete=0\ndiagnostic-result status=0x8000000000000006\n')
