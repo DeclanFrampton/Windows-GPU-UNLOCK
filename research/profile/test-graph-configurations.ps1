@@ -22,6 +22,15 @@ foreach($file in Get-ChildItem (Join-Path $PSScriptRoot 'graph-configurations') 
  $bios.SMBIOSBIOSVersion+='other';Reject {Assert-GraphMachine $p.Id $board $bios $cpu $video $drivers};$bios.SMBIOSBIOSVersion=$p.Bios
  Reject {Assert-GraphMachine $p.Id $board $bios $cpu @($video+$video) $drivers}
  Reject {Assert-GraphMachine $p.Id $board $bios $cpu @($video+[pscustomobject]@{PNPDeviceID='USB\PRIVATE'}) $drivers}
+ # Marketing name/version and even a signed driver cannot supply an unknown
+ # firmware identity. Replay the reported Parsec case as untrusted metadata.
+ if($p.Id -ceq 'issue92'){
+  foreach($id in @($null,'ROOT\PRIVATE','SWD\PRIVATE')){
+   $parsec=[pscustomobject]@{Name='Parsec Virtual Display Adapter';PNPDeviceID=$id}
+   $parsecDriver=[pscustomobject]@{DeviceID=$id;DriverProviderName='Parsec';DriverVersion='0.45.0.0';IsSigned=$true}
+   Reject {Assert-GraphMachine $p.Id $board $bios $cpu @($video+$parsec) @($parsecDriver)}
+  }
+ }
 }
 Reject {Read-GraphConfiguration '../issue33'}
 Reject {Read-GraphConfiguration 'missing'}
