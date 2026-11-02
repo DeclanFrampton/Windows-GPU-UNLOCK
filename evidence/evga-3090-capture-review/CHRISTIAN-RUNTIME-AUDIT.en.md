@@ -752,3 +752,23 @@ workload, driver reset, USB mutation or reboot. Existing manual/poweroff answers
 can be supplied as arguments, avoiding repeated questions. PS5.1 scalar-ID and
 query-failure fixtures passed; local OS queries completed with zero limitations.
 Further Windows boot evidence is needed before a justified EFI fix/rearm.
+
+## 2026-11-02 targeted pre-recovery diagnostic capability prepared
+
+The next test is a normal Windows control boot with USB disconnected, not an EFI
+retry. christian-boot-trace.ps1 configures a uniquely named DxgKrnl WPR autologger
+and one protected SYSTEM startup worker to save a trace before manual recovery
+would destroy that session's state. See docs/MSI-DISPLAY-TRACE.en.md for the
+mechanism, owned cleanup and limitations. A failed or incomplete worker must be
+cancelled using the same script; it never retries or runs an EFI. The summary ZIP
+excludes raw ETL, which remains in the protected local diagnostic folder.
+
+Published pinned helper hashes were checked against the actual downloaded files;
+the installed WPR parser accepted the downloaded32MiB event-only profile. Eight
+worker lifecycle/fault/refusal cases, isolated native arguments, actual preparation
+block with mocked privileged OS operations and failed-setup cleanup passed on
+WindowsPowerShell5.1. Non-admin refusal/error ZIP also passed. Actual elevated
+WPR setup, task registration and save-after-restart remain untested on hardware.
+No trace was activated or reboot performed on the development machine. This
+control first validates capturing the missing evidence without a working picture;
+it does not resolve the GPU fault or qualify another armed attempt by itself.
