@@ -3,11 +3,25 @@
 param([switch]$SelfTest,[ValidatePattern('^(?:[0-9A-Fa-f]{4})?$')][string]$ExpectedDevice,
       [ValidatePattern('^(?:[0-9A-Fa-f]{8})?$')][string]$ExpectedSubsystem)
 $ErrorActionPreference='Stop'
+. (Join-Path $PSScriptRoot '../research/profile/encryption-state.ps1')
+function Get-PreflightEncryption([scriptblock]$Query) {
+ $unknown=[ordered]@{ReadStatus='unknown';ProtectionState='unknown';ConversionState='unknown';EncryptionPercentage=$null;FullyDecryptedObserved=$false}
+ try{
+  $state=& $Query
+  if($state.ReadStatus -cnotin @('observed','unavailable','unknown') -or
+     $state.ProtectionState -cnotin @('off','on','unknown') -or
+     $state.ConversionState -cnotin @('fully-decrypted','fully-encrypted','encrypting','decrypting','encryption-paused','decryption-paused','unknown')){return $unknown}
+  if($state.ReadStatus -cne 'observed'){return $unknown}
+  if($state.EncryptionPercentage -isnot [int] -or $state.EncryptionPercentage -lt 0 -or $state.EncryptionPercentage -gt 100 -or $state.FullyDecryptedObserved -isnot [bool]){return $unknown}
+  # Only bounded status fields: never copy provider objects/keys/identifiers.
+  return [ordered]@{ReadStatus='observed';ProtectionState=$state.ProtectionState;ConversionState=$state.ConversionState;EncryptionPercentage=$state.EncryptionPercentage;FullyDecryptedObserved=($state.ProtectionState -ceq 'off' -and $state.ConversionState -ceq 'fully-decrypted' -and $state.EncryptionPercentage -eq 0 -and $state.FullyDecryptedObserved)}
+ }catch{return $unknown}
+}
 function Public-DriverLabel($Value) {
  if($Value -isnot [string] -or $Value.Length -gt 128 -or $Value -match '[\\/:@\x00-\x1f]'){return $null}
  return $Value
 }
-function Get-PreflightReport([bool]$Elevated,[scriptblock]$QuerySecureBoot,$Video,$Drivers,[string]$TargetDevice,[string]$TargetSubsystem) {
+function Get-PreflightReport([bool]$Elevated,[scriptblock]$QuerySecureBoot,$Video,$Drivers,[string]$TargetDevice,[string]$TargetSubsystem,[scriptblock]$QueryEncryption={$null}) {
  $secure=[ordered]@{State='unknown';ErrorCategory=$null;HResult=$null}
  try {
   $value=& $QuerySecureBoot
@@ -34,7 +48,7 @@ function Get-PreflightReport([bool]$Elevated,[scriptblock]$QuerySecureBoot,$Vide
  }
  $targetMatches=@($adapters | Where-Object {$_.Pci -and $_.Pci.Vendor -ieq '10DE' -and $_.Pci.Device -ieq $TargetDevice -and (!$TargetSubsystem -or $_.Pci.Subsystem -ieq $TargetSubsystem)})
  $target=if($TargetDevice){[ordered]@{Vendor='10DE';Device=$TargetDevice.ToUpperInvariant();ExpectedSubsystem=$(if($TargetSubsystem){$TargetSubsystem.ToUpperInvariant()}else{$null});MatchCount=$targetMatches.Count;UniqueInventoryMatch=($targetMatches.Count -eq 1)}}else{$null}
- return [ordered]@{SchemaVersion=2;Target=$target;Elevated=$Elevated;SecureBoot=$secure;DisplayAdapters=$adapters;
+ return [ordered]@{SchemaVersion=3;Target=$target;Elevated=$Elevated;SecureBoot=$secure;SystemVolumeEncryption=(Get-PreflightEncryption $QueryEncryption);DisplayAdapters=$adapters;
    HardwareTested=$false;WriteEligible=$false;Next='Keep EFI preparation stopped until reviewed. No settings changes or boot.'}
 }
 if($SelfTest){
@@ -65,12 +79,19 @@ if($SelfTest){
  if($r.Target.UniqueInventoryMatch -or $r.Target.MatchCount -ne 2){throw 'Duplicate subsystem accepted'}
  $r=Get-PreflightReport $false {$false} $v @() '2489' '38961462'
  if($r.Target.UniqueInventoryMatch -or $r.Target.MatchCount -ne 0){throw 'Wrong subsystem accepted'}
+ $observed={ [pscustomobject]@{ReadStatus='observed';ProtectionState='off';ConversionState='fully-encrypted';EncryptionPercentage=100;FullyDecryptedObserved=$false;RecoveryPassword='PRIVATE'} }
+ $r=Get-PreflightReport $false {$false} @() @() '2504' '397D1462' $observed
+ if($r.SystemVolumeEncryption.FullyDecryptedObserved -or $r.SystemVolumeEncryption.ConversionState -cne 'fully-encrypted' -or ($r|ConvertTo-Json -Depth 8).Contains('PRIVATE')){throw 'Protection-off encryption/privacy regression'}
+ $r=Get-PreflightReport $false {$false} @() @() '2504' '397D1462' {throw 'PRIVATE-PROVIDER-ERROR'}
+ if($r.SystemVolumeEncryption.ReadStatus -cne 'unknown' -or ($r|ConvertTo-Json -Depth 8).Contains('PRIVATE')){throw 'Unavailable encryption provider/privacy regression'}
+ $r=Get-PreflightReport $false {$false} @() @() '2504' '397D1462' {[pscustomobject]@{ReadStatus='observed';ProtectionState='off';ConversionState='fully-decrypted';EncryptionPercentage=0;FullyDecryptedObserved=$true}}
+ if(!$r.SystemVolumeEncryption.FullyDecryptedObserved -or $r.WriteEligible){throw 'Decrypted observation/admission regression'}
  Write-Host 'PASS: enabled/disabled/unknown states, driver association, redaction, non-boolean refusal.';exit
 }
 if($ExpectedSubsystem -and !$ExpectedDevice){throw '-ExpectedSubsystem requires -ExpectedDevice.'}
 $identity=[Security.Principal.WindowsIdentity]::GetCurrent()
 $elevated=([Security.Principal.WindowsPrincipal]$identity).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-$report=Get-PreflightReport $elevated {Confirm-SecureBootUEFI -ErrorAction Stop} @(Get-CimInstance Win32_VideoController) @(Get-CimInstance Win32_PnPSignedDriver -Filter "DeviceClass='DISPLAY'") $ExpectedDevice $ExpectedSubsystem
+$report=Get-PreflightReport $elevated {Confirm-SecureBootUEFI -ErrorAction Stop} @(Get-CimInstance Win32_VideoController) @(Get-CimInstance Win32_PnPSignedDriver -Filter "DeviceClass='DISPLAY'") $ExpectedDevice $ExpectedSubsystem {Read-EncryptionStatus}
 $docs=[Environment]::GetFolderPath('MyDocuments');if(!$docs){throw 'Documents folder unavailable.'}
 $out=Join-Path $docs ('GPU-Unlock-Preflight-'+[guid]::NewGuid().ToString('N').Substring(0,8))
 New-Item -ItemType Directory -Path $out|Out-Null
