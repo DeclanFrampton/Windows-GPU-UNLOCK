@@ -57,7 +57,6 @@ def main():
             parser.error('Card is not in the existing synthetic matrix')
     child_counts=(args.children,) if args.children is not None else (1, 2, 3, 4)
     for bus, children, command, (board,chip,memory), no_edid in itertools.product((1, 0x2b), child_counts, (2, 3), cards, (False,True)):
-        if children>2 and not no_edid:continue
         name = f'id{board:x}-bus{bus:x}-children{children}-cmd{command}-memory{memory:x}-noedid{int(no_edid)}'
         case = out / name
         case.mkdir()

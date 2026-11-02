@@ -73,7 +73,7 @@ COLD = [0x0, 0x823804, 0x118128, 0x118234, 0x110100, 0x1fa828, 0x82381c, 0x82382
 # Test expected-image buffer in test_efi_transaction.c.
 FWSEC_IMAGE_MAX = 0x10000
 IMAGE_MAX = 4 * 1024 * 1024  # Same loaded-image dump cap as probe.c.
-MAX_NO_EDID_CHILDREN = 4  # Contract-tested against full-release.c's runtime capacity.
+MAX_DISPLAY_CHILDREN = 4  # Contract-tested against non-aggregate full-release.c.
 
 
 class Refused(ValueError):
@@ -592,7 +592,7 @@ def analyze(diag, image_dir, envelope):
     nv_agent = sole_driver(blocks, rtx_pci, PCI_IO)
     child_edges = [(a, c, n) for p, a, c, attrs, n in blocks[rtx_pci]['edges'] if p == PATH and attrs == BY_CHILD_CONTROLLER]
     children = [c for a, c, n in child_edges]
-    child_limit = MAX_NO_EDID_CHILDREN if no_edid_driver and topology is None else 2
+    child_limit = MAX_DISPLAY_CHILDREN if topology is None else 2
     if not 1 <= len(children) <= child_limit or len(set(children)) != len(children) or \
             any(a != nv_agent or n != 1 for a, c, n in child_edges):
         raise TopologyRefused(

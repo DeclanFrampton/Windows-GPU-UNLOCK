@@ -158,7 +158,7 @@ class CompatibilityTests(unittest.TestCase):
 
     def test_generated_header_and_report_pin_nonaggregate_child_count(self):
         for no_edid in (False, True):
-            for children in (1, 2):
+            for children in (1, 2, 3, 4):
                 with self.subTest(no_edid=no_edid, children=children):
                     self.populate(no_edid=no_edid, children=children)
                     # This test covers topology metadata, not the native PROM parser.
@@ -169,14 +169,14 @@ class CompatibilityTests(unittest.TestCase):
                     self.assertIs(report['Replay']['Aggregate'], False)
                     self.assertEqual(report['Replay']['ChildCount'], children)
 
-    def test_bound_edid_three_children_refusal_is_diagnosable_without_relaxation(self):
-        self.populate(no_edid=False, children=3, count=1)
+    def test_bound_edid_five_children_refusal_is_diagnosable_without_relaxation(self):
+        self.populate(no_edid=False, children=5, count=1)
         report = self.result()
         self.assertEqual(report['status'], 'outside_scope')
         entries = [c for c in report['checks'] if c['code'] == 'topology_scope']
         self.assertEqual(len(entries), 1)
         self.assertEqual(entries[0]['topology_detail'], {
-            'reason': 'unsupported_display_children', 'display_children': 3, 'allowed_children': 2})
+            'reason': 'unsupported_display_children', 'display_children': 5, 'allowed_children': 4})
         self.assertIn('capture_count', [c['code'] for c in report['checks']])
         self.assertIs(report['hardware_tested'], False)
         self.assertIs(report['write_eligible'], False)
