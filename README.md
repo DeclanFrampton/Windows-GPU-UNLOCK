@@ -21,7 +21,6 @@ community contributions.
 | **I already have capture files from my PC** | [Check those files offline](docs/START-HERE.en.md#2--check-existing-files) |
 | **I want to know which setups have worked** | [Reported setups and their limits](docs/CONFIRMED-SETUPS.en.md) |
 | **I'm ready to investigate an unlock** | [Check the exact configuration and boot route first](docs/COMPATIBILITY.en.md) |
-| **Universal Multi-GPU Engine (Ampere & Ada)** | [Experimental zero-flash multi-GPU in-RAM unlock engine](experimental/README.md) ([English](experimental/README_EN.md)) |
 
 ### Quick check · No reboot
 
@@ -79,7 +78,6 @@ Firmware assets and private, partition-specific EFI binaries are not bundled.
 |---|---|---|
 | **Internal headless** | B650M/3090 FE or B660M/3070 Ti / 3090 Ti profile; monitors on RTX; display temporarily removed; no T/U/Enter | [Internal headless guide](docs/HEADLESS.en.md) |
 | **Headless USB** | Reported RTX 3060 / 3090 Ti configurations; profile-specific wrapper and child on a FAT32 USB stick | [Headless USB guide](docs/HEADLESS-USB.en.md) |
-| **Universal Multi-GPU Engine** | Standalone in-RAM engine for arbitrary multi-GPU setups (RTX 30 & 40 series) with direct Windows handoff | [Universal Engine Guide](experimental/README.md) ([English](experimental/README_EN.md)) |
 | Internal AMD-display manual / Auto | Original B650M profile, motherboard/iGPU display preserved; manual variant requires U | [Existing internal guide](docs/INTERNAL-BOOT.en.md) |
 | Legacy USB manual | Original AMD/iGPU display profile; U once, then Boot Override to Windows without reset | [Legacy USB guide](docs/GUIDE.en.md) |
 
