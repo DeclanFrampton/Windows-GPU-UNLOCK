@@ -645,3 +645,28 @@ report-christian-preparation.ps1은 고정된 기존 로컬 상태의 설치 정
 빌드 로컬 패키지의 완성 상태 및 변경 파일을 이용한 Windows PowerShell5.1 검증을
 통과했다. 사용자 실제 상태 확인은 대기 중이다. 새 호스트 시도 계획을 이전 상태에
 조용히 추가하지 않는다.
+
+## 2026-11-02 영수증 재무장 완료, DisplayPort 복귀 검토 중
+
+Christian은1566606352434860062에서 Windows는 부팅했으나 시작 시 DisplayPort 신호가
+없었다고 보고했다. ZIP christian-rearm-result-111a3a56f882439f9ce1a3f3e970855c에는
+시도 c53e6f10ac514570bfa8e416b7e7be25, 일치 STARTED/FINISHED, DIAG15 SHA256
+93979ddc4dc1a48744ed0997e64211f4fe7884d4f340f062981e9f54fcd6cd76 및
+자동 Windows 복귀 yes가 있다. EFI는 FLR1회, GFWerror0, fault0/retained0/maps0,
+두 번의 대상 셀렉터 검증, 디코드/소유권/자산 정리 및 attempt-finished 성공을
+기록했다. 실제 재무장의 영수증/EFI 완료를 입증하지만 DisplayPort 복귀 또는 전체
+재사용 흐름 자격은 아니다. 화면이 언제/어떻게 돌아왔는지는 아직 보고되지 않았다.
+
+첫 실행의 SS0는30232144, 재무장은70232144였으나 모두88888888/SS1=8에 도달했고
+기록된 FLR 후 GFW 결과는 같았다. 가변 초기 값은 기존 latch 설계에 포함되며 이를
+원인으로 단정하거나 영수증 쓰기/케이블/링크 훈련/Windows 드라이버 초기화를 원인으로
+지목할 근거는 없다. 추측성 GPU/리셋 변경 또는 무장 실행 반복을 하지 않는다.
+
+이전 수집기의 complete_success=true는 EFI 로그/영수증 완료만 뜻했다. 새 수집은
+이를 efi_receipt_and_log_complete로 분리하고 전체/디스플레이 성공을 미검증으로 둔다.
+원본 결과는 보존한다. 프로필은 디스플레이 복귀 검토 중으로 표시한다.
+report-christian-display.ps1은 화면 복귀 시점/복구 행동, OS 디스플레이/모니터 상태,
+현재 부팅 시간 및 최근2시간 관련 System 이벤트 최대300개를 수집한다. 드라이버
+리셋/CUDA/USB 쓰기/설치/재부팅은 없다. WindowsPowerShell5.1 모의 성공/쿼리 실패
+ZIP과 실제 반환 영수증 재생을 통한 EFI/화면 분리를 검증했다. 로컬 Windows OS 쿼리도
+제한0 및 리셋/재무장 없이 완료했지만 Christian의 디스플레이 증거는 아니다.

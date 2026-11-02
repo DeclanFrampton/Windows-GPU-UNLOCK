@@ -26,7 +26,7 @@ if($Mode -eq 'Collect'){
  if($logs.Count -eq 1){$text=Get-Content $logs[0].FullName -Raw;$complete=$text.Contains('msi-unlock-transaction-complete status=0x0000000000000000') -and $text.Contains('msi-attempt-finished status=0x0000000000000000') -and $text.Contains('diagnostic-result status=0x0000000000000000')}
  $answer=Read-Host 'Did Windows start automatically after this USB boot? Yes/No/Unknown'
  if($answer -notin @('Yes','No','Unknown')){$answer='Unknown'}
- [ordered]@{attempt_id=$id;started_receipt_matches=$began;finished_receipt_matches=$ended;matching_log_count=$logs.Count;complete_success=($began -and $ended -and $complete);automatic_windows_return=$answer;automatic_rearm=$false;benchmark_run=$false}|ConvertTo-Json|Set-Content -LiteralPath (Join-Path $out 'result.json') -Encoding utf8
+ [ordered]@{attempt_id=$id;started_receipt_matches=$began;finished_receipt_matches=$ended;matching_log_count=$logs.Count;efi_receipt_and_log_complete=($began -and $ended -and $complete);complete_success=$false;windows_display_verified=$false;automatic_windows_return=$answer;automatic_rearm=$false;benchmark_run=$false}|ConvertTo-Json|Set-Content -LiteralPath (Join-Path $out 'result.json') -Encoding utf8
  Compress-Archive -LiteralPath $out -DestinationPath ($out+'.zip');Write-Output ('Attach this ZIP: '+$out+'.zip');return
 }
 if(!$AcceptRearmRisk){throw 'Requires -AcceptRearmRisk: ONE attended rearm repeats GPU/PCI writes, BME, firmware execution, DMA and FLR. New durable USB receipt writes/readbacks can fail and hold boot. It may corrupt memory, hang or prevent Windows/GPU recovery; recovery is unproven. No blanket rollback/retry. Prior attempts remain preserved.'}

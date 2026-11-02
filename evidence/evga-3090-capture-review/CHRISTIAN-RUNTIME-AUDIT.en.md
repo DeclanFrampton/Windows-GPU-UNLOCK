@@ -697,3 +697,32 @@ state still produces a report ZIP; no repair or rearm is attempted. Windows
 PowerShell5.1 checks passed for complete state from the real archive-built local
 package and an altered-file fixture. Actual contributor state verification is
 pending. The newer host attempt plan is not silently added to the older state.
+
+## 2026-11-02 receipt rearm completed; DisplayPort return is under review
+
+Christian reported (1566606352434860062) that Windows booted but DisplayPort had
+no signal at startup. His ZIP christian-rearm-result-111a3a56f882439f9ce1a3f3e970855c
+contains attempt c53e6f10ac514570bfa8e416b7e7be25, matching STARTED/FINISHED,
+DIAG15 SHA256 93979ddc4dc1a48744ed0997e64211f4fe7884d4f340f062981e9f54fcd6cd76,
+and automatic_windows_return=yes. EFI reports one FLR, GFWerror0, fault0/retained0/
+maps0, both target selectors verified twice, decode/ownership/payload cleanup and
+attempt-finished success. This proves receipt protocol and EFI completion on the
+live rearm. It does not establish successful DisplayPort return or reusable
+end-to-end qualification. How/when video returned is not yet reported.
+
+The first run latched SS0=30232144; the rearm latched70232144. Both reached
+88888888/SS1=8 and had the same recorded post-FLR GFW result. The variable entry
+value was already covered by the latch design; this comparison does not identify
+it, receipt writes, cable/link training or Windows driver initialization as the
+cause. Do not make speculative GPU/reset changes or repeat the armed run.
+
+The old collector's complete_success=true represented EFI log/receipt completion
+only. Corrected new collection to name efi_receipt_and_log_complete separately
+and keep overall/display success unqualified. Original raw results are preserved.
+Profile metadata now marks display return under review. report-christian-display.ps1
+asks when video returned and what restored it, collects OS display/monitor state,
+current boot time and up to300 relevant System events over2 hours. No driver
+reset, CUDA, USB write, install or reboot. WindowsPowerShell5.1 mock success and
+query-failure ZIP checks passed; replay of the actual returned receipts passed
+EFI/display separation. A local Windows OS-query run also completed with zero
+query limitations and no reset/rearm; it is not Christian's display evidence.
