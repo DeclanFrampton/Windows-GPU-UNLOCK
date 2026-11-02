@@ -1,5 +1,5 @@
 {
-  "SchemaVersion": 1,
+  "SchemaVersion": 2,
   "Id": "issue114",
   "Scope": "pinned-read-only-resource-capture",
   "Board": "B650M DS3H",
@@ -11,5 +11,7 @@
   "TargetSubsystem": "263019da",
   "OtherPciVendor": "1002",
   "NonPci": [],
-  "ManufacturerMatch": "prefix"
+  "ManufacturerMatch": "prefix",
+  "OtherPciDevice": "164E",
+  "OtherPciSubsystem": "D0001458"
 }

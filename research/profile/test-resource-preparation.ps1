@@ -30,10 +30,25 @@ $lb.Manufacturer='LENOVO-other';Reject {Assert-PinnedProbe $lenovo $lb $lbi $lc 
 $lb.Product='other';Reject {Assert-PinnedProbe $lenovo $lb $lbi $lc @($lv)};$lb.Product='1052'
 Reject {Assert-PinnedProbe $lenovo $lb $lbi $lc @($lv,$lv)}
 Reject {Read-ProbeConfiguration '../issue31'}
+$zotac=Read-ProbeConfiguration 'issue114'
+$zb=[pscustomobject]@{Manufacturer='Gigabyte Technology Co., Ltd.';Product='B650M DS3H'}
+$zbi=[pscustomobject]@{SMBIOSBIOSVersion='F21'};$zc=[pscustomobject]@{Name='AMD Ryzen 5 7600'}
+$zv=[pscustomobject]@{PNPDeviceID='PCI\VEN_10DE&DEV_2504&SUBSYS_263019DA\PRIVATE'}
+$amd=[pscustomobject]@{PNPDeviceID='PCI\VEN_1002&DEV_164E&SUBSYS_D0001458\PRIVATE'}
+Assert-PinnedProbe $zotac $zb $zbi $zc @($zv,$amd)
+foreach($wrong in @('PCI\VEN_1002&DEV_13C0&SUBSYS_D0001458\PRIVATE','PCI\VEN_1002&DEV_164E&SUBSYS_7D751462\PRIVATE')){
+ Reject {Assert-PinnedProbe $zotac $zb $zbi $zc @($zv,[pscustomobject]@{PNPDeviceID=$wrong})}
+}
+Reject {Assert-PinnedProbe $zotac $zb $zbi $zc @($zv)}
+Reject {Assert-PinnedProbe $zotac $zb $zbi $zc @($zv,$amd,$amd)}
 $temp=Join-Path ([IO.Path]::GetTempPath()) ('resource-prep-'+[guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $temp|Out-Null
+$zraw=Get-Content (Join-Path $PSScriptRoot 'probe-configurations/issue114.json') -Raw
+foreach($bad in @($zraw.Replace('"OtherPciDevice": "164E"','"OtherPciDevice": null'),$zraw.Replace('"OtherPciSubsystem": "D0001458"','"OtherPciSubsystem": "*"'))){
+ [IO.File]::WriteAllText((Join-Path $temp 'issue114.json'),$bad);Reject {Read-ProbeConfiguration 'issue114' $temp}
+}
 $raw=Get-Content (Join-Path $PSScriptRoot 'probe-configurations/issue31.json') -Raw
-foreach($bad in @($raw.Replace('"TargetBus": 8','"TargetBus": 0'),$raw.Replace('pinned-read-only-resource-capture','unlock'),$raw.Replace('220410de','ffffffff'),$raw.Replace('"LCI"','"PCI"'))){
+foreach($bad in @($raw.Replace('"SchemaVersion": 2','"SchemaVersion": 1'),$raw.Replace('"OtherPciDevice": null','"OtherPciDevice": "164E"'),$raw.Replace('"TargetBus": 8','"TargetBus": 0'),$raw.Replace('pinned-read-only-resource-capture','unlock'),$raw.Replace('220410de','ffffffff'),$raw.Replace('"LCI"','"PCI"'))){
  [IO.File]::WriteAllText((Join-Path $temp 'issue31.json'),$bad);Reject {Read-ProbeConfiguration 'issue31' $temp}
 }
 $source=Join-Path $temp 'source.efi';[IO.File]::WriteAllText($source,'mock fixture')

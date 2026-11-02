@@ -13,9 +13,9 @@ function ProbeHash([string]$Path){
 function Read-ProbeConfiguration([string]$Id,[string]$Directory=(Join-Path $PSScriptRoot 'probe-configurations')){
  if($Id -cnotmatch '^[a-z][a-z0-9-]{0,63}$'){throw 'Invalid probe configuration ID.'}
  $p=Get-Content -LiteralPath (Join-Path $Directory ($Id+'.json')) -Raw|ConvertFrom-Json
- $keys=@('SchemaVersion','Id','Scope','Board','ManufacturerPrefix','ManufacturerMatch','Bios','CpuToken','TargetBus','TargetDevice','TargetSubsystem','OtherPciVendor','NonPci')
+ $keys=@('SchemaVersion','Id','Scope','Board','ManufacturerPrefix','ManufacturerMatch','Bios','CpuToken','TargetBus','TargetDevice','TargetSubsystem','OtherPciVendor','OtherPciDevice','OtherPciSubsystem','NonPci')
  if(@($p.PSObject.Properties).Count -ne $keys.Count -or @($p.PSObject.Properties|Where-Object {$_.Name -cnotin $keys}).Count -or
-    $p.SchemaVersion -isnot [int] -or $p.SchemaVersion -ne 1 -or $p.Id -cne $Id -or $p.Scope -cne 'pinned-read-only-resource-capture') {throw 'Invalid probe configuration schema/scope.'}
+    $p.SchemaVersion -isnot [int] -or $p.SchemaVersion -ne 2 -or $p.Id -cne $Id -or $p.Scope -cne 'pinned-read-only-resource-capture') {throw 'Invalid probe configuration schema/scope.'}
  foreach($key in @('Board','ManufacturerPrefix','ManufacturerMatch','Bios','CpuToken')){
   if($p.$key -isnot [string] -or [string]::IsNullOrWhiteSpace($p.$key) -or $p.$key.Length -gt 128 -or $p.$key -match '[\x00-\x1f]'){throw 'Invalid machine pin.'}
  }
@@ -33,6 +33,10 @@ function Read-ProbeConfiguration([string]$Id,[string]$Directory=(Join-Path $PSSc
      $a.Version -notmatch '^[0-9]+(?:\.[0-9]+){1,5}$' -or $seen.ContainsKey($a.Enumerator)){throw 'Invalid non-PCI pin.'}
   $seen[$a.Enumerator]=$true
  }
+ if($p.OtherPciVendor){
+  if($p.OtherPciDevice -isnot [string] -or $p.OtherPciDevice -cnotmatch '^[0-9A-F]{4}$' -or
+     $p.OtherPciSubsystem -isnot [string] -or $p.OtherPciSubsystem -cnotmatch '^[0-9A-F]{8}$'){throw 'Incomplete exact PCI companion pin.'}
+ }elseif($null -ne $p.OtherPciDevice -or $null -ne $p.OtherPciSubsystem){throw 'Unexpected PCI companion pin.'}
  return $p
 }
 function Assert-PinnedProbe($p,$Board,$Bios,$Cpu,$Video,$Drivers=@()){
@@ -41,7 +45,7 @@ function Assert-PinnedProbe($p,$Board,$Bios,$Cpu,$Video,$Drivers=@()){
  $target=@($pci|Where-Object {$_.PNPDeviceID -match $pattern})
  $expectedCount=1;if($p.OtherPciVendor){$expectedCount=2}
  if($target.Count -ne 1 -or $pci.Count -ne $expectedCount){throw 'Exact PCI display inventory mismatch.'}
- if($p.OtherPciVendor -and @($pci|Where-Object {$_.PNPDeviceID -match ('^PCI\\VEN_'+$p.OtherPciVendor+'&DEV_[0-9A-F]{4}&SUBSYS_[0-9A-F]{8}(?:&|\\|$)')}).Count -ne 1){throw 'PCI companion mismatch.'}
+ if($p.OtherPciVendor -and @($pci|Where-Object {$_.PNPDeviceID -match ('^PCI\\VEN_'+$p.OtherPciVendor+'&DEV_'+$p.OtherPciDevice+'&SUBSYS_'+$p.OtherPciSubsystem+'(?:&|\\|$)')}).Count -ne 1){throw 'Exact PCI companion mismatch.'}
  $other=@($Video|Where-Object {$_.PNPDeviceID -notmatch '^PCI\\'})
  if($other.Count -ne $p.NonPci.Count){throw 'Unknown display identity; stop.'}
  foreach($a in $p.NonPci){

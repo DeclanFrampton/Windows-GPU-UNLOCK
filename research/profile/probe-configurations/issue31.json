@@ -1,5 +1,5 @@
 {
-  "SchemaVersion": 1,
+  "SchemaVersion": 2,
   "Id": "issue31",
   "Scope": "pinned-read-only-resource-capture",
   "Board": "PRIME X570-PRO",
@@ -17,5 +17,7 @@
       "Version": "1.0.2018.1204"
     }
   ],
-  "ManufacturerMatch": "prefix"
+  "ManufacturerMatch": "prefix",
+  "OtherPciDevice": null,
+  "OtherPciSubsystem": null
 }

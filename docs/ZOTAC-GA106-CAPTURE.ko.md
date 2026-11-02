@@ -78,3 +78,13 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\research\profile\prepare-z
 테스트용 Windows GUID는 가짜이므로 해당 산출물을 준비하거나 부팅하지 마세요.
 
 준비 과정은 빌드 전과 USB 기록 직전에 시스템 볼륨의 완전 복호화를 확인합니다. 보호 해제만으로 충분하지 않습니다. 암호화/전환/알 수 없는 상태 또는 공급자 실패이면 설정 변경 없이 중단합니다. 테스트를 위해 보호 일시 중지나 복호화를 하지 마세요. 기존 파일 수집은 계속 가능합니다.
+# 준비 단계 identity 수정
+
+Resource configuration schema2는 companion PCI display adapter를 vendor뿐 아니라
+device/subsystem까지 고정합니다. issue114는 NVIDIA2504/263019DA와 함께
+AMD1002:164E / D0001458을 요구합니다. 누락/중복, 다른 AMD device/subsystem,
+불완전/wildcard companion 데이터, 이전 schema1은 staging 전에 거부합니다.
+companion이 없는 구성은 세 필드를 모두 null로 유지하며 source/config revision을
+함께 사용해야 합니다. 준비 조건만 제한하며 MMIO/release/unlock 허가를 추가하지
+않습니다. 케이블 없는 iGPU의 preboot 복구를 입증하거나 재캡처를 요청하지 않습니다.
+별도 issue172 게시 보류는 유지됩니다.

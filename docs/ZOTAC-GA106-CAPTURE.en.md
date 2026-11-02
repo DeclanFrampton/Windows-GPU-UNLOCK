@@ -84,3 +84,14 @@ environment: `research/profile/test-zotac-probe.ps1` (optional `-VcVars` path).
 Its fixture Windows GUID is synthetic: never stage or boot that test artifact.
 
 Preparation now requires an observed fully decrypted system volume before build and immediately before staging. Protection off alone is insufficient. Encrypted/transitional/unknown/provider-failure states stop without settings changes. Do not suspend or decrypt for this test. Collection of existing files remains available.
+# Preparation identity correction
+
+Resource configuration schema2 pins the companion PCI display adapter by vendor,
+device and subsystem, not vendor alone. Issue114 requires AMD1002:164E /
+D0001458 alongside NVIDIA2504/263019DA. Missing, duplicate, another AMD device,
+another subsystem, incomplete/wildcard companion data and old schema1 inputs
+refuse before staging. The bundled no-companion configurations explicitly keep
+all three companion fields null; source/config revisions must stay together.
+This restricts preparation only. It adds no MMIO, release or unlock permission,
+does not establish preboot recovery on the uncabled iGPU, and requests no repeat
+capture. The separate issue172 publication hold remains in force.

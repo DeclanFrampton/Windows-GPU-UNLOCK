@@ -1,5 +1,5 @@
 {
-  "SchemaVersion": 1,
+  "SchemaVersion": 2,
   "Id": "issue172",
   "Scope": "pinned-read-only-resource-capture",
   "Board": "X570 AORUS ELITE",
@@ -11,5 +11,7 @@
   "TargetSubsystem": "147d10de",
   "OtherPciVendor": null,
   "NonPci": [],
-  "ManufacturerMatch": "prefix"
+  "ManufacturerMatch": "prefix",
+  "OtherPciDevice": null,
+  "OtherPciSubsystem": null
 }

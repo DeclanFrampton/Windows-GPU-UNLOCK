@@ -1,5 +1,5 @@
 {
-  "SchemaVersion": 1,
+  "SchemaVersion": 2,
   "Id": "issue19",
   "Scope": "pinned-read-only-resource-capture",
   "Board": "1052",
@@ -11,5 +11,7 @@
   "TargetDevice": "250410de",
   "TargetSubsystem": "881d1043",
   "OtherPciVendor": null,
-  "NonPci": []
+  "NonPci": [],
+  "OtherPciDevice": null,
+  "OtherPciSubsystem": null
 }
