@@ -37,3 +37,11 @@ sufficient for this classification test. PROM and IMG files are not required.
 Do not collect a second capture to clear the capture-count warning. Automatic
 Windows/display return is an owner observation, not profile or unlock proof.
 Keep the currently enabled Secure Boot setting unchanged.
+
+For #75, current generation supports aggregate console graphs; the old
+two-GOP refusal is not the current blanket rule. A synthetic root-UID1
+aggregate regression accepts the reported SS0/SS1 pairs without changing
+structural pins, while route drift still fails. This is source behavior,
+not proof the actual captures pass or the register differences are harmless.
+Use the already saved captures/images with this same offline checker. No new
+cold-monitor capture, BIOS/driver change, profile borrowing or hardware run.

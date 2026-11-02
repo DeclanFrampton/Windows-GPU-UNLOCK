@@ -35,3 +35,10 @@ EFI를 다시 부팅하지 마세요.
 한 개면 충분합니다. PROM 또는 IMG 파일은 필요하지 않습니다. 캡처 수 경고를
 없애려고 두 번째 캡처를 수집하지 마세요. Windows/화면 자동 복귀는 사용자
 관찰이며 프로필 또는 unlock 증거가 아닙니다. 현재 활성화된 Secure Boot를 유지하세요.
+
+#75의 현재 생성기는 aggregate console graph를 지원합니다. 이전 two-GOP
+거부는 현재의 일괄 규칙이 아닙니다. 합성 root-UID1 aggregate 회귀는 보고된
+SS0/SS1 쌍에서 구조 pin을 유지하고 route drift를 거부합니다. 소스 동작이며
+실제 캡처 통과나 레지스터 변화의 무해함을 증명하지 않습니다. 저장된 캡처와
+이미지에 같은 offline checker를 사용하세요. 새 cold-monitor 캡처, BIOS/드라이버
+변경, 다른 프로필 차용 또는 하드웨어 실행은 요청하지 않습니다.
