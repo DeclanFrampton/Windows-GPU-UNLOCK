@@ -7,6 +7,8 @@ import sys
 
 
 def review(text):
+    # Normalize analysis text only. The CLI hashes and preserves the original bytes.
+    text = text.replace('\r\n', '\n')
     def one(pattern, convert):
         values = re.findall(pattern, text, re.M)
         if len(values) != 1:
