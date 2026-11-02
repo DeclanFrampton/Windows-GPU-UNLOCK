@@ -23,6 +23,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--clang', default='clang')
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--card', type=lambda value: int(value, 0),
+                        help='Select one existing matrix card; never adds admission')
+    parser.add_argument('--children', type=int, choices=(1, 2, 3, 4),
+                        help='Select an existing child-count dimension')
     args = parser.parse_args()
     out = args.output.resolve()
     if out.exists():
@@ -47,7 +51,12 @@ def main():
            (0x248710de,0xb74000a1,0x3000),(0x250410de,0xb76000a1,0x3000),
            (0x220310de,0xb72000a1,0x5ff4),(0x248410de,0xb74000a1,0x2000),
            (0x24c910de,0xb74000a1,0x2000))
-    for bus, children, command, (board,chip,memory), no_edid in itertools.product((1, 0x2b), (1, 2, 3, 4), (2, 3), cards, (False,True)):
+    if args.card is not None:
+        cards=tuple(card for card in cards if card[0]==args.card)
+        if not cards:
+            parser.error('Card is not in the existing synthetic matrix')
+    child_counts=(args.children,) if args.children is not None else (1, 2, 3, 4)
+    for bus, children, command, (board,chip,memory), no_edid in itertools.product((1, 0x2b), child_counts, (2, 3), cards, (False,True)):
         if children>2 and not no_edid:continue
         name = f'id{board:x}-bus{bus:x}-children{children}-cmd{command}-memory{memory:x}-noedid{int(no_edid)}'
         case = out / name
@@ -112,6 +121,7 @@ def main():
                 child_checks.append({'case': name, 'job': job, 'result': result})
                 print(name + ': ' + result, flush=True)
     (out / 'summary.json').write_text(json.dumps({'synthetic_only': True, 'hardware_access': False,
+                                                 'selection': {'card': args.card, 'children': args.children},
                                                  'cases': summaries, 'child_checks': child_checks,
                                                  'image_refusals':image_refusals}, indent=2))
 
