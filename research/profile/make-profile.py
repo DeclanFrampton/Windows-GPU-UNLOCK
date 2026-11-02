@@ -80,6 +80,18 @@ class Refused(ValueError):
     pass
 
 
+class TopologyRefused(Refused):
+    """Fixed, numeric diagnosis; never raw graph text/addresses or admission."""
+    def __init__(self, message, reason, **counts):
+        super().__init__(message)
+        if reason not in ('active_edid_without_target_owner', 'unsupported_display_children'):
+            raise ValueError('Unknown topology diagnostic')
+        if any(key not in ('active_edid_handles', 'display_children', 'allowed_children') or
+               type(value) is not int or not 0 <= value <= 4096 for key, value in counts.items()):
+            raise ValueError('Invalid topology diagnostic counts')
+        self.topology_detail = {'reason': reason, **counts}
+
+
 def fail(message):
     raise Refused(message)
 
@@ -574,14 +586,18 @@ def analyze(diag, image_dir, envelope):
         live_edid = [h for h, b in blocks.items()
                      if any(p == EDID_DISCOVERED and attrs not in (1, 2, 4) for p, a, c, attrs, n in b['edges'])]
         if live_edid:
-            fail(f'no BY_DRIVER EDID owner on the RTX GOP, yet {len(live_edid)} handle(s) have an active EdidDiscovered opener')
+            raise TopologyRefused(
+                f'no BY_DRIVER EDID owner on the RTX GOP, yet {len(live_edid)} handle(s) have an active EdidDiscovered opener',
+                'active_edid_without_target_owner', active_edid_handles=len(live_edid))
     nv_agent = sole_driver(blocks, rtx_pci, PCI_IO)
     child_edges = [(a, c, n) for p, a, c, attrs, n in blocks[rtx_pci]['edges'] if p == PATH and attrs == BY_CHILD_CONTROLLER]
     children = [c for a, c, n in child_edges]
     child_limit = MAX_NO_EDID_CHILDREN if no_edid_driver and topology is None else 2
     if not 1 <= len(children) <= child_limit or len(set(children)) != len(children) or \
             any(a != nv_agent or n != 1 for a, c, n in child_edges):
-        fail(f'console topology requires 1..{child_limit} unique NVIDIA-owned display children')
+        raise TopologyRefused(
+            f'console topology requires 1..{child_limit} unique NVIDIA-owned display children',
+            'unsupported_display_children', display_children=len(children), allowed_children=child_limit)
     if rtx not in children or any(c not in blocks for c in children):
         fail('console display children must include the RTX GOP and exist in the graph')
     if no_edid_driver and any(EDID_DISCOVERED not in blocks[c]['protocols'] for c in children):

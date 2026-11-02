@@ -58,3 +58,13 @@ without borrowing3090 admission; one saved capture also retains capture_count.
 The diagnostic compile flag GU_CONSOLE_AGGREGATE does not establish an observed
 aggregate graph. Do not collect another boot just to clear count; existing
 complete evidence is the next source-review input, not an armed profile.
+
+For #114's complete resource capture, `topology_scope` is independent of
+`capture_count`. The checker now adds bounded `topology_detail` for two existing
+refusals: `unsupported_display_children` (observed and allowed child counts), or
+`active_edid_without_target_owner` (active EDID handle count). These details do
+not change the refusal or grant admission. Global EDID counts in the earlier
+report cannot identify the actual ownership edges. Run this checker on the
+existing complete capture only; a second boot does not resolve this refusal.
+Other topology refusals may have no detail. Return only report.json/result.json;
+do not upload raw captures or images, change settings, or repeat an EFI run.

@@ -169,6 +169,46 @@ class CompatibilityTests(unittest.TestCase):
                     self.assertIs(report['Replay']['Aggregate'], False)
                     self.assertEqual(report['Replay']['ChildCount'], children)
 
+    def test_bound_edid_three_children_refusal_is_diagnosable_without_relaxation(self):
+        self.populate(no_edid=False, children=3, count=1)
+        report = self.result()
+        self.assertEqual(report['status'], 'outside_scope')
+        entries = [c for c in report['checks'] if c['code'] == 'topology_scope']
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]['topology_detail'], {
+            'reason': 'unsupported_display_children', 'display_children': 3, 'allowed_children': 2})
+        self.assertIn('capture_count', [c['code'] for c in report['checks']])
+        self.assertIs(report['hardware_tested'], False)
+        self.assertIs(report['write_eligible'], False)
+        # The generator itself must still stop before any private asset work.
+        with self.assertRaises(checker.mp.TopologyRefused):
+            checker.mp.analyze(self.folder/'DIAG00.TXT', None, self.envelope)
+
+    def test_topology_detail_rejects_unreviewed_fields_and_values(self):
+        for reason, values in [('PRIVATE-PATH', {}), ('unsupported_display_children', {'raw':'PRIVATE'}),
+                               ('unsupported_display_children', {'display_children': True}),
+                               ('unsupported_display_children', {'display_children': 4097})]:
+            with self.assertRaises(ValueError):
+                checker.mp.TopologyRefused('internal detail never exported', reason, **values)
+
+    def test_active_edid_elsewhere_is_not_absence_on_target(self):
+        text = self.populate(no_edid=False)
+        old = (f'protocol guid={checker.mp.EDID_DISCOVERED}\n'
+               'opens status=0x0000000000000000 count=0x1\n'
+               'open agent=0x9 controller=0x2 attributes=0x10 count=0x1\n')
+        new = (f'protocol guid={checker.mp.EDID_DISCOVERED}\n'
+               'opens status=0x0000000000000000 count=0x0\n')
+        self.assertIn(old, text)
+        for path in self.folder.glob('DIAG*.TXT'):
+            path.write_text(text.replace(old, new), encoding='ascii')
+        report = self.result()
+        entries = [c for c in report['checks'] if c['code'] == 'topology_scope']
+        self.assertEqual(len(entries), 2)
+        self.assertEqual(entries[0]['topology_detail'], {
+            'reason': 'active_edid_without_target_owner', 'active_edid_handles': 1})
+        self.assertEqual(report['status'], 'outside_scope')
+        self.assertIs(report['write_eligible'], False)
+
     def test_complete_root_and_bridge_ancestry_must_agree_across_cold_boots(self):
         changes=(('02010c00d041030a00000000','02010c00d041030a01000000'),
                  ('02010c00d041030a00000000','02010c00d041080a00000000'),

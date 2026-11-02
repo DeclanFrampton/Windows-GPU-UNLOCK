@@ -254,6 +254,7 @@ def check(folder, envelope, *, inputs=None):
         report['checks'].append(entry)
         if priority[state] > priority[report['status']]:
             report['status'] = state
+        return entry
 
     try:
         validate_envelope(envelope)
@@ -318,7 +319,9 @@ def check(folder, envelope, *, inputs=None):
                 result = mp.analyze(diag, None, envelope)
             except mp.Refused as error:
                 state, code = observation_reason(error)
-                add(state, code, name)
+                entry = add(state, code, name)
+                if isinstance(error, mp.TopologyRefused):
+                    entry['topology_detail'] = error.topology_detail
                 continue
             observations.append(result)
             add('candidate', 'observations_pass', name)

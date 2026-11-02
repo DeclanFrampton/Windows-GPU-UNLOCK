@@ -53,3 +53,13 @@ GA102/10240MiB이며 회귀는3090 승인을 차용하지 않고 outside_scope/g
 유지합니다. 저장 캡처1개이면 capture_count도 유지합니다. 진단 컴파일 플래그
 GU_CONSOLE_AGGREGATE는 관측된 aggregate graph의 증거가 아닙니다. count를 없애려고
 새 부팅을 하지 마세요. 기존 증거가 소스 검토 입력이며 armed profile은 아닙니다.
+
+#114의 완전한 resource 캡처에서 `topology_scope`는 `capture_count`와 별개입니다.
+기존 거부 두 가지에 제한된 `topology_detail`을 추가합니다.
+`unsupported_display_children`은 관측/허용 child 수,
+`active_edid_without_target_owner`는 활성 EDID handle 수를 표시합니다.
+거부 결과와 승인 조건은 바뀌지 않습니다. 이전 보고서의 전체 EDID 수만으로
+실제 ownership 연결을 알 수 없습니다. 기존 완전한 캡처만 검사하세요.
+두 번째 부팅으로 이 거부가 해결되지 않습니다. 다른 topology 거부에는 detail이
+없을 수 있습니다. report.json/result.json만 반환하고 원본 캡처/이미지 업로드,
+설정 변경, EFI 재실행은 하지 마세요.
