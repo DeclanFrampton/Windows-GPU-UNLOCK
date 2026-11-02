@@ -1,6 +1,6 @@
 # Pure configuration/inventory mocks; no hardware or disk staging.
 [CmdletBinding()]
-param([switch]$Report)
+param([switch]$Report,[ValidateSet('151','196')][string]$Case='151')
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'prepare-graph.ps1')
 function Reject([scriptblock]$Action){$failed=$false;try{& $Action}catch{$failed=$true};if(!$failed){throw 'Expected refusal.'}}
@@ -44,6 +44,18 @@ foreach($enumerator in @('ROOT','SWD')){
 Reject {Assert-GraphMachine 'issue151' $board151 $bios151 $cpu151 @($pci151[0])}
 $wrong151=@($pci151|ForEach-Object{[pscustomobject]@{PNPDeviceID=$_.PNPDeviceID.Replace('403F1458','48973842')}})
 Reject {Assert-GraphMachine 'issue151' $board151 $bios151 $cpu151 $wrong151}
+# New dual-NVIDIA case: an unconnected second NVIDIA adapter is still pinned.
+# Disabled Windows display state must not be converted into a firmware claim.
+$case196=Read-GraphConfiguration 'issue196'
+$board196=[pscustomobject]@{Manufacturer='Micro-Star International Co., Ltd.';Product=$case196.Board}
+$bios196=[pscustomobject]@{SMBIOSBIOSVersion=$case196.Bios}
+$cpu196=[pscustomobject]@{Name='AMD Ryzen 7 9800X3D 8-Core Processor'}
+$pci196=@($case196.Adapters|ForEach-Object{[pscustomobject]@{PNPDeviceID=('PCI\VEN_'+$_.Vendor+'&DEV_'+$_.Device+'&SUBSYS_'+$_.Subsystem+'\PRIVATE')}})
+Assert-GraphMachine 'issue196' $board196 $bios196 $cpu196 $pci196
+for($omit=0;$omit -lt $pci196.Count;$omit++){
+ $remaining=@(for($at=0;$at -lt $pci196.Count;$at++){if($at -ne $omit){$pci196[$at]}})
+ Reject {Assert-GraphMachine 'issue196' $board196 $bios196 $cpu196 $remaining}
+}
 $temp=Join-Path ([IO.Path]::GetTempPath()) ('graph-config-'+[guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $temp|Out-Null
 $good=Get-Content (Join-Path $PSScriptRoot 'graph-configurations/issue33.json') -Raw
@@ -72,6 +84,7 @@ if($Report){
  $folder=Join-Path $docs ('GPU-Unlock-Graph-Config-'+[guid]::NewGuid().ToString('N').Substring(0,8))
  New-Item -ItemType Directory -Path $folder|Out-Null
  $summary=[ordered]@{Test='graph-configuration-v2';Passed=$true;Case='151';FixtureOnly=$true;PhysicalAdapterPins=2;UnknownDisplayCasesRefused=6;MissingDisplayRefused=$true;Other2216SubsystemRefused=$true;HardwareInventoryRead=$false;HardwareUnlockTested=$false;VirtualAdapterAdmissionGranted=$false;WriteEligible=$false}
+ if($Case -ceq '196'){$summary=[ordered]@{Test='graph-configuration-v3';Passed=$true;Case='196';FixtureOnly=$true;PhysicalAdapterPins=3;MissingPhysicalAdapterCasesRefused=3;A4000Required=$true;DisabledIgpuProvesPrebootGop=$false;HardwareInventoryRead=$false;HardwareUnlockTested=$false;VirtualAdapterAdmissionGranted=$false;WriteEligible=$false}}
  $path=Join-Path $folder 'graph-configuration.json'
  $summary|ConvertTo-Json|Set-Content -LiteralPath $path -Encoding UTF8
  Write-Host ('Return only '+$path+'. This tests fixtures, not your hardware. No EFI, settings changes or reboot.')
