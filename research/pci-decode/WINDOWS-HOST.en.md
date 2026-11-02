@@ -9,6 +9,8 @@ powershell -NoProfile -File .\research\pci-decode\test-decode-sync.ps1
 If discovery needs help, use -Python, -Clang or -VcVars with tools already
 installed. No installs, PATH persistence or policy changes are requested.
 The script sets the compiler environment only in its child process, runs the
+existing exact device/chip/memory/driver admission suite (including 6000a on
+2204 and cross-family refusals), then runs the
 existing shared core/adapter/capture suites and all compiled guard mutations,
 and writes a new Documents/GPU-Unlock-Decode-Host-*/run/summary.json.
 Expect all host suites PASS and21 compiled mutations detected on the PR139

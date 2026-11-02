@@ -9,6 +9,8 @@ powershell -NoProfile -File .\research\pci-decode\test-decode-sync.ps1
 도구 검색이 실패하면 기존 설치 경로를 -Python, -Clang, -VcVars로 지정하세요.
 설치, 영구 PATH 수정 또는 정책 변경은 요청하지 않습니다. 자식 프로세스에서만
 컴파일러 환경을 설정하고 기존 공유 core/adapter/capture 및 모든 컴파일된
+테스트 전에 정확한 device/chip/memory/driver 승인 suite(2204의6000a 및
+다른 제품군 거부 포함)를 실행합니다. 이어서
 guard mutation 테스트를 실행합니다. 새 Documents/GPU-Unlock-Decode-Host-*/run/
 summary.json을 생성합니다. PR139 병합 소스에서 전체 PASS와21개 mutation 검출을
 예상합니다. 네이티브 Windows RAM 모의 테스트이며 EFI ABI/하드웨어, production
