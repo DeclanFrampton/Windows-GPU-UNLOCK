@@ -1,14 +1,16 @@
 # Read Windows PnP parent associations; no PCI config, MMIO or device changes.
 [CmdletBinding()]
-param([switch]$SelfTest,[ValidateSet('108','17')][string]$Case='108')
+param([switch]$SelfTest,[ValidateSet('108','17','167')][string]$Case='108')
 $ErrorActionPreference='Stop'
 function Get-PciParentTargets($Devices,[string]$CaseId){
  if($Devices.Count -gt 16){throw 'Too many display adapters.'}
- $pins=if($CaseId -ceq '17'){@('2204/40411458','1E04/12FA10DE')}else{@('2208/40811458')}
+ $pins=if($CaseId -ceq '17'){@('10DE/2204/40411458','10DE/1E04/12FA10DE')}
+       elseif($CaseId -ceq '167'){@('10DE/2504/263019DA','8086/9BC8/B44019DA')}
+       else{@('10DE/2208/40811458')}
  $selected=@()
  foreach($pin in $pins){
   $parts=$pin.Split('/')
-  $pattern='^PCI\\VEN_10DE&DEV_'+$parts[0]+'&SUBSYS_'+$parts[1]+'(?:&|\\)'
+  $pattern='^PCI\\VEN_'+$parts[0]+'&DEV_'+$parts[1]+'&SUBSYS_'+$parts[2]+'(?:&|\\)'
   $found=@($Devices|Where-Object {$_.InstanceId -match $pattern})
   if($found.Count -ne 1){throw 'Target missing or not unique.'}
   $selected+=$found[0]
@@ -51,6 +53,12 @@ if($SelfTest){
  $script:reads=0
  foreach($d in $selected){$null=Get-PciParentChain $d.InstanceId {param($id) if($id -match '2C02'){throw 'Non-target traversed'};$script:reads++;''}}
  if($script:reads -ne 2){throw 'Multi-target traversal regression.'}
+ $zbox=@('PCI\VEN_10DE&DEV_2504&SUBSYS_263019DA\PRIVATE','PCI\VEN_8086&DEV_9BC8&SUBSYS_B44019DA\PRIVATE','ROOT\RDP\PRIVATE')|ForEach-Object {[pscustomobject]@{InstanceId=$_}}
+ $zselected=@(Get-PciParentTargets $zbox '167')
+ if($zselected.Count -ne 2 -or $zselected[0].InstanceId -notmatch '2504' -or $zselected[1].InstanceId -notmatch '9BC8' -or @($zselected|Where-Object {$_.InstanceId -match '^ROOT'}).Count){throw 'ZBOX PCI role selection regression.'}
+ $refused=$false
+ try{Get-PciParentTargets @($zbox[0],$zbox[2]) '167'|Out-Null}catch{$refused=$true}
+ if(!$refused){throw 'RDP substituted for physical Intel PCI adapter.'}
  foreach($bad in @(@($multi[0]),@($multi[0],$multi[0],$multi[1]))){
   $refused=$false;try{Get-PciParentTargets $bad '17'|Out-Null}catch{$refused=$true}
   if(!$refused){throw 'Missing/duplicate target accepted.'}
@@ -72,7 +80,7 @@ try{
   }
  }
 }catch{$status='unavailable';$targets=@()}
-$report=[ordered]@{Test='windows-pci-parent-v2';Case=$Case;ReadStatus=$status;Targets=$targets;RawIdentitiesExported=$false;ExternalConnectorVerified=$false;PrebootTopologyVerified=$false;HardwareUnlockTested=$false;WriteEligible=$false}
+$report=[ordered]@{Test='windows-pci-parent-v2';Case=$Case;ReadStatus=$status;Targets=$targets;RawIdentitiesExported=$false;ExternalConnectorVerified=$false;PrebootTopologyVerified=$false;PhysicalDisplayRouteVerified=$false;VirtualAdapterAdmissionGranted=$false;HardwareUnlockTested=$false;WriteEligible=$false}
 $docs=[Environment]::GetFolderPath('MyDocuments');if(!$docs){throw 'Documents unavailable.'}
 $folder=Join-Path $docs ('GPU-Unlock-Pci-Parents-'+[guid]::NewGuid().ToString('N').Substring(0,8))
 New-Item -ItemType Directory -Path $folder|Out-Null
