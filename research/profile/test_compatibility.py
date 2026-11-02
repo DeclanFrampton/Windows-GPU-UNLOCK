@@ -100,6 +100,18 @@ class CompatibilityTests(unittest.TestCase):
         self.populate(count=1)
         self.assert_reason('needs_data', 'capture_count')
 
+    def test_three_edid_children_with_one_capture_remains_needs_data(self):
+        # Issue 114's shape, generated locally; this is not its private capture.
+        self.populate(no_edid=False, children=3, count=1)
+        report = self.result()
+        self.assertEqual(report['status'], 'needs_data')
+        self.assertEqual(report['capture_count'], 1)
+        codes = {c['code'] for c in report['checks']}
+        self.assertIn('capture_count', codes)
+        self.assertNotIn('topology_scope', codes)
+        self.assertIs(report['hardware_tested'], False)
+        self.assertIs(report['write_eligible'], False)
+
     def test_issue20_3080_fe_observation_does_not_borrow_ga102_admission(self):
         # Reported identity/VRAM in a synthetic graph, not supplied PROM/images.
         text=self.populate(count=1,board=0x220610de,chip=0xb72000a1,memory=0x2800,
