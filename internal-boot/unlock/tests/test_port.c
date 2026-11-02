@@ -112,6 +112,15 @@ int main(void) {
   assert(cpu && dma==0x12000000 && dma!=(UINTN)cpu && fake.maps==1);
   for(UINTN i=0;i<15*4096;i++)assert(((UINT8 *)cpu)[i]==0);
   assert(!EFI_ERROR(GuDmaFree(cpu,dma)) && fake.unmaps==1 && fake.frees==1);
+  /* A CPU allocation address is not the device DMA address. Exercise the
+   * actual rounded buffer end at the 32-bit device-address boundary. */
+  setup();fake.next_dma=0xfffff000ULL;
+  assert(!EFI_ERROR(GuDmaAllocate(4096,&cpu,&dma)) && dma==0xfffff000ULL);
+  assert(!EFI_ERROR(GuDmaFree(cpu,dma)) && fake.unmaps==1 && fake.frees==1);
+  setup();fake.next_dma=0xfffff000ULL;cpu=NULL;dma=0;
+  assert(EFI_ERROR(GuDmaAllocate(4097,&cpu,&dma)) && !cpu && !dma);
+  assert(fake.maps==1 && fake.unmaps==1 && fake.frees==1 && !Gu.allocations);
+  assert(!fake.writes && !fake.pciwrites && !fake.reads);
   for(int mode=0;mode<5;mode++) {
     setup();fake.alloc_fail=mode==0;fake.map_fail=mode==1;fake.short_map=mode==2;
     fake.high_map=mode==3;fake.unaligned_map=mode==4;cpu=NULL;dma=0;
