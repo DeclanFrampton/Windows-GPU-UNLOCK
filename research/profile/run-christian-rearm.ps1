@@ -1,4 +1,4 @@
-# Build/stage ONE attended experimental MSI unlock transaction. Never boots or retries automatically.
+# One receipt-bound attended MSI rearm; never boots, retries or recreates old markers.
 param([ValidateSet('Stage','Collect')][string]$Mode='Stage',
       [ValidatePattern('^[A-Za-z]$')][string]$Drive='G',[string]$Root='C:\GPU-Unlock',[switch]$AcceptRearmRisk)
 $ErrorActionPreference='Stop'
@@ -29,7 +29,7 @@ if($Mode -eq 'Collect'){
  [ordered]@{attempt_id=$id;started_receipt_matches=$began;finished_receipt_matches=$ended;matching_log_count=$logs.Count;complete_success=($began -and $ended -and $complete);automatic_windows_return=$answer;automatic_rearm=$false;benchmark_run=$false}|ConvertTo-Json|Set-Content -LiteralPath (Join-Path $out 'result.json') -Encoding utf8
  Compress-Archive -LiteralPath $out -DestinationPath ($out+'.zip');Write-Output ('Attach this ZIP: '+$out+'.zip');return
 }
-if(!$AcceptRearmRisk){throw 'Requires -AcceptRearmRisk: ONE experimental transaction adds GPU MMIO and PCI writes, BME, firmware upload/execution, DMA and FLR. It may corrupt memory, hang, lose display/input or prevent Windows/GPU recovery. Recovery is unproven; errors hold with no blanket rollback or retry. Do not run unless you accept this new write/firmware/DMA/reset boundary.'}
+if(!$AcceptRearmRisk){throw 'Requires -AcceptRearmRisk: ONE attended rearm repeats GPU/PCI writes, BME, firmware execution, DMA and FLR. New durable USB receipt writes/readbacks can fail and hold boot. It may corrupt memory, hang or prevent Windows/GPU recovery; recovery is unproven. No blanket rollback/retry. Prior attempts remain preserved.'}
 if(@(Get-ChildItem -LiteralPath $usb -File -Filter 'MSI-*.ARMED').Count){throw 'An MSI arm file already exists. Preserve it and collect results; do not repeat.'}
 if(Test-Path -LiteralPath $marker){throw 'Already staged. Do not repeat; collect results instead'}
 $priorLog=Join-Path $capture 'DIAG14.TXT'
@@ -106,4 +106,5 @@ Copy-Item -LiteralPath (Join-Path $built 'manifest.json') -Destination (Join-Pat
 Copy-Item -LiteralPath (Join-Path $built 'pe-verification.json') -Destination (Join-Path $backup 'pe-verification.json')
 $armFile=[IO.File]::Open((Join-Path $capture ('MA'+$attempt+'.ARMED')),[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
 try{$data=[Text.Encoding]::ASCII.GetBytes("ARM "+$attempt+"`r`n");$armFile.Write($data,0,$data.Length);$armFile.Flush($true)}finally{$armFile.Dispose()}
+if((Get-Content -LiteralPath (Join-Path $capture ('MA'+$attempt+'.ARMED')) -Raw) -cne ("ARM "+$attempt+"`r`n")){throw 'Arm readback failed; do not boot or retry'}
 Write-Output 'Ready. Shut down and boot USB once. No keys needed. If Windows is absent after 10 minutes: power off, remove USB, choose Windows Boot Manager. Do not retry.'

@@ -108,3 +108,36 @@ receipt-finish fault cases, including pending/finished refusal, exact arm mismat
 short writes, flush/readback/close/delete failures. No hardware execution occurred.
 The next live boundary is one separately identified attended rearm; no automatic
 retry, unrestricted rearm loop or unattended deployment is implemented.
+
+## First receipt-bound attended rearm handoff
+
+The existing preparation was verified complete by Christian's report
+christian-preparation-report-ab9eaf952bec4ec5a4864c675b5b1a87.zip
+(message1566601541337481226), package manifest SHA256
+6395d1d06a4e7485c286eb253aec7b652692795d0a4fcb03270940c9889037a2.
+
+run-christian-rearm.ps1 stages one new attempt only. It requires the reviewed
+successful DIAG14 and prepared-package hashes, verifies all local/USB payloads,
+backs up the original EFI/captures, generates a fresh compiled attempt ID and
+installs the matching receipt-enabled EFI. A durable exclusive host preparation
+claim prevents concurrent/repeated staging. The old MSI-UNLOCK.STAGED and all
+old evidence remain. Only the new MA<ID>.ARMED is created, last, with flush and
+readback. The old MSI-UNLOCK.ARMED is never recreated. No boot, retry, firmware
+variable or BootOrder write is performed by the script. This is one bounded rearm
+validation, not an unrestricted reusable or unattended installer.
+
+Collect checks the matching STARTED/FINISHED bodies and exactly one matching
+DIAG log with transaction/cleanup completion. It asks automatic Windows return
+and makes christian-rearm-result ZIP without ASSETS or a new benchmark workload.
+A missing/partial receipt is not success. Do not retry/rearm after an error/hang;
+preserve receipts and report. After10 minutes without Windows, manual power-off,
+USB removal and normal Windows Boot Manager are the recovery instructions, not
+a guarantee of recovery. New filesystem receipt failure can hold boot; the same
+GPU writes/DMA/firmware execution/FLR risks apply as the first transaction.
+
+Actual pinned archive download/build/PE and mocked FAT32 USB stage/readback passed
+with a 93,696-byte EFI. Tests checked exact arm content, preservation of old state,
+partial evidence rejection, synthetic completed-receipt collection and repeated
+stage refusal. The default read-only probe also rebuilt/PE-verified. Receipt
+fault tests and simulated staging are local proof only; the new live rearm is
+not yet demonstrated. No raw captures or NVIDIA payloads were committed.
