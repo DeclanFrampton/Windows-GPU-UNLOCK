@@ -43,5 +43,14 @@ reset/GPU write, firmware 실행/upload, profile 생성, unlock은 승인하지 
 acceptance를 받아야 합니다. Secure Boot/encryption 정책은 바꾸지 않고 확인합니다.
 Intel header/BME 관찰은 복구 화면 증거가 아닙니다.
 
+target BAR0 DWORD offset16개는000000,108154,108170,108180,108354,118128,
+118234,110100,1183a4,1fa828,8219c0,822804,823804,82381c,823820,824140입니다.
+PROM window300000..3ffffc이며 총 최대262160개 읽기입니다. 기존 Windows handoff는
+EFI watchdog을 해제합니다. 향후 동의한 실행에서도 TV off/Intel enabled/케이블을
+유지하고 Documents 오류 이력 때문에 기존 alternate local OutputRoot로 검토한
+report.json만 수집합니다. 원본 DIAG/PROM/IMG/EFI/backup은 로컬 보존합니다.
+2분 내 Windows가 시작하지 않으면 제안 복구는 power-off/USB 제거/정상 Windows
+Boot Manager이며 미검증입니다. 복구 실패 시 중단하고 검토 없이 반복하지 않습니다.
+
 기존 issue172 template은 sample GUID로 독립 재빌드하여 이전 personalized bytes와
 완전히 일치했습니다. source hash metadata만 갱신하며 게시/acceptance 보류는 유지합니다.

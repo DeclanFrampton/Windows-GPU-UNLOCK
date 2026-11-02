@@ -49,6 +49,16 @@ and exact build/evidence collection, and obtain the applicable informed acceptan
 Current Secure Boot/encryption policy must be checked without changing it. The
 Intel adapter's header/BME observation is not proof of a recovery display.
 
+The sixteen target BAR0 DWORD offsets are000000,108154,108170,108180,108354,
+118128,118234,110100,1183a4,1fa828,8219c0,822804,823804,82381c,823820,824140;
+the PROM window is300000..3ffffc, up to262160 reads total. The inherited Windows
+handoff disables the EFI watchdog. A future accepted run would keep the TV off,
+Intel enabled and cables unchanged, collect reviewed report.json using the
+existing alternate local OutputRoot because Documents previously failed, and
+retain raw DIAG/PROM/IMG/EFI/backups locally. Windows not started within two
+minutes: proposed recovery is power-off/remove USB/normal Windows Boot Manager;
+it is unproven. Stop if recovery fails; no automatic or manual repeat without review.
+
 The existing issue172 template was independently rebuilt with the sample GUID
 and matched its previous personalized bytes exactly. Only its source-hash
 metadata changed; its publication/acceptance hold remains in force.
