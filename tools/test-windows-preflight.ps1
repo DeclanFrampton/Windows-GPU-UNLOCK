@@ -75,6 +75,14 @@ if($PreflightSelfTest){
  if($r.Target.UniqueInventoryMatch -or $r.Target.MatchCount -ne 2){throw 'Duplicate targets must remain ambiguous'}
  $r=Get-PreflightReport $false {$true} $v @() '2204'
  if($r.Target.UniqueInventoryMatch -or $r.Target.MatchCount -ne 0){throw 'Wrong target accepted'}
+ # Synthetic issue 187 shape: Windows inventory is not preboot ownership.
+ $nv='PCI\VEN_10DE&DEV_2206&SUBSYS_146710DE\PRIVATE-NV'
+ $intel='PCI\VEN_8086&DEV_A780&SUBSYS_00000000\PRIVATE-INTEL'
+ $caseVideo=@([pscustomobject]@{PNPDeviceID=$nv},[pscustomobject]@{PNPDeviceID=$intel})
+ $caseDrivers=@([pscustomobject]@{DeviceID=$nv;DriverProviderName='NVIDIA';DriverVersion='32.0.16.1088';IsSigned=$true},[pscustomobject]@{DeviceID=$intel;DriverProviderName='Intel Corporation';DriverVersion='32.0.101.7088';IsSigned=$true})
+ $r=Get-PreflightReport $true {$false} $caseVideo $caseDrivers '2206'
+ $json=$r|ConvertTo-Json -Depth 8
+ if($r.SecureBoot.State -cne 'disabled' -or !$r.Target.UniqueInventoryMatch -or $r.DisplayAdapters[1].Pci.Subsystem -cne '00000000' -or $r.DisplayAdapters[0].Drivers[0].Provider -cne 'NVIDIA' -or $r.DisplayAdapters[1].Drivers[0].Provider -cne 'Intel Corporation' -or $r.HardwareTested -or $r.WriteEligible -or $json.Contains('PRIVATE')){throw 'Dual-adapter inventory/eligibility regression'}
  $other=[pscustomobject]@{PNPDeviceID=$sample.Replace('12341569','38961462')}
  $r=Get-PreflightReport $false {$false} @($v+$other) @() '2489' '38961462'
  if(!$r.Target.UniqueInventoryMatch -or $r.Target.ExpectedSubsystem -cne '38961462'){throw 'Exact subsystem match failed'}
