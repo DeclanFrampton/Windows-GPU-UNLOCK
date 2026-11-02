@@ -1,6 +1,6 @@
 # Offline only: reads existing files, never starts EFI or accesses GPU hardware.
 [CmdletBinding()]
-param([string]$Captures, [string]$Python='python.exe')
+param([string]$Captures, [string]$Python='python.exe', [string]$OutputRoot)
 $ErrorActionPreference = 'Stop'
 if (!$Captures) { $Captures = Read-Host 'Enter the folder containing your existing DIAG00.TXT / DIAG01.TXT' }
 $source = (Resolve-Path -LiteralPath $Captures).Path
@@ -10,12 +10,23 @@ $pythonCommand = Get-Command $Python -CommandType Application -ErrorAction Stop
 if($pythonCommand.Source -match '\\Microsoft\\WindowsApps\\python(?:3)?\.exe$') {
     throw 'Python resolves to a Windows app alias. Use -Python with your known-good python.exe path; do not change PATH.'
 }
-$documents = [Environment]::GetFolderPath('MyDocuments')
+$documents = if($OutputRoot){(Resolve-Path -LiteralPath $OutputRoot).Path}else{[Environment]::GetFolderPath('MyDocuments')}
 if (!$documents) { throw 'Documents folder is unavailable.' }
 $output = Join-Path $documents ('GPU-Unlock-Capture-Check-' + [Guid]::NewGuid().ToString('N').Substring(0, 8))
 New-Item -ItemType Directory -Path $output | Out-Null
 $utf8 = New-Object System.Text.UTF8Encoding($false)
-$result = [ordered]@{ test = 'existing-capture-refusal-v1'; checker_exit = $null; status = 'FAILED'; phase = 'python-check' }
+function Get-ReceiptHash([string]$Path) {
+    $algorithm = [Security.Cryptography.SHA256]::Create()
+    $stream = [IO.File]::OpenRead($Path)
+    try { return ([BitConverter]::ToString($algorithm.ComputeHash($stream))).Replace('-','').ToLowerInvariant() }
+    finally { $stream.Dispose(); $algorithm.Dispose() }
+}
+$sourceHashes = [ordered]@{}
+foreach($relative in @('tools/test-existing-captures.ps1','research/profile/check-compatibility.py','research/profile/make-profile.py','research/profile/proven.json')) {
+    $sourceHashes[$relative] = (Get-ReceiptHash (Join-Path $root $relative))
+}
+$result = [ordered]@{ test = 'existing-capture-refusal-v2'; run_id = [Guid]::NewGuid().ToString('N');
+    source_sha256 = $sourceHashes; report_sha256 = $null; checker_exit = $null; status = 'FAILED'; phase = 'python-check' }
 $process = New-Object System.Diagnostics.Process
 try {
     $process.StartInfo.FileName = $pythonCommand.Source
@@ -46,6 +57,12 @@ try {
     if ($report.route -ne 'automatic_local_profile' -or $report.write_eligible -ne $false -or
         $report.hardware_tested -ne $false) { throw 'Unexpected report.' }
     [IO.File]::WriteAllText((Join-Path $output 'report.json'), $stdout.Result, $utf8)
+    foreach($relative in $sourceHashes.Keys) {
+        if((Get-ReceiptHash (Join-Path $root $relative)) -ne $sourceHashes[$relative]) {
+            throw 'Source changed during check; stop and retain these results.'
+        }
+    }
+    $result.report_sha256 = (Get-ReceiptHash (Join-Path $output 'report.json'))
     $result.status = $report.status
     $result.phase = 'done'
     Write-Host ('Report status: ' + $report.status)
