@@ -14,9 +14,12 @@ if (-not (Test-Path $VbiosDir)) {
     New-Item -ItemType Directory -Path $VbiosDir -Force | Out-Null
 }
 
-$Nvflash = Join-Path $ScriptDir "..\nvflashk.exe"
+$Nvflash = Join-Path $ScriptDir "tools\nvflashk.exe"
 if (-not (Test-Path $Nvflash)) {
     $Nvflash = Join-Path $ScriptDir "nvflashk.exe"
+}
+if (-not (Test-Path $Nvflash)) {
+    $Nvflash = Join-Path $ScriptDir "..\nvflashk.exe"
 }
 if (-not (Test-Path $Nvflash)) {
     $Nvflash = "nvflashk.exe"
@@ -27,7 +30,7 @@ function Get-VbiosDevId($filePath) {
     try {
         $bytes = [System.IO.File]::ReadAllBytes($filePath)
         for ($pos = 0; $pos -lt [Math]::Min($bytes.Length - 0x20, 0x100000); $pos += 512) {
-            if ($bytes[$pos] -eq 0x55 -and $bytes[$pos+1] -eq 0xAA) {
+            if ($bytes[$pos] -eq 0x55 -and $bytes[$pos + 1] -eq 0xAA) {
                 $pcirRel = [BitConverter]::ToUInt16($bytes, $pos + 0x18)
                 $pcir = $pos + $pcirRel
                 if ($pcir + 8 -le $bytes.Length) {
@@ -42,7 +45,8 @@ function Get-VbiosDevId($filePath) {
                 }
             }
         }
-    } catch {}
+    }
+    catch {}
     return $null
 }
 
@@ -78,7 +82,8 @@ foreach ($gpu in $gpus) {
         if ($processedIds.ContainsKey($romName)) {
             Write-Host "      [INFO] Identical hardware ID already dumped by sibling card." -ForegroundColor Green
             Write-Host "             The same file covers both cards automatically in UEFI loader!" -ForegroundColor Green
-        } else {
+        }
+        else {
             $processedIds[$romName] = $true
             $dumpSuccess = $false
 
@@ -88,24 +93,35 @@ foreach ($gpu in $gpus) {
             if (Test-Path $Nvflash) {
                 foreach ($candidateIdx in $candidateIndices) {
                     Write-Host "      Attempting nvflashk with --index=$candidateIdx ..."
-                    
-                    # Try --save
-                    & $Nvflash "--index=$candidateIdx" --save "$targetPath" 2>$null | Out-Null
-                    if (-not (Test-Path $targetPath)) {
-                        # Retry with -b
-                        & $Nvflash "--index=$candidateIdx" -b "$targetPath" 2>$null | Out-Null
-                    }
+                    $tempFile = [System.IO.Path]::Combine([System.IO.Path]::GetTempPath(), "nvflash_${PID}_${index}_${candidateIdx}.rom")
+                    if (Test-Path $tempFile) { Remove-Item $tempFile -Force -ErrorAction SilentlyContinue }
 
-                    if (Test-Path $targetPath) {
-                        $foundDev = Get-VbiosDevId $targetPath
-                        if ($foundDev -eq $devId) {
-                            $sizeKb = [math]::Round((Get-Item $targetPath).Length / 1KB, 1)
-                            Write-Host "      [SUCCESS] Verified VBIOS dump for DevID 0x$devId via nvflashk --index=$candidateIdx ($sizeKb KB)" -ForegroundColor Green
-                            $dumpSuccess = $true
-                            break
-                        } else {
-                            Write-Host "      [MISMATCH] nvflashk index $candidateIdx returned DevID 0x$foundDev (expected 0x$devId). Discarding..." -ForegroundColor Yellow
-                            Remove-Item $targetPath -Force -ErrorAction SilentlyContinue
+                    try {
+                        # Try --save
+                        & $Nvflash "--index=$candidateIdx" --save "$tempFile" 2>$null | Out-Null
+                        if (-not (Test-Path $tempFile) -or (Get-Item $tempFile).Length -eq 0) {
+                            if (Test-Path $tempFile) { Remove-Item $tempFile -Force -ErrorAction SilentlyContinue }
+                            # Retry with -b
+                            & $Nvflash "--index=$candidateIdx" -b "$tempFile" 2>$null | Out-Null
+                        }
+
+                        if ((Test-Path $tempFile) -and (Get-Item $tempFile).Length -gt 0) {
+                            $foundDev = Get-VbiosDevId $tempFile
+                            if ($foundDev -eq $devId) {
+                                $sizeKb = [math]::Round((Get-Item $tempFile).Length / 1KB, 1)
+                                Move-Item -Path $tempFile -Destination $targetPath -Force
+                                Write-Host "      [SUCCESS] Verified VBIOS dump for DevID 0x$devId via nvflashk --index=$candidateIdx ($sizeKb KB)" -ForegroundColor Green
+                                $dumpSuccess = $true
+                                break
+                            }
+                            else {
+                                Write-Host "      [MISMATCH] nvflashk index $candidateIdx returned DevID 0x$foundDev (expected 0x$devId). Discarding..." -ForegroundColor Yellow
+                            }
+                        }
+                    }
+                    finally {
+                        if (Test-Path $tempFile) {
+                            Remove-Item $tempFile -Force -ErrorAction SilentlyContinue
                         }
                     }
                 }
@@ -117,7 +133,8 @@ foreach ($gpu in $gpus) {
                 Write-Host "                      $targetPath" -ForegroundColor Yellow
             }
         }
-    } else {
+    }
+    else {
         Write-Host "      [!] Could not parse Hardware ID from PNP ID." -ForegroundColor Red
     }
     $index++

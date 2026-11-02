@@ -45,7 +45,15 @@ echo.
 
 if exist "%~dp0dist\*" (
     echo [1/4] Copying EFI loader...
+    if exist "!DRIVE!\EFI\BOOT\BOOTX64.EFI" (
+        copy /Y "!DRIVE!\EFI\BOOT\BOOTX64.EFI" "!DRIVE!\EFI\BOOT\BOOTX64.EFI.bak" >nul 2>&1
+    )
     xcopy /E /I /Y "%~dp0dist\*" "!DRIVE!\" >nul
+    if errorlevel 1 (
+        echo [ERROR] Failed to copy EFI loader to !DRIVE!\
+        pause
+        exit /b 1
+    )
 )
 
 if not exist "!DRIVE!\EFI\ASSETS" mkdir "!DRIVE!\EFI\ASSETS" >nul 2>&1
@@ -53,11 +61,21 @@ if not exist "!DRIVE!\EFI\ASSETS" mkdir "!DRIVE!\EFI\ASSETS" >nul 2>&1
 if exist "%~dp0UNIVERSAL-ASSETS\*" (
     echo [2/4] Copying firmware assets to \EFI\ASSETS\...
     xcopy /E /I /Y "%~dp0UNIVERSAL-ASSETS\*" "!DRIVE!\EFI\ASSETS\" >nul
+    if errorlevel 1 (
+        echo [ERROR] Failed to copy assets to !DRIVE!\EFI\ASSETS\
+        pause
+        exit /b 1
+    )
 )
 
 if exist "%~dp0EFI\*" (
     echo [3/4] Copying VBIOS...
     xcopy /E /I /Y "%~dp0EFI\*" "!DRIVE!\EFI\" >nul
+    if errorlevel 1 (
+        echo [ERROR] Failed to copy EFI directory to !DRIVE!\EFI\
+        pause
+        exit /b 1
+    )
 )
 
 echo [4/4] Copying Windows utilities...
@@ -65,7 +83,9 @@ if exist "%~dp0dump_vbios.bat" copy /Y "%~dp0dump_vbios.bat" "!DRIVE!\" >nul
 if exist "%~dp0dump_vbios.ps1" copy /Y "%~dp0dump_vbios.ps1" "!DRIVE!\" >nul
 if exist "%~dp0enable_laptop_hybrid.bat" copy /Y "%~dp0enable_laptop_hybrid.bat" "!DRIVE!\" >nul
 if exist "%~dp0enable_laptop_hybrid.ps1" copy /Y "%~dp0enable_laptop_hybrid.ps1" "!DRIVE!\" >nul
-if exist "%~dp0nvflashk.exe" (
+if exist "%~dp0tools\nvflashk.exe" (
+    copy /Y "%~dp0tools\nvflashk.exe" "!DRIVE!\" >nul
+) else if exist "%~dp0nvflashk.exe" (
     copy /Y "%~dp0nvflashk.exe" "!DRIVE!\" >nul
 ) else if exist "%~dp0..\nvflashk.exe" (
     copy /Y "%~dp0..\nvflashk.exe" "!DRIVE!\" >nul
