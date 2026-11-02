@@ -27,6 +27,8 @@ def main():
                         help='Select one existing matrix card; never adds admission')
     parser.add_argument('--children', type=int, choices=(1, 2, 3, 4),
                         help='Select an existing child-count dimension')
+    parser.add_argument('--mutations', action='store_true',
+                        help='Require a compiled skipped-NVIDIA-profile guard to fail')
     args = parser.parse_args()
     out = args.output.resolve()
     if out.exists():
@@ -45,7 +47,7 @@ def main():
              '-I', str(out), '-I', str(ROOT / 'deps/edk2/MdePkg/Include'), '-I', str(ROOT / 'deps/edk2/MdePkg/Include/X64')]
     sources = [str(BOOT / 'test_headless_full.c'), str(BOOT / 'console-flow.c'),
                str(ROOT / 'internal-boot/unlock/checks.c'), str(ROOT / 'internal-boot/unlock/sha256.c')]
-    summaries, child_checks, image_refusals = [], [], []
+    summaries, child_checks, image_refusals, mutations = [], [], [], []
     envelope=json.loads((ROOT / 'research/profile/proven.json').read_text())
     cards=((0x220410de,0xb72000a1,0x6000),(0x220410de,0xb72000a1,0x5ff4),
            (0x248710de,0xb74000a1,0x3000),(0x250410de,0xb76000a1,0x3000),
@@ -97,6 +99,24 @@ def main():
         summary = run(name, [str(exe), *images, str(prom), str(config_path)])
         summaries.append({'case': name, 'result': summary})
         print(name + ': ' + summary, flush=True)
+        if args.mutations and not no_edid and not mutations:
+            source=(BOOT/'full-release.c').read_text()
+            before='if(s==EFI_SUCCESS)s=Profile(stage==3?Full.EdidAgent:Full.NvAgent,stage==3);'
+            if source.count(before)!=1:raise RuntimeError('Profile mutation no longer matches source')
+            broken=case/'full-release-skipped-profile.c'
+            broken.write_text(source.replace(before,before.replace('s==EFI_SUCCESS','s==EFI_SUCCESS && stage!=4')))
+            mapping=json.loads(overlay.read_text())
+            mapping['roots'].append({'type':'file','name':str(BOOT/'full-release.c'),
+                                    'external-contents':str(broken),'use-external-name':False})
+            mutant_overlay=case/'mutant-overlay.json';mutant_overlay.write_text(json.dumps(mapping))
+            mutant=case/('skipped-profile.exe' if sys.platform=='win32' else 'skipped-profile')
+            run(name+'-mutation-compile',flags+['-ivfsoverlay',str(mutant_overlay),*sources,'-o',str(mutant)])
+            detected=subprocess.run([str(mutant),*images,str(prom),str(config_path)],capture_output=True,text=True)
+            (case/'mutation.log').write_text(detected.stdout+detected.stderr)
+            if detected.returncode!=1 or 'FAIL ' not in detected.stderr:
+                raise RuntimeError('Skipped profile guard must fail an assertion, not crash or pass')
+            mutations.append({'name':'skip-stage4-profile','compiled':True,'detected':True})
+            print('PASS compiled skipped-NVIDIA-profile guard mutation detected',flush=True)
         if bus==1 and children==1 and command==2 and memory!=0x5ff4:
             for index,image in enumerate(images):
                 for length in (0,2,63,Path(image).stat().st_size-1,Path(image).stat().st_size+1):
@@ -121,6 +141,7 @@ def main():
                 print(name + ': ' + result, flush=True)
     (out / 'summary.json').write_text(json.dumps({'synthetic_only': True, 'hardware_access': False,
                                                  'selection': {'card': args.card, 'children': args.children},
+                                                 'mutations':mutations,
                                                  'cases': summaries, 'child_checks': child_checks,
                                                  'image_refusals':image_refusals}, indent=2))
 
