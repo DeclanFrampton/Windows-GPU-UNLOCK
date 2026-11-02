@@ -1,4 +1,4 @@
-# Issue173 resource 준비: 하드웨어 실행 제안 아님
+# Issue173 resource 준비: 하드웨어 실행 미승인
 
 MEG Z790 ACE(MS-7D86), BIOS1.G0, i9-13900K, segment0/bus1/device0/fn0의
 EVGA2216/48973842와 Intel8086:A780/7D861462를 고정합니다. 기존 보고 graph

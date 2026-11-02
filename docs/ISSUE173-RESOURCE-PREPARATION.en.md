@@ -1,4 +1,4 @@
-# Issue173 resource preparation: hardware run not proposed
+# Issue173 resource preparation: hardware execution not authorized
 
 This source prepares a separately scoped resource diagnostic for MEG Z790 ACE
 (MS-7D86), BIOS1.G0, i9-13900K, EVGA2216/48973842 at segment0/bus1/device0/fn0,

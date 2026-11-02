@@ -41,9 +41,11 @@ $captureFolder=Join-Path $root 'RTX3090-UNLOCK';$publicFolder=Join-Path $root 'p
 New-Item -ItemType Directory -Path $publicFolder | Out-Null
 $sample="PRIVATE-LOCAL-PATH`nincomplete reason=probe-unreviewed-envelope status=0x8000000000000003`nmmio off=0x00000000 status=0x8000000000000007 value=0xdeadbeef`ncapture-complete=0`ndiagnostic-result status=0x8000000000000006`n"
 [IO.File]::WriteAllText((Join-Path $captureFolder 'DIAG00.TXT'),$sample)
-Export-ProbeReport ([IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))) $captureFolder $publicFolder $Python 'issue31'
+foreach($case in @('issue31','issue173')){
+Export-ProbeReport ([IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))) $captureFolder $publicFolder $Python $case
 $json=[IO.File]::ReadAllText((Join-Path $publicFolder 'report.json'));$public=$json | ConvertFrom-Json
-if($public.Test -cne 'issue31-pinned-probe-review' -or $json.Contains('PRIVATE') -or $public.WriteEligible -ne $false -or $public.HardwareVerified -ne $false -or
+if($public.Test -cne ($case+'-pinned-probe-review') -or $json.Contains('PRIVATE') -or $public.WriteEligible -ne $false -or $public.HardwareVerified -ne $false -or
    $public.CaptureMarkers.Count -ne 1 -or !$public.CaptureMarkers[0].EnvelopeRefusalRecorded -or $public.CaptureMarkers[0].FailedMmioReads -ne 1){throw 'Offline public report failed privacy/refusal checks.'}
+}
 Write-Host 'PASS: real offline checker export preserves failure markers and excludes private log text.'
 # Tiny mock directory retained for inspection; no recursive cleanup.
