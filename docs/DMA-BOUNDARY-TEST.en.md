@@ -33,4 +33,3 @@ flags false. This is a contributor-reported result, not an independently
 observed run. The returned JSON contains no source hash. It does not verify
 the later v2 six-case retained-cleanup/re-entry extension, physical AD103
 behavior, an EFI root-port graph, unlock or recovery. No repeat is requested.
-
