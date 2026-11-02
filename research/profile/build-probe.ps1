@@ -6,7 +6,8 @@
 # DMA or firmware variable writes in default mode. MsiOneChildTest explicitly
 # permits one text-child removal after fresh guards. Builds files only.
 param([Parameter(Mandatory)][guid]$WindowsEspGuid,[string]$Clang='clang',[string]$LldLink='lld-link',[string]$Python='python',
-      [ValidateRange(1,255)][int]$TargetBus=1,[switch]$MsiRuntimeAudit,[switch]$MsiZeroChildTest,[switch]$MsiMembershipAudit,[switch]$MsiOneChildTest,[switch]$MsiVirtualTextTest,[switch]$MsiGraphicsTest,[switch]$MsiEdidTest,[switch]$MsiNvidiaRelease,[switch]$MsiColdProbe,[switch]$MsiColdFullProm,[switch]$MsiAssetsDma,[switch]$MsiAdmission,[switch]$MsiUnlock)
+      [ValidateRange(1,255)][int]$TargetBus=1,[switch]$MsiRuntimeAudit,[switch]$MsiZeroChildTest,[switch]$MsiMembershipAudit,[switch]$MsiOneChildTest,[switch]$MsiVirtualTextTest,[switch]$MsiGraphicsTest,[switch]$MsiEdidTest,[switch]$MsiNvidiaRelease,[switch]$MsiColdProbe,[switch]$MsiColdFullProm,[switch]$MsiAssetsDma,[switch]$MsiAdmission,[switch]$MsiUnlock,
+      [ValidatePattern('^[0-9a-f]{32}$')][string]$MsiAttemptId)
 $ErrorActionPreference='Stop'
 if($MsiZeroChildTest -and !$MsiRuntimeAudit){throw 'Zero-child test requires the exact MSI runtime audit'}
 if($MsiMembershipAudit -and (!$MsiRuntimeAudit -or $MsiZeroChildTest)){throw 'Membership audit requires identity audit and excludes method calls'}
@@ -21,8 +22,14 @@ if($MsiAssetsDma -and !$MsiColdFullProm){throw 'Assets and DMA qualification req
 if($MsiAdmission -and !$MsiAssetsDma){throw 'Exact admission requires payload and mapping qualification'}
 if($MsiUnlock -and !$MsiAdmission){throw 'Unlock requires the exact MSI admission and prior stages'}
 if($MsiUnlock -and $TargetBus -ne 1){throw 'MSI write profile is pinned to bus 1'}
+if($MsiAttemptId -and !$MsiUnlock){throw 'Attempt receipts require the exact MSI unlock mode'}
 $repo=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $boot=Join-Path $repo 'internal-boot/boot'
+if($MsiAttemptId){
+ $lines=@(('#define GU_MSI_ATTEMPT_ID "'+$MsiAttemptId+'"'))
+ foreach($item in @(@('ARM','ARMED'),@('STARTED','STARTED'),@('FINISHED','FINISHED'))){$lines+=('#define GU_MSI_ATTEMPT_'+$item[0]+' L"\\RTX3090-UNLOCK\\MA'+$MsiAttemptId+'.'+$item[1]+'"')}
+ [IO.File]::WriteAllText((Join-Path $boot 'msi-attempt-config.h'),($lines -join "`n")+"`n")
+}
 function GuidC([guid]$Value){
  $b=$Value.ToByteArray();$tail=($b[8..15] | ForEach-Object {'0x{0:x2}' -f $_}) -join ','
  return ('{{0x{0:x8},0x{1:x4},0x{2:x4},{{{3}}}}}' -f [BitConverter]::ToUInt32($b,0),[BitConverter]::ToUInt16($b,4),[BitConverter]::ToUInt16($b,6),$tail)
@@ -56,6 +63,7 @@ try {
  if($MsiAssetsDma){$defines+='-DGU_MSI_ASSETS_DMA'}
  if($MsiAdmission){$defines+='-DGU_MSI_ADMISSION'}
  if($MsiUnlock){$defines+=@('-DGU_MSI_UNLOCK','-DGU_MSI_TRANSACTION_DEVELOPMENT','-DGU_PROFILE_MSI_H510_3090','-DGU_EXPERIMENTAL_3090','-DGU_ENTRY_LATCHED_SS1_FULL','-DGU_UEFI_PORT','-D__KERNEL__')}
+ if($MsiAttemptId){$defines+='-DGU_MSI_ATTEMPT'}
  $busMode='auto'
  if($PSBoundParameters.ContainsKey('TargetBus')){
   $defines+=('-DGU_PROBE_BUS=0x{0:x}U' -f $TargetBus);$busMode='explicit'
@@ -66,7 +74,7 @@ try {
   $sourceDefines=$defines
   if($MsiUnlock -and $source -eq 'probe.c'){
    # Keep the generic capture object inside its existing read-only compile guards.
-   $sourceDefines=@($defines | Where-Object {$_ -notin @('-DGU_MSI_UNLOCK','-DGU_MSI_TRANSACTION_DEVELOPMENT','-DGU_PROFILE_MSI_H510_3090','-DGU_EXPERIMENTAL_3090','-DGU_ENTRY_LATCHED_SS1_FULL','-DGU_UEFI_PORT','-D__KERNEL__')})
+   $sourceDefines=@($defines | Where-Object {$_ -notin @('-DGU_MSI_UNLOCK','-DGU_MSI_TRANSACTION_DEVELOPMENT','-DGU_PROFILE_MSI_H510_3090','-DGU_EXPERIMENTAL_3090','-DGU_ENTRY_LATCHED_SS1_FULL','-DGU_UEFI_PORT','-D__KERNEL__','-DGU_MSI_ATTEMPT')})
   }
   $compilation+=[ordered]@{Source=$source;Defines=$sourceDefines}
   & $Clang -target x86_64-pc-windows-msvc -std=c11 -ffreestanding -fno-builtin -fno-stack-protector -mno-red-zone -fshort-wchar -Os -Wall -Wextra -Werror -Wno-unused-parameter @sourceDefines -I ../unlock/compat -I ../../deps/edk2/MdePkg/Include -I ../../deps/edk2/MdePkg/Include/X64 -c $source -o $obj
@@ -84,11 +92,12 @@ try {
  if($MsiColdProbe){$manifestInputs+='msi-cold-probe.h'}
  if($MsiAssetsDma){$manifestInputs+=@('msi-assets.h','msi-dma-probe.h','../unlock/asset-reader.h')}
  if($MsiAdmission){$manifestInputs+=@('../unlock/msi-admission.h','../unlock/checks.h')}
+ if($MsiAttemptId){$manifestInputs+=@('msi-attempt-config.h','msi-attempt-receipt.h')}
  if($MsiUnlock){$manifestInputs+=@('msi-transaction-graph.h','../unlock/msi-transaction.h','../unlock/port.h','../unlock/compat/compat.h','../unlock/assets.json')+@(Get-ChildItem '../unlock','../../deps/edk2/MdePkg/Include' -Filter '*.h' -File -Recurse | ForEach-Object {Resolve-Path -Relative $_.FullName})}
  [ordered]@{Mode=$(if($MsiUnlock){'msi-attended-experimental-unlock'}elseif($MsiNvidiaRelease){'msi-nvidia-child-parent-release-then-windows-usb'}elseif($MsiOneChildTest){'msi-one-child-removal-then-windows-usb'}else{'generic-read-only-probe-then-windows-usb'});MsiRuntimeAudit=[bool]$MsiRuntimeAudit;MsiZeroChildTest=[bool]$MsiZeroChildTest;MsiMembershipAudit=[bool]$MsiMembershipAudit;MsiOneChildTest=[bool]$MsiOneChildTest;MsiVirtualTextTest=[bool]$MsiVirtualTextTest;MsiGraphicsTest=[bool]$MsiGraphicsTest;CallsDriverStop=([bool]$MsiZeroChildTest -or [bool]$MsiOneChildTest);CanUnlock=[bool]$MsiUnlock;CanDetach=[bool]$MsiOneChildTest;WritesFirmwareVariables=$false;HardwareTested=$false;Defines=$defines;Compilation=$compilation
   MsiEdidTest=[bool]$MsiEdidTest;MsiNvidiaRelease=[bool]$MsiNvidiaRelease;NvidiaStopCalled=[bool]$MsiNvidiaRelease
   MsiColdProbe=[bool]$MsiColdProbe;MsiColdFullProm=[bool]$MsiColdFullProm;MsiAssetsDma=[bool]$MsiAssetsDma;DmaMappingQualification=[bool]$MsiAssetsDma;MsiAdmission=[bool]$MsiAdmission;MsiUnlock=[bool]$MsiUnlock;ColdReadCountExcludesTransaction=[bool]$MsiUnlock;CaptureObjectReadOnly=$true;WindowsEspGuid=$WindowsEspGuid.ToString();ColdMmioReads=$(if($MsiAdmission){262171}elseif($MsiColdFullProm){262162}elseif($MsiColdProbe){146}else{0});PciMemoryEnableDisable=[bool]$MsiColdProbe
-  ProbeBusMode=$busMode;TargetBus=$(if($busMode -eq 'explicit'){$TargetBus}else{$null})
+  MsiAttemptId=$MsiAttemptId;DurableAttemptReceipts=[bool]$MsiAttemptId;ProbeBusMode=$busMode;TargetBus=$(if($busMode -eq 'explicit'){$TargetBus}else{$null})
   EfiSha256=(Get-FileHash -LiteralPath "$out/BOOTX64.EFI").Hash.ToLowerInvariant();BuiltUtc=[DateTime]::UtcNow.ToString('o')
   Sources=@($manifestInputs | ForEach-Object {[ordered]@{Path=$_;Sha256=(Get-FileHash -LiteralPath $_).Hash.ToLowerInvariant()}})
  } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath "$out/manifest.json" -Encoding utf8

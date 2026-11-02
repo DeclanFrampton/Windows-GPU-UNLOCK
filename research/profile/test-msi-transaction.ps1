@@ -8,16 +8,16 @@ try {
  $defs=@('-DGU_PROFILE_MSI_H510_3090','-DGU_MSI_TRANSACTION_DEVELOPMENT','-DGU_MSI_UNLOCK','-DGU_EXPERIMENTAL_3090','-DGU_ENTRY_LATCHED_SS1_FULL')
  $flags=@('-target','x86_64-pc-windows-msvc','-std=c11','-ffreestanding','-fno-builtin','-fno-stack-protector','-fshort-wchar','-Os','-Wall','-Wextra','-Werror','-Wno-unused-parameter','-I','deps/edk2/MdePkg/Include','-I','deps/edk2/MdePkg/Include/X64')+$defs
  $objects=@{}
- foreach($file in @('internal-boot/unlock/runtime.c','internal-boot/unlock/format.c','internal-boot/unlock/checks.c','internal-boot/unlock/tests/test_msi_transaction.c','internal-boot/boot/test-msi-transaction-graph.c')){
+ foreach($file in @('internal-boot/unlock/runtime.c','internal-boot/unlock/format.c','internal-boot/unlock/checks.c','internal-boot/unlock/tests/test_msi_transaction.c','internal-boot/boot/test-msi-transaction-graph.c','internal-boot/boot/test-msi-attempt-receipt.c')){
   $name=[IO.Path]::GetFileNameWithoutExtension($file);$obj=Join-Path $out ($name+'.obj')
   & $Clang @flags -c $file -o $obj;if($LASTEXITCODE -ne 0){throw "Compile failed: $file"};$objects[$name]=$obj
  }
- foreach($test in @('test_msi_transaction','test-msi-transaction-graph')){
+ foreach($test in @('test_msi_transaction','test-msi-transaction-graph','test-msi-attempt-receipt')){
   $objs=@($objects[$test],$objects['runtime']);if($test -eq 'test_msi_transaction'){$objs+=@($objects['format'],$objects['checks'])}
   $exe=Join-Path $out ($test+'.exe');& $LldLink /nologo /nodefaultlib /subsystem:console /entry:main /machine:x64 "/out:$exe" @objs
   if($LASTEXITCODE -ne 0){throw "Link failed: $test"}; & (Join-Path $repo $exe);if($LASTEXITCODE -ne 0){throw "Scenario failed: $test/$LASTEXITCODE"}
  }
- 'PASS 23 wrapper cases with repeat refusal and 17 graph ownership cases; GPU core/hash/callbacks mocked'
+ 'PASS 23 wrapper/repeat, 17 graph, 13 receipt-begin and 6 receipt-finish fault cases; hardware/filesystem mocked'
  if($Prom -or $Capture -or $Assets){
   if(!$Prom -or !$Capture -or !$Assets){throw 'Provide all of Prom, Capture and Assets for real-core replay'}
   $Prom=[IO.Path]::GetFullPath($Prom);$Capture=[IO.Path]::GetFullPath($Capture);$Assets=[IO.Path]::GetFullPath($Assets)

@@ -9,6 +9,13 @@
 #include <Guid/GlobalVariable.h>
 #endif
 #include "media.h"
+#ifdef GU_MSI_ATTEMPT
+#include "msi-attempt-config.h"
+#include "msi-attempt-receipt.h"
+#if !defined(GU_MSI_UNLOCK)
+#error MSI receipt mode requires the exact MSI unlock transaction
+#endif
+#endif
 #include "flow.h"
 #ifdef GU_MSI_RUNTIME_AUDIT
 #include "msi-runtime-audit.h"
@@ -542,9 +549,13 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE Image,EFI_SYSTEM_TABLE *St) {
 #ifdef GU_MSI_RUNTIME_AUDIT
 #ifdef GU_MSI_ONE_CHILD_TEST
     if(s==EFI_SUCCESS){
+#ifndef GU_MSI_ATTEMPT
       EFI_FILE_PROTOCOL *arm=NULL;
+#endif
       s=Table->BootServices->SetWatchdogTimer(0,0,0,NULL);
-#if defined(GU_MSI_UNLOCK)
+#if defined(GU_MSI_ATTEMPT)
+      if(s==EFI_SUCCESS)s=GuMsiAttemptBegin(Root,GU_MSI_ATTEMPT_ARM,GU_MSI_ATTEMPT_STARTED,GU_MSI_ATTEMPT_FINISHED,GU_MSI_ATTEMPT_ID);
+#elif defined(GU_MSI_UNLOCK)
       if(s==EFI_SUCCESS)s=Root->Open(Root,&arm,L"MSI-UNLOCK.ARMED",EFI_FILE_MODE_READ|EFI_FILE_MODE_WRITE,0);
 #elif defined(GU_MSI_COLD_PROBE)
       if(s==EFI_SUCCESS)s=Root->Open(Root,&arm,L"MSI-COLD-PROBE.ARMED",EFI_FILE_MODE_READ|EFI_FILE_MODE_WRITE,0);
@@ -559,7 +570,11 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE Image,EFI_SYSTEM_TABLE *St) {
 #else
       if(s==EFI_SUCCESS)s=Root->Open(Root,&arm,L"MSI-ONE-CHILD.ARMED",EFI_FILE_MODE_READ|EFI_FILE_MODE_WRITE,0);
 #endif
+#ifndef GU_MSI_ATTEMPT
       if(s==EFI_SUCCESS)s=arm->Delete(arm);
+#else
+      if(s==EFI_SUCCESS)s=Record(NULL,"msi-attempt-id=" GU_MSI_ATTEMPT_ID,EFI_SUCCESS);
+#endif
       if(s==EFI_SUCCESS)s=Record(NULL,"msi-one-child-arm-consumed",EFI_SUCCESS);
       ResearchOutputDisabled=TRUE;
     }
@@ -573,6 +588,12 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE Image,EFI_SYSTEM_TABLE *St) {
 #endif
 #endif
     EFI_STATUS recorded=Record(NULL,"diagnostic-result",s);
+#ifdef GU_MSI_ATTEMPT
+    if(s==EFI_SUCCESS && recorded==EFI_SUCCESS){
+      s=GuMsiAttemptFinish(Root,GU_MSI_ATTEMPT_STARTED,GU_MSI_ATTEMPT_FINISHED,GU_MSI_ATTEMPT_ID);
+      if(s==EFI_SUCCESS)s=Record(NULL,"msi-attempt-finished",EFI_SUCCESS);
+    }
+#endif
 #ifdef GU_MSI_ONE_CHILD_TEST
     if(s!=EFI_SUCCESS || recorded!=EFI_SUCCESS)Stop();
 #endif

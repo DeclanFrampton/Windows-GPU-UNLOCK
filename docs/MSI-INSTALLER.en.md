@@ -83,3 +83,28 @@ Tests additionally verify correct binding, pending-plan refusal and preservation
 of the original file hash after an attempted overwrite. The one-script contributor
 preparation is pinned to the preceding preparation revision; do not silently
 upgrade or replace an existing contributor state to add this newer journal.
+
+## Exact-attempt EFI receipt implementation
+
+The receipt variant of build-probe.ps1 takes an explicit 32-hex MsiAttemptId and
+embeds distinct MA<ID>.ARMED/STARTED/FINISHED paths. It verifies the exact ARM ID,
+refuses any existing STARTED/FINISHED receipt, writes/flushes/closes and reads back
+STARTED before consuming the arm and before driver release. A failed write,
+flush, readback, close or arm deletion holds; any partial STARTED file blocks
+repeat execution. FINISHED is written/read back only after successful transaction,
+resource cleanup and diagnostic logging, before attempting Windows handoff.
+FINISHED therefore does not independently prove Windows started.
+
+The legacy one-shot build remains separate and unchanged when MsiAttemptId is
+absent. Generated configuration is private/ignored; its hash is in the build
+manifest. The generic capture object does not receive the attempt/write flags.
+The existing-state report from Christian (1566601541337481226) verified the old
+preparation complete, not installed or armed, with no host attempt plan present.
+It is preserved rather than silently migrated.
+
+A 93,696-byte receipt EFI built and passed PE verification. CPU tests passed
+23 transaction-wrapper/repeat cases,17 graph cases,13 receipt-begin cases and6
+receipt-finish fault cases, including pending/finished refusal, exact arm mismatch,
+short writes, flush/readback/close/delete failures. No hardware execution occurred.
+The next live boundary is one separately identified attended rearm; no automatic
+retry, unrestricted rearm loop or unattended deployment is implemented.
