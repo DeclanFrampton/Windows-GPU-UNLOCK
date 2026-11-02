@@ -1,5 +1,6 @@
 # Complete CPU/mock validation. Optional VcVars only initializes the compiler environment.
-param([string]$Clang='clang',[string]$LldLink='lld-link',[string]$Python='python',[string]$VcVars)
+param([string]$Clang='clang',[string]$LldLink='lld-link',[string]$Python='python',[string]$VcVars,
+ [ValidateSet('issue114','issue173')][string]$FixtureMachine='issue114')
 $ErrorActionPreference='Stop'
 $repo=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 if(Test-Path -LiteralPath (Join-Path $repo 'internal-boot/boot/platform-config.h')){
@@ -19,9 +20,13 @@ try {
  New-Item -ItemType Directory -Path build/probe-pinned-tests -Force | Out-Null
  $flags=@('-DGU_DIAGNOSTIC_ONLY','-DGU_DIAGNOSTIC_PROBE','-DGU_PROBE_GENERIC')
  $includes=@('-I','../../deps/edk2/MdePkg/Include','-I','../../deps/edk2/MdePkg/Include/X64')
- foreach($test in @('generic','pinned','x570','lenovo')){
+ foreach($test in @('generic','pinned','x570','lenovo','evga','evga-wrong-bus','evga-other-board')){
   $extra=if($test -eq 'pinned'){@('-DGU_PROBE_EXPECTED_ID=0x250410deU','-DGU_PROBE_EXPECTED_SUBSYSTEM=0x263019daU')}elseif($test -eq 'x570'){@('-DGU_PROBE_EXPECTED_ID=0x220410deU','-DGU_PROBE_EXPECTED_SUBSYSTEM=0x147d10deU','-DGU_PROBE_BUS=8U')}elseif($test -eq 'lenovo'){@('-DGU_PROBE_EXPECTED_ID=0x250410deU','-DGU_PROBE_EXPECTED_SUBSYSTEM=0x881d1043U')}else{@()}
+  if($test -eq 'evga'){$extra=@('-DGU_PROBE_EXPECTED_ID=0x221610deU','-DGU_PROBE_EXPECTED_SUBSYSTEM=0x48973842U','-DGU_PROBE_BUS=1U')}
+  if($test -eq 'evga-wrong-bus'){$extra=@('-DGU_PROBE_EXPECTED_ID=0x221610deU','-DGU_PROBE_EXPECTED_SUBSYSTEM=0x48973842U','-DGU_PROBE_BUS=8U')}
+  if($test -eq 'evga-other-board'){$extra=@('-DGU_PROBE_EXPECTED_ID=0x221610deU','-DGU_PROBE_EXPECTED_SUBSYSTEM=0x403f1458U','-DGU_PROBE_BUS=1U')}
   $source=if($test -ne 'generic'){'test_probe_pinned.c'}else{'test_probe_generic.c'}
+  if($test -in @('evga-wrong-bus','evga-other-board')){$source='test_probe_research_refusal.c'}
   & $Clang -std=c11 -O1 -Wall -Wextra -Werror -D_CRT_SECURE_NO_WARNINGS @flags @extra @includes $source probe.c ../unlock/sha256.c -o "build/probe-pinned-tests/$test.exe"
   if($LASTEXITCODE -ne 0){throw "Mock compile failed: $test"}
   & "./build/probe-pinned-tests/$test.exe"
@@ -41,7 +46,9 @@ try {
 } finally {Pop-Location}
 # Fixture build uses a mock partition observation, never real disk discovery.
 function Get-Partition {[pscustomobject]@{Guid='11111111-2222-3333-4444-555555555555';IsSystem=$true}}
-& (Join-Path $PSScriptRoot 'build-probe.ps1') -WindowsEspGuid 11111111-2222-3333-4444-555555555555 -TargetBus 1 -ExpectedDevice 250410de -ExpectedSubsystem 263019da -Clang $Clang -LldLink $LldLink -Python $Python
+$fixtureDevice='250410de';$fixtureSubsystem='263019da'
+if($FixtureMachine -ceq 'issue173'){$fixtureDevice='221610de';$fixtureSubsystem='48973842'}
+& (Join-Path $PSScriptRoot 'build-probe.ps1') -WindowsEspGuid 11111111-2222-3333-4444-555555555555 -TargetBus 1 -ExpectedDevice $fixtureDevice -ExpectedSubsystem $fixtureSubsystem -Clang $Clang -LldLink $LldLink -Python $Python
 if(!$?){throw 'Pinned fixture build failed.'}
 . (Join-Path $PSScriptRoot 'probe-manifest.ps1')
 $built=Join-Path $repo 'internal-boot/boot/build/probe-generic'

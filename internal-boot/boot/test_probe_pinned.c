@@ -15,6 +15,9 @@ int main(void) {
   Check(!S.RegReads && !S.PromReads,"device mismatch blocks all MMIO");
   Check(Pinned(GU_PROBE_EXPECTED_ID,GU_PROBE_EXPECTED_SUBSYSTEM,1)==EFI_NOT_READY,"nonzero segment refused");
   Check(!S.RegReads && !S.PromReads,"segment mismatch blocks all MMIO");
+  GenericSetup(G_OK);TestId=GU_PROBE_EXPECTED_ID;TestSubsystem=GU_PROBE_EXPECTED_SUBSYSTEM;TestBus=GU_TEST_PROBE_BUS+1;
+  Check(GuCaptureGraphOnVolume(&Table,&LogFile,&RootFile)==EFI_NOT_READY,"different bus refused");
+  Check(!S.RegReads && !S.PromReads,"bus mismatch blocks all MMIO");
   GenericSetup(G_CHANGED);TestId=GU_PROBE_EXPECTED_ID;TestSubsystem=GU_PROBE_EXPECTED_SUBSYSTEM;
   Check(GuCaptureGraphOnVolume(&Table,&LogFile,&RootFile)==EFI_NOT_READY,"subsystem drift after initial pin refused");
   Check(!S.RegReads && !S.PromReads,"drifted pinned subsystem blocks MMIO");

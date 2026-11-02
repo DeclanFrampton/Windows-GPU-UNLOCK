@@ -23,7 +23,7 @@
     "ExpectedSubsystem": "147d10de",
     "ExpectedSegment": 0,
     "EfiSha256": "f8a8b25ee0e8e02dcd0645f0a0285b7625cd3c302a6a0d5e34bd3f72e0c2e5ab",
-    "BuiltUtc": "2026-11-01T21:20:46.0302959Z",
+    "BuiltUtc": "2026-11-02T04:59:31.1262481Z",
     "Sources": [
       {
         "Path": "internal-boot/boot/handoff.c",
@@ -39,7 +39,7 @@
       },
       {
         "Path": "internal-boot/boot/probe.c",
-        "Sha256": "fc0a80abe01270b10258111a4a25919d540758b377b7d5188000b9ac3fbe6550"
+        "Sha256": "45394333c09c8cda144efc4e49178064e8a2511aa5280252ccc92b108f6230ce"
       },
       {
         "Path": "internal-boot/boot/probe-parent.c",
@@ -2764,7 +2764,7 @@
     },
     {
       "Path": "internal-boot/boot/probe.c",
-      "Sha256": "fc0a80abe01270b10258111a4a25919d540758b377b7d5188000b9ac3fbe6550"
+      "Sha256": "45394333c09c8cda144efc4e49178064e8a2511aa5280252ccc92b108f6230ce"
     },
     {
       "Path": "internal-boot/boot/probe.h",
@@ -2824,7 +2824,7 @@
     },
     {
       "Path": "internal-boot/boot/test_probe_generic.c",
-      "Sha256": "25184d51766c624d747814ab6d302a6fb500f3a0ebfdee41cd3e93b26be2fe99"
+      "Sha256": "48e4324dc6057043e2d1250b16b832c335b67b3dbf2b056116c936b2861f1342"
     },
     {
       "Path": "internal-boot/boot/test_probe_parent.c",
@@ -2832,7 +2832,11 @@
     },
     {
       "Path": "internal-boot/boot/test_probe_pinned.c",
-      "Sha256": "54cd23f11e50f49420519c6536648f3888a16c8ca1505b85f4d1b57ae3a4c132"
+      "Sha256": "0af888b0e9dc8ef1b629274bf1e4cca68827f7096ffd17c2c2454bda14b547be"
+    },
+    {
+      "Path": "internal-boot/boot/test_probe_research_refusal.c",
+      "Sha256": "ebc6462d8863b8d2ecf0063a2be3ae256b0b8487eb0f8cb7b2c00e18e7269f64"
     },
     {
       "Path": "internal-boot/boot/test_prom_boundary.c",

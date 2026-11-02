@@ -180,6 +180,12 @@ static BOOLEAN ProbeEnvelope(CAPTURE *c,EFI_PCI_IO_PROTOCOL *io,const UINT32 *cf
   BOOLEAN identity=cfg[0]==0x220410deU || cfg[0]==0x220310deU ||
     cfg[0]==0x248710deU || cfg[0]==0x250410deU || cfg[0]==0x248410deU || cfg[0]==0x24c910deU || cfg[0]==0x220a10deU;
 #ifdef GU_PROBE_EXPECTED_ID
+  /* Separately scoped capture research: EVGA 3080 / MEG Z790 ACE case.
+   * This is not generic 2216 admission or write/profile qualification. The
+   * existing MEM1/BME0/resource/callback guards below still precede MMIO. */
+#if GU_PROBE_EXPECTED_ID == 0x221610deU && GU_PROBE_EXPECTED_SUBSYSTEM == 0x48973842U && GU_PROBE_BUS == 1
+  identity=identity || (cfg[0]==0x221610deU && cfg[11]==0x48973842U);
+#endif
   /* Additional restriction only: never expands the reviewed register maps. */
   identity=identity && cfg[0]==GU_PROBE_EXPECTED_ID && cfg[11]==GU_PROBE_EXPECTED_SUBSYSTEM;
 #endif

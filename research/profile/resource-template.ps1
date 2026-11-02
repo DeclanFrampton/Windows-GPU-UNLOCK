@@ -3,7 +3,7 @@ function New-GuResourceTemplate([string]$Repo,[guid]$WindowsGuid,[string]$Machin
  $sentinel=[guid]'a2b4c6d8-1357-49ab-bcde-102030405060'
  if($MachineId -cne 'issue172' -or $WindowsGuid -eq [guid]::Empty -or $WindowsGuid -eq $sentinel){throw 'Invalid resource template case/Windows pin.'}
  $base=Join-Path $Repo 'research/profile/resource-template';$mp=Join-Path $base 'template.json';$tp=Join-Path $base 'probe-bus8.template'
- if((ProbeHash $mp) -cne 'dff83e6bab6b34c940cea6efae46c3ee58452baddb8e7f99c2a414b968afcb1d' -or
+ if((ProbeHash $mp) -cne 'f1e799c72a9a937eef4939e6e2de43b8f36329104ac1b076a0adb67b28669a89' -or
     (ProbeHash $tp) -cne 'f8a8b25ee0e8e02dcd0645f0a0285b7625cd3c302a6a0d5e34bd3f72e0c2e5ab'){throw 'Resource template identity changed.'}
  $m=Get-Content -LiteralPath $mp -Raw|ConvertFrom-Json
  foreach($row in $m.SourcePins){

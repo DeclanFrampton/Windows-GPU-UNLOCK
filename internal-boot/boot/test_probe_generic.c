@@ -195,6 +195,9 @@ int main(void) {
   Check(GuCaptureGraphOnVolume(&Table,&LogFile,&RootFile)==EFI_NOT_READY,"consistent unknown NVIDIA identity is inventory only");
   Check(S.RegReads==0 && S.PromReads==0 && !AttributeOthers,"auto discovery never enables unknown GPU register-map access");
   Check(!Logged("capture-complete=1"),"unknown deep-read identity cannot claim complete capture");
+  GenericSetup(G_OK);TestId=0x221610deU;TestSubsystem=0x48973842U;
+  Check(GuCaptureGraphOnVolume(&Table,&LogFile,&RootFile)==EFI_NOT_READY,"EVGA resource research is unavailable to an unpinned generic build");
+  Check(!S.RegReads && !S.PromReads,"generic EVGA refusal occurs before MMIO/PROM");
 #endif
   Check(GenericRun(G_OK,TRUE)==EFI_SUCCESS,"reviewed generic envelope succeeds");
   Check(Logged("pci-bar0-resource raw=8a2b00000000"),"validated BAR descriptor bytes are recorded before the final target recheck");

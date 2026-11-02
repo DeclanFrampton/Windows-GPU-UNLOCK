@@ -41,6 +41,17 @@ foreach($wrong in @('PCI\VEN_1002&DEV_13C0&SUBSYS_D0001458\PRIVATE','PCI\VEN_100
 }
 Reject {Assert-PinnedProbe $zotac $zb $zbi $zc @($zv)}
 Reject {Assert-PinnedProbe $zotac $zb $zbi $zc @($zv,$amd,$amd)}
+$evga=Read-ProbeConfiguration 'issue173'
+$eb=[pscustomobject]@{Manufacturer='Micro-Star International Co., Ltd.';Product='MEG Z790 ACE (MS-7D86)'}
+$ebi=[pscustomobject]@{SMBIOSBIOSVersion='1.G0'};$ec=[pscustomobject]@{Name='Intel Core i9-13900K'}
+$ev=[pscustomobject]@{PNPDeviceID='PCI\VEN_10DE&DEV_2216&SUBSYS_48973842\PRIVATE'}
+$ei=[pscustomobject]@{PNPDeviceID='PCI\VEN_8086&DEV_A780&SUBSYS_7D861462\PRIVATE'}
+Assert-PinnedProbe $evga $eb $ebi $ec @($ev,$ei)
+foreach($wrong in @('PCI\VEN_10DE&DEV_2216&SUBSYS_403F1458\PRIVATE','PCI\VEN_10DE&DEV_2204&SUBSYS_48973842\PRIVATE')){
+ Reject {Assert-PinnedProbe $evga $eb $ebi $ec @([pscustomobject]@{PNPDeviceID=$wrong},$ei)}
+}
+Reject {Assert-PinnedProbe $evga $eb $ebi $ec @($ev)}
+$ebi.SMBIOSBIOSVersion='other';Reject {Assert-PinnedProbe $evga $eb $ebi $ec @($ev,$ei)}
 $temp=Join-Path ([IO.Path]::GetTempPath()) ('resource-prep-'+[guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $temp|Out-Null
 $zraw=Get-Content (Join-Path $PSScriptRoot 'probe-configurations/issue114.json') -Raw
