@@ -1,7 +1,20 @@
 # Read Windows PnP parent associations; no PCI config, MMIO or device changes.
 [CmdletBinding()]
-param([switch]$SelfTest)
+param([switch]$SelfTest,[ValidateSet('108','17')][string]$Case='108')
 $ErrorActionPreference='Stop'
+function Get-PciParentTargets($Devices,[string]$CaseId){
+ if($Devices.Count -gt 16){throw 'Too many display adapters.'}
+ $pins=if($CaseId -ceq '17'){@('2204/40411458','1E04/12FA10DE')}else{@('2208/40811458')}
+ $selected=@()
+ foreach($pin in $pins){
+  $parts=$pin.Split('/')
+  $pattern='^PCI\\VEN_10DE&DEV_'+$parts[0]+'&SUBSYS_'+$parts[1]+'(?:&|\\)'
+  $found=@($Devices|Where-Object {$_.InstanceId -match $pattern})
+  if($found.Count -ne 1){throw 'Target missing or not unique.'}
+  $selected+=$found[0]
+ }
+ return $selected
+}
 function Get-PciParentChain([string]$Start,[scriptblock]$ReadParent){
  $rows=@();$seen=@{};$current=$Start;$state='hop-limit'
  for($hop=0;$hop -lt 16;$hop++){
@@ -32,15 +45,26 @@ if($SelfTest){
  $script:sequence=0
  if((Get-PciParentChain $target {$script:sequence++;'NODE'+$script:sequence}).State -cne 'hop-limit'){throw 'Hop limit regression.'}
  if((Get-PciParentChain ('X'*2049) {''}).State -cne 'unknown'){throw 'Bounds regression.'}
+ $multi=@('PCI\VEN_10DE&DEV_2204&SUBSYS_40411458\PRIVATE','PCI\VEN_10DE&DEV_1E04&SUBSYS_12FA10DE\PRIVATE','PCI\VEN_10DE&DEV_2C02&SUBSYS_41781458\PRIVATE')|ForEach-Object {[pscustomobject]@{InstanceId=$_}}
+ $selected=@(Get-PciParentTargets $multi '17')
+ if($selected.Count -ne 2 -or @($selected|Where-Object {$_.InstanceId -match '2C02'}).Count){throw 'Non-target selected.'}
+ $script:reads=0
+ foreach($d in $selected){$null=Get-PciParentChain $d.InstanceId {param($id) if($id -match '2C02'){throw 'Non-target traversed'};$script:reads++;''}}
+ if($script:reads -ne 2){throw 'Multi-target traversal regression.'}
+ foreach($bad in @(@($multi[0]),@($multi[0],$multi[0],$multi[1]))){
+  $refused=$false;try{Get-PciParentTargets $bad '17'|Out-Null}catch{$refused=$true}
+  if(!$refused){throw 'Missing/duplicate target accepted.'}
+ }
  Write-Host 'PASS: PCI parent chain, subsystem, privacy, cycle, failed/ambiguous read and bounds.'
  exit 0
 }
 $status='observed';$targets=@()
 try{
- # Exact issue108 identity; no arbitrary device access or device enable operation.
- $devices=@(Get-PnpDevice -PresentOnly -Class Display -ErrorAction Stop | Where-Object {$_.InstanceId -match '^PCI\\VEN_10DE&DEV_2208&SUBSYS_40811458(?:&|\\)'})
- if($devices.Count -ne 1){$status='target-not-unique'}else{
-  $targets+=Get-PciParentChain $devices[0].InstanceId {
+ # Exact case identities; this cannot grant EFI admission or enable a device.
+ $devices=@(Get-PnpDevice -PresentOnly -Class Display -ErrorAction Stop)
+ $selected=@();try{$selected=@(Get-PciParentTargets $devices $Case)}catch{$status='target-not-unique'}
+ foreach($device in $selected){
+  $targets+=Get-PciParentChain $device.InstanceId {
    param($id)
    $p=Get-PnpDeviceProperty -InstanceId $id -KeyName DEVPKEY_Device_Parent -ErrorAction Stop
    if($p.Type -cne 'String' -or $p.Data -isnot [string]){throw 'Unknown parent property.'}
@@ -48,7 +72,7 @@ try{
   }
  }
 }catch{$status='unavailable';$targets=@()}
-$report=[ordered]@{Test='windows-pci-parent-v1';ReadStatus=$status;Targets=$targets;RawIdentitiesExported=$false;ExternalConnectorVerified=$false;PrebootTopologyVerified=$false;HardwareUnlockTested=$false;WriteEligible=$false}
+$report=[ordered]@{Test='windows-pci-parent-v2';Case=$Case;ReadStatus=$status;Targets=$targets;RawIdentitiesExported=$false;ExternalConnectorVerified=$false;PrebootTopologyVerified=$false;HardwareUnlockTested=$false;WriteEligible=$false}
 $docs=[Environment]::GetFolderPath('MyDocuments');if(!$docs){throw 'Documents unavailable.'}
 $folder=Join-Path $docs ('GPU-Unlock-Pci-Parents-'+[guid]::NewGuid().ToString('N').Substring(0,8))
 New-Item -ItemType Directory -Path $folder|Out-Null
