@@ -68,3 +68,6 @@ report cannot identify the actual ownership edges. Run this checker on the
 existing complete capture only; a second boot does not resolve this refusal.
 Other topology refusals may have no detail. Return only report.json/result.json;
 do not upload raw captures or images, change settings, or repeat an EFI run.
+If diagnostic fields exceed the bounded export contract, the checker reports
+invalid observations without exporting those fields. It must not crash or
+convert that condition into admission.

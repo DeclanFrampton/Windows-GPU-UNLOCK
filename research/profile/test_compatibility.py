@@ -209,6 +209,19 @@ class CompatibilityTests(unittest.TestCase):
         self.assertEqual(report['status'], 'outside_scope')
         self.assertIs(report['write_eligible'], False)
 
+    def test_unexportable_topology_count_remains_a_reported_refusal(self):
+        self.populate(count=1)
+        def oversized(*args, **kwargs):
+            raise checker.mp.TopologyRefused('not exported', 'unsupported_display_children',
+                                            display_children=4097, allowed_children=2)
+        with patch.object(checker.mp, 'analyze', side_effect=oversized):
+            report = self.result()
+        self.assertEqual(report['status'], 'invalid_data')
+        self.assertIn('observations_invalid', [c['code'] for c in report['checks']])
+        self.assertTrue(all('topology_detail' not in c for c in report['checks']))
+        self.assertIs(report['hardware_tested'], False)
+        self.assertIs(report['write_eligible'], False)
+
     def test_complete_root_and_bridge_ancestry_must_agree_across_cold_boots(self):
         changes=(('02010c00d041030a00000000','02010c00d041030a01000000'),
                  ('02010c00d041030a00000000','02010c00d041080a00000000'),

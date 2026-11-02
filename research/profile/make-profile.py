@@ -85,10 +85,10 @@ class TopologyRefused(Refused):
     def __init__(self, message, reason, **counts):
         super().__init__(message)
         if reason not in ('active_edid_without_target_owner', 'unsupported_display_children'):
-            raise ValueError('Unknown topology diagnostic')
+            raise Refused('Unknown topology diagnostic')
         if any(key not in ('active_edid_handles', 'display_children', 'allowed_children') or
                type(value) is not int or not 0 <= value <= 4096 for key, value in counts.items()):
-            raise ValueError('Invalid topology diagnostic counts')
+            raise Refused('Invalid topology diagnostic counts')
         self.topology_detail = {'reason': reason, **counts}
 
 

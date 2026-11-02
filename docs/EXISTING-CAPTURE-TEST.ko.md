@@ -63,3 +63,5 @@ GU_CONSOLE_AGGREGATE는 관측된 aggregate graph의 증거가 아닙니다. cou
 두 번째 부팅으로 이 거부가 해결되지 않습니다. 다른 topology 거부에는 detail이
 없을 수 있습니다. report.json/result.json만 반환하고 원본 캡처/이미지 업로드,
 설정 변경, EFI 재실행은 하지 마세요.
+진단 필드가 제한된 export 계약을 벗어나면 해당 필드를 출력하지 않고 invalid
+observations로 보고합니다. crash하거나 승인으로 바꾸지 않습니다.
