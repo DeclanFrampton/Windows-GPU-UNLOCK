@@ -26,6 +26,28 @@ class Tests(unittest.TestCase):
         r=m.review(text);self.assertEqual(r['active_by_driver_count'],1);self.assertEqual(r['discovered_by_driver_count'],0)
         self.assertEqual(m.review(data.synthetic_capture(no_edid=True,children=1))['discovered_by_driver_count'],0)
 
+    def test_same_version_peer_image_is_not_the_edid_edge_owner(self):
+        # Public metadata transcribed into synthetic records, not owner DIAG.
+        text=data.synthetic_capture(no_edid=False,children=1)
+        start=text.index('binding handle=0x9 ');end=text.index('handles status=',start)
+        binding=text[start:end].replace('version=0x1 ','version=0x10 ')
+        mouse=uuid.UUID(m.mp.MOUSE_FILE).bytes_le.hex()
+        owner='e1ff8a3d-0a1f-49c2-67d3-930bcaee7798'
+        peer='605ced2c-583b-4171-9311-aa6e146b1a4b'
+        owner_binding=binding.replace(mouse,uuid.UUID(owner).bytes_le.hex())
+        peer_binding=binding.replace('handle=0x9 image=0x9','handle=0x19 image=0x19').replace(mouse,uuid.UUID(peer).bytes_le.hex())
+        for records in (owner_binding+peer_binding,peer_binding+owner_binding):
+            with self.subTest(peer_first=records.startswith(peer_binding)):
+                capture=text[:start]+records+text[end:]
+                report=m.review(capture)
+                self.assertEqual(report['bindings'],[{'protocol':'discovered','version':16,
+                    'file_guid':owner,'reviewed_mouse_identity_match':False}])
+                self.assertEqual(report['discovered_by_driver_count'],1)
+                self.assertEqual(report['active_by_driver_count'],0)
+                self.assertFalse(report['no_edid_driver_authorized'])
+                self.assertFalse(report['driver_detach_authorized'])
+                with self.assertRaises(data.mp.Refused):data.analyze(capture)
+
     def test_incomplete_and_ambiguous_refuse(self):
         text=data.synthetic_capture(no_edid=False,children=1)
         for bad in (text.replace('capture-complete=1','capture-complete=0'),text.replace('binding handle=0x9 image=0x9','binding handle=0x99 image=0x9')):
