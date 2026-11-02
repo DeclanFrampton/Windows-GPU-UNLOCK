@@ -4,7 +4,7 @@ param([ValidateSet('Prepare','Collect','Cancel','Finish')][string]$Mode='Prepare
 $ErrorActionPreference='Stop'
 $stateDir=Join-Path $env:ProgramData 'GPUUnlock-MSI-DisplayTrace'
 $taskName='GPUUnlock-MSI-DisplayTrace'
-$sourceRevision='REPLACE_SOURCE_REVISION'
+$sourceRevision='4592cb99cbb1dac0fe531c042ac1574e6595cb75'
 function Assert-Admin {
  if(!([Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)){throw 'Open PowerShell as Administrator, then run this script. Nothing configured.'}
 }
