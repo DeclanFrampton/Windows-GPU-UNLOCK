@@ -1,4 +1,6 @@
 # Pure configuration/inventory mocks; no hardware or disk staging.
+[CmdletBinding()]
+param([switch]$Report)
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'prepare-graph.ps1')
 function Reject([scriptblock]$Action){$failed=$false;try{& $Action}catch{$failed=$true};if(!$failed){throw 'Expected refusal.'}}
@@ -23,6 +25,25 @@ foreach($file in Get-ChildItem (Join-Path $PSScriptRoot 'graph-configurations') 
 }
 Reject {Read-GraphConfiguration '../issue33'}
 Reject {Read-GraphConfiguration 'missing'}
+# Issue151: preserve both physical GPUs and refuse every unknown software
+# adapter independently, even when its marketing name/version are known.
+$case151=Read-GraphConfiguration 'issue151'
+$board151=[pscustomobject]@{Manufacturer='Gigabyte Technology Co., Ltd.';Product=$case151.Board}
+$bios151=[pscustomobject]@{SMBIOSBIOSVersion='F40'}
+$cpu151=[pscustomobject]@{Name='AMD Ryzen 7 5800X 8-Core Processor'}
+$pci151=@($case151.Adapters|ForEach-Object{[pscustomobject]@{PNPDeviceID=('PCI\VEN_'+$_.Vendor+'&DEV_'+$_.Device+'&SUBSYS_'+$_.Subsystem+'\PRIVATE')}})
+Assert-GraphMachine 'issue151' $board151 $bios151 $cpu151 $pci151
+foreach($name in @('Virtual Desktop Monitor','SudoMaker Virtual Display Adapter','Meta Virtual Monitor','vorpX Virtual Display')){
+ $unknown=[pscustomobject]@{Name=$name;PNPDeviceID=$null}
+ Reject {Assert-GraphMachine 'issue151' $board151 $bios151 $cpu151 @($pci151+$unknown)}
+}
+foreach($enumerator in @('ROOT','SWD')){
+ $unknown=[pscustomobject]@{PNPDeviceID=($enumerator+'\PRIVATE')}
+ Reject {Assert-GraphMachine 'issue151' $board151 $bios151 $cpu151 @($pci151+$unknown)}
+}
+Reject {Assert-GraphMachine 'issue151' $board151 $bios151 $cpu151 @($pci151[0])}
+$wrong151=@($pci151|ForEach-Object{[pscustomobject]@{PNPDeviceID=$_.PNPDeviceID.Replace('403F1458','48973842')}})
+Reject {Assert-GraphMachine 'issue151' $board151 $bios151 $cpu151 $wrong151}
 $temp=Join-Path ([IO.Path]::GetTempPath()) ('graph-config-'+[guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $temp|Out-Null
 $good=Get-Content (Join-Path $PSScriptRoot 'graph-configurations/issue33.json') -Raw
@@ -46,3 +67,12 @@ foreach($bad in @($known.Replace('"LCI"','"PCI"'),$known.Replace('"LuminonCore"'
 . (Join-Path $PSScriptRoot 'prepare-x99-graph.ps1')
 if((Read-GraphConfiguration 'issue33').Scope -cne 'graph-only'){throw 'Legacy entry point failed'}
 Write-Host 'PASS: all configuration fixtures, mismatched BIOS/adapters, unknown inventory, traversal, malformed schema/scope/IDs, legacy entry point.'
+if($Report){
+ $docs=[Environment]::GetFolderPath('MyDocuments');if(!$docs){throw 'Documents unavailable.'}
+ $folder=Join-Path $docs ('GPU-Unlock-Graph-Config-'+[guid]::NewGuid().ToString('N').Substring(0,8))
+ New-Item -ItemType Directory -Path $folder|Out-Null
+ $summary=[ordered]@{Test='graph-configuration-v2';Passed=$true;Case='151';FixtureOnly=$true;PhysicalAdapterPins=2;UnknownDisplayCasesRefused=6;MissingDisplayRefused=$true;Other2216SubsystemRefused=$true;HardwareInventoryRead=$false;HardwareUnlockTested=$false;VirtualAdapterAdmissionGranted=$false;WriteEligible=$false}
+ $path=Join-Path $folder 'graph-configuration.json'
+ $summary|ConvertTo-Json|Set-Content -LiteralPath $path -Encoding UTF8
+ Write-Host ('Return only '+$path+'. This tests fixtures, not your hardware. No EFI, settings changes or reboot.')
+}
