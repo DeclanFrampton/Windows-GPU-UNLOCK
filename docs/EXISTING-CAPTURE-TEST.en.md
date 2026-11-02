@@ -38,6 +38,13 @@ Do not collect a second capture to clear the capture-count warning. Automatic
 Windows/display return is an owner observation, not profile or unlock proof.
 Keep the currently enabled Secure Boot setting unchanged.
 
+Owner confirmation for #104 (2026-11-02): the reviewed attached report/result
+from pinned4158d038 show checker2, one capture, probe_envelope_refused,
+invalid_data, checker_exit2 and phase done; hardware/write flags remain false.
+The JSON attachments were independently parsed, not the private original DIAG.
+The owner reports Secure Boot still enabled and no additional EFI/settings
+changes. This confirms the requested reporting result; no repeat is needed.
+
 For #75, current generation supports aggregate console graphs; the old
 two-GOP refusal is not the current blanket rule. A synthetic root-UID1
 aggregate regression accepts the reported SS0/SS1 pairs without changing

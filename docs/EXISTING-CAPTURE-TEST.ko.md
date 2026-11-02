@@ -36,6 +36,12 @@ EFI를 다시 부팅하지 마세요.
 없애려고 두 번째 캡처를 수집하지 마세요. Windows/화면 자동 복귀는 사용자
 관찰이며 프로필 또는 unlock 증거가 아닙니다. 현재 활성화된 Secure Boot를 유지하세요.
 
+#104 사용자 확인(2026-11-02): pinned4158d038의 첨부 report/result는 checker2,
+캡처1개, probe_envelope_refused, invalid_data, checker_exit2, phase done,
+hardware/write false를 보여줍니다. JSON 첨부를 독립적으로 파싱했으며 비공개
+원본 DIAG를 검증한 것은 아닙니다. 사용자는 Secure Boot 활성화 및 추가 EFI/설정
+변경 없음을 보고했습니다. 요청한 보고 결과가 확인되었으므로 반복하지 않습니다.
+
 #75의 현재 생성기는 aggregate console graph를 지원합니다. 이전 two-GOP
 거부는 현재의 일괄 규칙이 아닙니다. 합성 root-UID1 aggregate 회귀는 보고된
 SS0/SS1 쌍에서 구조 pin을 유지하고 route drift를 거부합니다. 소스 동작이며
