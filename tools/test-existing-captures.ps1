@@ -6,7 +6,7 @@ if (!$Captures) { $Captures = Read-Host 'Enter the folder containing your existi
 $source = (Resolve-Path -LiteralPath $Captures).Path
 if (!(Test-Path -LiteralPath $source -PathType Container)) { throw 'Select a folder, not a file.' }
 $root = Split-Path -Parent $PSScriptRoot
-$pythonCommand = Get-Command $Python -CommandType Application -ErrorAction Stop
+$pythonCommand = @(Get-Command $Python -CommandType Application -ErrorAction Stop)[0]
 if($pythonCommand.Source -match '\\Microsoft\\WindowsApps\\python(?:3)?\.exe$') {
     throw 'Python resolves to a Windows app alias. Use -Python with your known-good python.exe path; do not change PATH.'
 }
