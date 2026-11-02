@@ -6,7 +6,7 @@ function Reject([scriptblock]$Action){$failed=$false;try{& $Action}catch{$failed
 $board=[pscustomobject]@{Manufacturer='Gigabyte Technology Co., Ltd.';Product='B650M DS3H'}
 $bios=[pscustomobject]@{SMBIOSBIOSVersion='F21'};$cpu=[pscustomobject]@{Name='AMD Ryzen 5 7600 6-Core Processor'}
 $gpu=[pscustomobject]@{PNPDeviceID='PCI\VEN_10DE&DEV_2504&SUBSYS_263019DA&REV_A1\PRIVATE'}
-$amd=[pscustomobject]@{PNPDeviceID='PCI\VEN_1002&DEV_164E&SUBSYS_00001458\PRIVATE'}
+$amd=[pscustomobject]@{PNPDeviceID='PCI\VEN_1002&DEV_164E&SUBSYS_D0001458\PRIVATE'}
 Assert-Zotac114 $board $bios $cpu @($gpu,$amd)
 Reject {Assert-Zotac114 $board $bios $cpu @($gpu)}
 $bios.SMBIOSBIOSVersion='other';Reject {Assert-Zotac114 $board $bios $cpu @($gpu,$amd)};$bios.SMBIOSBIOSVersion='F21'
