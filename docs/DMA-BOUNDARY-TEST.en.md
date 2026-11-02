@@ -24,3 +24,13 @@ content visibility, coherency, an AD103 root cause or a qualified recovery path.
 The original test artifacts are unavailable; do not reconstruct them by booting.
 Also, probe-parent.c prints parents0 when available0: that is unavailable data,
 not an observed zero-parent graph. No source admission or guard bypass follows.
+# Contributor reproduction, 2026-11-02
+
+[Issue54 comment6567031221](https://github.com/windows-GPU-UNLOCK/Windows-GPU-UNLOCK/issues/54#issuecomment-6567031221)
+reports the v1 CPU-only boundary test passed on Windows using clang/LLVM23.1.4:
+exact 32-bit end accepted, rounded crossing refused; hardware, EFI and write
+flags false. This is a contributor-reported result, not an independently
+observed run. The returned JSON contains no source hash. It does not verify
+the later v2 six-case retained-cleanup/re-entry extension, physical AD103
+behavior, an EFI root-port graph, unlock or recovery. No repeat is requested.
+
