@@ -34,3 +34,19 @@ true이면 중단하고 하드웨어 재시도는 하지 마세요.
 FWSECv2, 정확한 카드/보드/cold 핀, 소유권, 해제, 정리/Windows 복귀 및
 동일 조건 성능은 별도 검토 단계입니다. 다른 카드 레지스터를 옮기거나 Ampere
 프로필을 부팅해서 채우지 마세요.
+
+## 연구 v2 메타데이터 후속 작업
+
+같은 실행기는 합성 descriptor 바이트로 `fwsec-v2-metadata.h`도 검사합니다.
+secure/nonsecure IMEM 분리, 정확한 descriptor+이미지 경계 및 잘림/오버플로/
+범위/미검토 필드 거부79개를 검사합니다. 실패 출력은0입니다. 보고서는
+turing-layout-input-model-v2, MetadataRefusalCases=79입니다.
+이슈115에 전달한 v1 결과/핀은 별도 결과로 유지합니다.
+
+v2를 계속 거부하는 실제 vbios_610.c의 확장이 아닙니다. 고정 Linux
+descriptor 계약의 연구용 부분집합이며 generic-loader entry/DMEM base0,
+미검토 tail 필드0 및 secure 코드의 존재를 의도적으로 요구합니다. 실제
+펌웨어에는 다른 검토 계약이 필요할 수 있으며 실제 Turing 펌웨어로 가정을
+검증하지 않았습니다. 펌웨어 자산의 요구/복사/출력은 없습니다. 컨테이너 탐색,
+서명/인증 검증, 로더 통합, 이미지 패치 또는 실행은 구현하지 않았습니다.
+실제 v3 동작과 카드 가드는 그대로입니다.

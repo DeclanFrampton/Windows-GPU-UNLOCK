@@ -35,3 +35,20 @@ This advances an isolated arithmetic gap, not a Turing transaction. Firmware
 descriptor/loader/FWSECv2, exact card/board/cold pins, ownership, release,
 cleanup/Windows return and matched performance remain separate review gates.
 Do not adapt another card's registers or boot an Ampere profile to fill them.
+
+## Research v2 metadata follow-through
+
+The same runner now also tests `fwsec-v2-metadata.h` against synthetic descriptor
+bytes: accepted secure/nonsecure IMEM split, exact descriptor+image boundary,
+and79 truncation/overflow/geometry/unknown-field refusals. Failed outputs are
+zero. The report is turing-layout-input-model-v2 with MetadataRefusalCases=79.
+The v1 result/pin previously supplied to issue115 remains a separate result.
+
+This is not an extension of production vbios_610.c, which still refuses v2.
+It is a research metadata subset of the pinned Linux descriptor contract:
+zero generic-loader entry/DMEM base, zero unreviewed tail fields and nonzero
+secure code are deliberately required. Real firmware may require a different
+reviewed contract; no captured Turing firmware qualifies these assumptions.
+No firmware assets are needed, copied or emitted. No container walking,
+signature/authentication validation, loader integration, image patching or
+execution is implemented. Production v3 behavior and card guards are unchanged.
