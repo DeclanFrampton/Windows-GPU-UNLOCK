@@ -12,6 +12,7 @@
   "live_transaction_passed": true,
   "efi_receipt_rearm_observed": true,
   "display_return_qualified": false,
+  "rearm_blocked_reason": "DisplayPort required manual power-off recovery on receipt-enabled attempt",
   "performance_observed": true,
   "automatic_windows_return_contributor_confirmed": true,
   "same_boot_performance_contributor_confirmed": true,

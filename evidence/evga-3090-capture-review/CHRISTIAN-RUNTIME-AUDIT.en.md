@@ -726,3 +726,29 @@ reset, CUDA, USB write, install or reboot. WindowsPowerShell5.1 mock success and
 query-failure ZIP checks passed; replay of the actual returned receipts passed
 EFI/display separation. A local Windows OS-query run also completed with zero
 query limitations and no reset/rearm; it is not Christian's display evidence.
+
+## 2026-11-02 manual power-off recovery confirmed
+
+Display report message1566608124834611300 says picture_returned=manual and
+recovery_action=poweroff. Current Windows boot is00:12:44.500Z. After recovery,
+NVIDIA RTX3090 driver32.0.15.9649 and monitor show OK/error0, active DisplayPort
+technology10,1920x1080 at165Hz. These describe the recovery boot, not the failed
+display-return state. Selected events were five Kernel-PnP219 warnings for
+ROOT/PARAGONBLOCKDEVICE/WUDFRd, not evidence identifying an NVIDIA fault. No
+cause is established by the absence of an NVIDIA event in this selected report.
+The receipt-enabled rearm remains unqualified and no new armed retry is sent.
+
+Local source comparison found no changes between first-success core3ea0a43 and
+receipt build8d914d8 in msi-transaction.c,port.c,compat.c or vendor code. The new
+receipt/handoff path and per-boot state differ; unchanged hardware-core source
+is not proof of identical live execution or a diagnosis of the display failure.
+
+Fixed a PowerShell5.1 reporting bug: Get-Content returned a provider-decorated
+string for attempt_id, expanding filesystem/provider metadata in JSON. ReadAllText
+now produces a plain scalar ID. Reportv2 also reads recent Kernel-Boot/Power/
+General/EventLog records and boot-type event data, plus names/sizes/timestamps
+of recent LiveKernelReports dumps only (no dump content). It performs no GPU
+workload, driver reset, USB mutation or reboot. Existing manual/poweroff answers
+can be supplied as arguments, avoiding repeated questions. PS5.1 scalar-ID and
+query-failure fixtures passed; local OS queries completed with zero limitations.
+Further Windows boot evidence is needed before a justified EFI fix/rearm.

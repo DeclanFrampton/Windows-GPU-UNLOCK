@@ -670,3 +670,25 @@ report-christian-display.ps1은 화면 복귀 시점/복구 행동, OS 디스플
 리셋/CUDA/USB 쓰기/설치/재부팅은 없다. WindowsPowerShell5.1 모의 성공/쿼리 실패
 ZIP과 실제 반환 영수증 재생을 통한 EFI/화면 분리를 검증했다. 로컬 Windows OS 쿼리도
 제한0 및 리셋/재무장 없이 완료했지만 Christian의 디스플레이 증거는 아니다.
+
+## 2026-11-02 수동 전원 차단 복구 확인
+
+디스플레이 보고1566608124834611300은 picture_returned=manual,
+recovery_action=poweroff를 기록했다. 현재 Windows 부팅은00:12:44.500Z이다.
+복구 후 NVIDIA RTX3090 드라이버32.0.15.9649 및 모니터는 OK/error0, 활성 DP기술10,
+1920x1080/165Hz이다. 이는 복구 부팅 상태이며 화면 복귀 실패 당시 상태가 아니다.
+선택 이벤트는 ROOT/PARAGONBLOCKDEVICE/WUDFRd에 대한 Kernel-PnP219 경고5개이며
+NVIDIA 원인을 지목하는 증거가 아니다. 선택 보고에 NVIDIA 이벤트가 없다고
+원인이 없음을 입증하지 않는다. 영수증 재무장은 미검증이며 새 무장 재시도는 보내지 않는다.
+
+첫 성공 코어3ea0a43과 영수증 빌드8d914d8 사이 msi-transaction.c/port.c/compat.c/
+vendor 소스 변경은 없다. 영수증/인계 경로와 부팅별 상태는 다르며 하드웨어 코어
+소스가 같아도 실제 실행 동일성 또는 화면 실패 원인을 입증하지 않는다.
+
+PowerShell5.1의 Get-Content 문자열에 공급자 속성이 붙어 attempt_id JSON이
+파일시스템/공급자 메타데이터로 확장되는 버그를 수정했다. ReadAllText로 일반 스칼라
+ID를 사용한다. v2는 최근 Kernel-Boot/Power/General/EventLog 기록 및 부팅 유형
+이벤트 데이터, 최근 LiveKernelReports 덤프의 이름/크기/시간만 수집한다(내용 제외).
+GPU 부하/드라이버 리셋/USB 변경/재부팅은 없다. 이미 알려진 manual/poweroff 답은
+인수로 주어 반복 질문을 피한다. PS5.1 스칼라ID/쿼리 실패 검증 및 로컬 OS 쿼리
+제한0을 확인했다. 근거 있는 EFI 수정/재무장 전에 Windows 부팅 증거가 더 필요하다.
