@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<WindowsPerformanceRecorder Version="1.0">
+  <Profiles>
+    <EventCollector Id="MsiDisplayCollector" Name="GPUUnlock MSI Display Diagnostic">
+      <BufferSize Value="256" />
+      <Buffers Value="128" />
+    </EventCollector>
+    <!-- DxgKrnl keyword mask from Windows' built-in GPU.Light profile; no stack or kernel system collector. -->
+    <EventProvider Id="DxgKrnl" Name="802ec45a-1e99-4b83-9920-87c98277ba9d" Level="5" NonPagedMemory="true">
+      <Keywords><Keyword Value="0x277" /></Keywords>
+      <CaptureStateOnStart Timeout="10"><Keyword Value="0x277" /></CaptureStateOnStart>
+    </EventProvider>
+    <Profile Id="MsiDisplayBoot.Light.Memory" Name="MsiDisplayBoot" Description="Bounded display initialization diagnostic" LoggingMode="Memory" DetailLevel="Light">
+      <Collectors><EventCollectorId Value="MsiDisplayCollector"><EventProviders><EventProviderId Value="DxgKrnl" /></EventProviders></EventCollectorId></Collectors>
+    </Profile>
+  </Profiles>
+</WindowsPerformanceRecorder>
