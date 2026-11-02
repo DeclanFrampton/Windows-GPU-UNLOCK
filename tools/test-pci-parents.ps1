@@ -1,7 +1,7 @@
 # Read Windows PnP parent associations; no PCI config, MMIO or device changes.
 [CmdletBinding()]
-param([switch]$SelfTest,[ValidateSet('108','17','167')][string]$Case='108')
-$ErrorActionPreference='Stop'
+param([Alias('SelfTest')][switch]$PciParentsSelfTest,[Alias('Case')][ValidateSet('108','17','167')][string]$PciParentsCase='108')
+if($MyInvocation.InvocationName -ne '.'){$ErrorActionPreference='Stop'}
 
 function Get-PciParentTargets($Devices,[ValidateSet('108','17','167')][string]$CaseId){
  if($Devices.Count -gt 16){throw 'Too many display adapters.'}
@@ -106,7 +106,43 @@ function Get-PciParentReport($Devices,[string]$CaseId,[scriptblock]$ReadParent){
  return $report
 }
 
-if($SelfTest){
+function Get-DisplayParentReport($Devices,[scriptblock]$ReadParent,$Context){
+ # Generic observation only: keep every row, including duplicate card models.
+ # The exact-case selectors above remain the admission-independent CLI contract.
+ if($null -eq $Context){$Context=New-PciParentContext}
+ $all=@($Devices);$limit=64
+ $report=[ordered]@{
+  Test='windows-display-parent-v1';RunId=$Context.RunId;ReadStatus='partial'
+  ExpectedChains=$all.Count;CompletedChains=0;Targets=@();Truncated=($all.Count -gt $limit)
+  DuplicateIdentityCount=0;RawIdentitiesExported=$false;PrebootTopologyVerified=$false
+  PhysicalDisplayRouteVerified=$false;VirtualAdapterAdmissionGranted=$false
+  HardwareUnlockTested=$false;WriteEligible=$false
+ }
+ $seen=@{};$index=0
+ for($index=0;$index -lt [Math]::Min($all.Count,$limit);$index++){
+  $device=$all[$index]
+  $identity=$null
+  if($device.InstanceId -is [string]){$identity=$device.InstanceId}
+  elseif($device.PNPDeviceID -is [string]){$identity=$device.PNPDeviceID}
+  $valid=$identity -and $identity.Length -le 2048 -and $identity.Trim() -and $identity -notmatch '[\x00-\x1f\x7f]'
+  $node=if($valid){Get-PciParentNodeId $Context $identity}else{[guid]::NewGuid().ToString('N')}
+  $duplicate=$null
+  if($valid){
+   if($seen.ContainsKey($identity)){$duplicate=$seen[$identity];$report.DuplicateIdentityCount++}
+   else{$seen[$identity]=$index}
+  }
+  $chain=Get-PciParentChain $identity $ReadParent $Context
+  $chain['AdapterIndex']=$index;$chain['AdapterNodeId']=$node;$chain['DuplicateOfIndex']=$duplicate
+  $report.Targets+=,$chain
+ }
+ $report.CompletedChains=@($report.Targets | Where-Object {$_.State -ceq 'complete'}).Count
+ if($all.Count -gt 0 -and !$report.Truncated -and $report.CompletedChains -eq $all.Count){$report.ReadStatus='complete'}
+ return $report
+}
+
+# Imports expose only functions, never PnP queries, self-tests or output folders.
+if($MyInvocation.InvocationName -eq '.'){return}
+if($PciParentsSelfTest){
  $checks=0
  function Assert-ParentTest([bool]$Condition,[string]$Name){
   if(!$Condition){throw ('Parent-chain regression: '+$Name)}
@@ -207,10 +243,10 @@ if($SelfTest){
 $devices=$null
 try{$devices=@(Get-PnpDevice -PresentOnly -Class Display -ErrorAction Stop)}catch{}
 if($null -eq $devices){
- $report=New-PciParentReport $Case (New-PciParentContext)
+ $report=New-PciParentReport $PciParentsCase (New-PciParentContext)
  $report.FailureReason='display-inventory-unavailable'
 }else{
- $report=Get-PciParentReport $devices $Case {
+ $report=Get-PciParentReport $devices $PciParentsCase {
   param($id)
   $p=Get-PnpDeviceProperty -InstanceId $id -KeyName DEVPKEY_Device_Parent -ErrorAction Stop
   if($p.Type -cne 'String' -or $p.Data -isnot [string]){throw 'Unknown parent property.'}

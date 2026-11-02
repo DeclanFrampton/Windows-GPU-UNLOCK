@@ -5,8 +5,8 @@ function New-PinnedGraphFromTemplate([string]$Repo,[guid]$WindowsGuid,[string]$O
  if($WindowsGuid -eq [guid]::Empty -or $WindowsGuid -eq $sentinel){throw 'Invalid Windows ESP pin; do not stage.'}
  $base=Join-Path $Repo 'research/profile/graph-template'
  $mp=Join-Path $base 'template.json';$tp=Join-Path $base 'graph-only.template'
- if((Get-GraphHash $mp) -cne '26f24097a9f73667f2101ec7ac5d72cb4baa417808097e3e24c509fe8fbca9a4' -or
-    (Get-GraphHash $tp) -cne '7070d624c00cb4d194ae03626f336ae0b02b279716ffb42f6b53cf5609c5ee60'){throw 'Packaged graph template identity changed; stop.'}
+ if((Get-GraphHash $mp) -cne '9d0d63344f62e82776490ef6f731fd0c875b7df3c27cae3b4a6e756e9856a070' -or
+    (Get-GraphHash $tp) -cne 'e7c31ff71ca3834791063d46fcbd5161da5fd6c2b603a2e8fc40d94c083466cb'){throw 'Packaged graph template identity changed; stop.'}
  $m=Get-Content -LiteralPath $mp -Raw|ConvertFrom-Json
  foreach($row in $m.Sources){
   if($row.Path -cnotmatch '^(internal-boot|deps/edk2/MdePkg/Include)/[A-Za-z0-9_./-]+$' -or $row.Path.Contains('..')){throw 'Invalid source pin.'}

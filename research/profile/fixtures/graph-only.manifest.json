@@ -20,7 +20,7 @@
     },
     {
       "Path": "internal-boot/boot/diagnostic.c",
-      "Sha256": "b23f1c082c8fe0a0b1b567f15a8c8fd45b2017e9c31b98a878dd27121ee92cac"
+      "Sha256": "6f608f093c5edf44644c478379e61f6e38e54ece91eb7deb9ba535b98d3a5671"
     },
     {
       "Path": "internal-boot/efi_runtime.c",
@@ -44,7 +44,7 @@
     },
     {
       "Path": "internal-boot/unlock/machine-profile.h",
-      "Sha256": "928e9914ee153f4e8e217bf2b39ee41d8b656af8de3e6b3d3238266080f261ce"
+      "Sha256": "36c037ddb9d6c63c785b8356aa2422e41fea04ff6c578035c4663a30700a8973"
     },
     {
       "Path": "internal-boot/unlock/gpu-family.h",
@@ -55,5 +55,5 @@
       "Sha256": "6384231c3bf102d1b970714934baae459fe2d1d89d63e5550243aee77173370a"
     }
   ],
-  "EfiSha256": "3d476bb7498d28c8f4d6e5a041d8da4b60b4df212e9edc43c2465668cd28f6f6"
+  "EfiSha256": "487f558711204faeb7fd9af599b1fcd31b98580529f6aee970f3220c91f76ab0"
 }

@@ -152,9 +152,9 @@ static VOID Details(CAPTURE *c,EFI_HANDLE h,EFI_GUID *g) {
       Field(c,"gop pixel-format=0x",gp->Mode->Info->PixelFormat);
       Field(c," info-bytes=0x",gp->Mode->SizeOfInfo);End(c);
     } else {
-#if GU_CONSOLE_AGGREGATE || defined(GU_PROBE_GENERIC)
+#if GU_CONSOLE_AGGREGATE || defined(GU_PROBE_GENERIC) || defined(GU_GRAPH_ONLY)
       /* Aggregate/pathless GOPs legitimately lack Mode->Info on this firmware;
-         record it as an observation, not a capture failure (generic probe: topology unknown). */
+         record the absence without assuming a board's topology in generic diagnostics. */
       Field(c,"gop info-bytes=0x",gp->Mode->SizeOfInfo);End(c);
 #else
       Problem(c,"gop-info",EFI_NOT_READY);

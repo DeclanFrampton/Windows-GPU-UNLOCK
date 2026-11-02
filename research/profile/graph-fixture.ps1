@@ -1,6 +1,6 @@
 # Fixed non-boot test data. This module only reads bytes; it never executes EFI.
 function Assert-GraphFixture([byte[]]$Bytes,$Manifest,[string]$Repo){
- $expected='3d476bb7498d28c8f4d6e5a041d8da4b60b4df212e9edc43c2465668cd28f6f6'
+ $expected='487f558711204faeb7fd9af599b1fcd31b98580529f6aee970f3220c91f76ab0'
  $h=[Security.Cryptography.SHA256]::Create()
  try{$actual=([BitConverter]::ToString($h.ComputeHash($Bytes))).Replace('-','').ToLowerInvariant()}finally{$h.Dispose()}
  if($actual -cne $expected -or $Manifest.EfiSha256 -cne $expected -or

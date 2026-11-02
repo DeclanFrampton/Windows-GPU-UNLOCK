@@ -1,8 +1,9 @@
 # Windows-only setup diagnostics. No device, boot or firmware writes.
 [CmdletBinding()]
-param([switch]$SelfTest,[ValidatePattern('^(?:[0-9A-Fa-f]{4})?$')][string]$ExpectedDevice,
-      [ValidatePattern('^(?:[0-9A-Fa-f]{8})?$')][string]$ExpectedSubsystem)
-$ErrorActionPreference='Stop'
+param([Alias('SelfTest')][switch]$PreflightSelfTest,
+      [Alias('ExpectedDevice')][ValidatePattern('^(?:[0-9A-Fa-f]{4})?$')][string]$PreflightExpectedDevice,
+      [Alias('ExpectedSubsystem')][ValidatePattern('^(?:[0-9A-Fa-f]{8})?$')][string]$PreflightExpectedSubsystem)
+if($MyInvocation.InvocationName -ne '.'){$ErrorActionPreference='Stop'}
 . (Join-Path $PSScriptRoot '../research/profile/encryption-state.ps1')
 function Get-PreflightEncryption([scriptblock]$Query) {
  $unknown=[ordered]@{ReadStatus='unknown';ProtectionState='unknown';ConversionState='unknown';EncryptionPercentage=$null;FullyDecryptedObserved=$false}
@@ -12,7 +13,7 @@ function Get-PreflightEncryption([scriptblock]$Query) {
      $state.ProtectionState -cnotin @('off','on','unknown') -or
      $state.ConversionState -cnotin @('fully-decrypted','fully-encrypted','encrypting','decrypting','encryption-paused','decryption-paused','unknown')){return $unknown}
   if($state.ReadStatus -cne 'observed'){return $unknown}
-  if($state.EncryptionPercentage -isnot [int] -or $state.EncryptionPercentage -lt 0 -or $state.EncryptionPercentage -gt 100 -or $state.FullyDecryptedObserved -isnot [bool]){return $unknown}
+  if(($state.EncryptionPercentage -isnot [int] -and $state.EncryptionPercentage -isnot [long]) -or $state.EncryptionPercentage -lt 0 -or $state.EncryptionPercentage -gt 100 -or $state.FullyDecryptedObserved -isnot [bool]){return $unknown}
   # Only bounded status fields: never copy provider objects/keys/identifiers.
   return [ordered]@{ReadStatus='observed';ProtectionState=$state.ProtectionState;ConversionState=$state.ConversionState;EncryptionPercentage=$state.EncryptionPercentage;FullyDecryptedObserved=($state.ProtectionState -ceq 'off' -and $state.ConversionState -ceq 'fully-decrypted' -and $state.EncryptionPercentage -eq 0 -and $state.FullyDecryptedObserved)}
  }catch{return $unknown}
@@ -51,7 +52,9 @@ function Get-PreflightReport([bool]$Elevated,[scriptblock]$QuerySecureBoot,$Vide
  return [ordered]@{SchemaVersion=3;Target=$target;Elevated=$Elevated;SecureBoot=$secure;SystemVolumeEncryption=(Get-PreflightEncryption $QueryEncryption);DisplayAdapters=$adapters;
    HardwareTested=$false;WriteEligible=$false;Next='Keep EFI preparation stopped until reviewed. No settings changes or boot.'}
 }
-if($SelfTest){
+# Importing the helpers never queries Windows or creates a report directory.
+if($MyInvocation.InvocationName -eq '.'){return}
+if($PreflightSelfTest){
  $video=@([pscustomobject]@{PNPDeviceID='LCI\PRIVATE'})
  $drivers=@([pscustomobject]@{DeviceID='LCI\PRIVATE';DriverProviderName='Example Display';Manufacturer='Example';DriverVersion='1.2.3';InfName='oem1.inf';IsSigned=$true},[pscustomobject]@{DeviceID='OTHER\PRIVATE';DriverProviderName='WRONG'})
  foreach($enabled in @($true,$false)){
@@ -88,10 +91,10 @@ if($SelfTest){
  if(!$r.SystemVolumeEncryption.FullyDecryptedObserved -or $r.WriteEligible){throw 'Decrypted observation/admission regression'}
  Write-Host 'PASS: enabled/disabled/unknown states, driver association, redaction, non-boolean refusal.';exit
 }
-if($ExpectedSubsystem -and !$ExpectedDevice){throw '-ExpectedSubsystem requires -ExpectedDevice.'}
+if($PreflightExpectedSubsystem -and !$PreflightExpectedDevice){throw '-ExpectedSubsystem requires -ExpectedDevice.'}
 $identity=[Security.Principal.WindowsIdentity]::GetCurrent()
 $elevated=([Security.Principal.WindowsPrincipal]$identity).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-$report=Get-PreflightReport $elevated {Confirm-SecureBootUEFI -ErrorAction Stop} @(Get-CimInstance Win32_VideoController) @(Get-CimInstance Win32_PnPSignedDriver -Filter "DeviceClass='DISPLAY'") $ExpectedDevice $ExpectedSubsystem {Read-EncryptionStatus}
+$report=Get-PreflightReport $elevated {Confirm-SecureBootUEFI -ErrorAction Stop} @(Get-CimInstance Win32_VideoController) @(Get-CimInstance Win32_PnPSignedDriver -Filter "DeviceClass='DISPLAY'") $PreflightExpectedDevice $PreflightExpectedSubsystem {Read-EncryptionStatus}
 $docs=[Environment]::GetFolderPath('MyDocuments');if(!$docs){throw 'Documents folder unavailable.'}
 $out=Join-Path $docs ('GPU-Unlock-Preflight-'+[guid]::NewGuid().ToString('N').Substring(0,8))
 New-Item -ItemType Directory -Path $out|Out-Null

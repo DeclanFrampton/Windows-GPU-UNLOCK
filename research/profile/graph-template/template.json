@@ -1,6 +1,6 @@
 {
   "Mode": "graph-only-guid-template",
-  "TemplateSha256": "7070d624c00cb4d194ae03626f336ae0b02b279716ffb42f6b53cf5609c5ee60",
+  "TemplateSha256": "e7c31ff71ca3834791063d46fcbd5161da5fd6c2b603a2e8fc40d94c083466cb",
   "GuidOffset": 10752,
   "Sentinel": "a2b4c6d8-1357-49ab-bcde-102030405060",
   "Sources": [
@@ -18,7 +18,7 @@
     },
     {
       "Path": "internal-boot/boot/diagnostic.c",
-      "Sha256": "b23f1c082c8fe0a0b1b567f15a8c8fd45b2017e9c31b98a878dd27121ee92cac"
+      "Sha256": "6f608f093c5edf44644c478379e61f6e38e54ece91eb7deb9ba535b98d3a5671"
     },
     {
       "Path": "internal-boot/boot/diagnostic.h",
@@ -42,7 +42,7 @@
     },
     {
       "Path": "internal-boot/boot/full-release.c",
-      "Sha256": "07c0911c51d5463151dddb9653f263f940701629a840549041c83dd1ae5701c0"
+      "Sha256": "3367ff10c39250903491461760702894280cd8bfd38fb2e2713f327a198c6129"
     },
     {
       "Path": "internal-boot/boot/full-release.h",
@@ -114,11 +114,11 @@
     },
     {
       "Path": "internal-boot/boot/test_diagnostic.c",
-      "Sha256": "30b9d2143a40ee43e6f1975524be79a2211ad3e534eb82528f89f63adb572ac7"
+      "Sha256": "1f0d68150f4700f5b9a42ea8c5aa94379b1dac99888fb6fb8076350c9fa35bd6"
     },
     {
       "Path": "internal-boot/boot/test_full.c",
-      "Sha256": "feb75483de6131cc8df8a7b0dfea421e6601417fb748b8541198a8f166e3c16b"
+      "Sha256": "14901e9b75872a36e296644f14d345ff8c417ff9507aeba410ad19b97ba4c716"
     },
     {
       "Path": "internal-boot/boot/test_full_flow.c",
@@ -130,7 +130,7 @@
     },
     {
       "Path": "internal-boot/boot/test_headless_full.c",
-      "Sha256": "a37e356d3d1fdf4dd18d9ea5668dfc15547eb0ef857d69698cf29c6b426c4736"
+      "Sha256": "ae9d93d2f143d82d90232d0698e364ccfcab56b41615561785cb4d962fc20aa7"
     },
     {
       "Path": "internal-boot/boot/test_probe.c",
@@ -270,7 +270,7 @@
     },
     {
       "Path": "internal-boot/unlock/machine-profile.h",
-      "Sha256": "928e9914ee153f4e8e217bf2b39ee41d8b656af8de3e6b3d3238266080f261ce"
+      "Sha256": "36c037ddb9d6c63c785b8356aa2422e41fea04ff6c578035c4663a30700a8973"
     },
     {
       "Path": "internal-boot/unlock/ownership.c",

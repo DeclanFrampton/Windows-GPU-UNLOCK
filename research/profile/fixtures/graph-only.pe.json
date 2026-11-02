@@ -1,7 +1,7 @@
 {
   "path": "GRAPH-ONLY.EFI",
   "bytes": 14848,
-  "sha256": "3d476bb7498d28c8f4d6e5a041d8da4b60b4df212e9edc43c2465668cd28f6f6",
+  "sha256": "487f558711204faeb7fd9af599b1fcd31b98580529f6aee970f3220c91f76ab0",
   "machine": "AMD64",
   "subsystem": 10,
   "entry": "efi_main",
