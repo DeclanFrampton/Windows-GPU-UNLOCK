@@ -46,7 +46,7 @@ at the checked locations and is not claimed as tested.
 | Generic graph handlers | 110 assertions; capabilities, source/inventory/ESP/media drift, cancellation, one attempt, changed drive letter and verified collection |
 | Resumable session | 37 assertions; cache integrity, partial results, invalid inputs, atomic state replacement, concurrent-session exclusion and interrupted preparation |
 | Bounded native subprocess runner | 40 actual-child assertions; Windows argument quoting, Unicode, simultaneous streams, limits, timeout, cancellation and unrelated-process preservation |
-| Tools Python suite | 38 tests, including 24 unified analyzer fixtures |
+| Tools Python suite | 41 tests, including 27 unified analyzer fixtures |
 | Profile Python suite | 143 tests, including saved command/GOP readers and current admission-envelope tests |
 | Diagnostic C runner | Default 63 and graph-only 68 assertions; existing probe fixtures and negative compilation guards also passed |
 | Three-child LOCAL native replay | 16 combinations across EDID mode, PCI command, bus and memory variants |
@@ -57,11 +57,20 @@ at the checked locations and is not claimed as tested.
 | Packaged graph template | Personalised bytes matched an independently compiled sample-GUID image |
 | Nonboot fixture and source pins | Regenerated, pin/refusal tests passed; source ordering identical under en-US, ja-JP and tr-TR locales |
 | Actual batch launcher | Windows observation and offline first-run/resume passed; spaces and Korean characters in paths preserved |
+| Retained contributor inputs | Issue166 legacy wrapper and issue169's three refused captures reviewed with original byte hashes preserved; parser-source changes invalidated prior cache keys |
 
 The native release replay explicitly uses synthetic buffers and mocked EFI
 services. Its summary records `synthetic_only: true` and `hardware_access:
 false`. The ordinary diagnostic C runner now includes the graph-only variant,
 so its positive GOP regression is part of the standard invocation.
+
+The retained issue166 log uses lowercase transaction and FINAL markers rather
+than the newer command/GOPDIAG format. Its bounded legacy reader now reports
+transaction, containment, SetMode and final-handoff observations separately.
+It does not infer recovery, unlock or a cached-attribute cause. Unrecognised
+text produces an explicit partial observation. Issue114's raw captures were
+not present in the retained audit folder; no new raw-capture result is claimed
+for that issue.
 
 ## Consistency defects resolved during integration
 

@@ -46,7 +46,7 @@ authorised analysis machine. Do not change security settings for a diagnostic.
 | Unknown, mixed or duplicate adapters | All observed adapters retained; opaque per-run node IDs preserve shared ancestry without publishing raw Windows instance IDs |
 | Saved diagnostic logs | File validation and hashes, graph observations and the existing strict LOCAL-profile assessment |
 | Saved images and EDID records | Relevant NVIDIA code-identity and display-child checks selected automatically |
-| Saved wrapper/transaction or GOP text logs | Recognised command-boundary and GOP observations reviewed without executing captured code |
+| Saved wrapper/transaction or GOP text logs | Recognised command-boundary, GOP and legacy transaction/handoff observations reviewed without executing captured code |
 | Partial, refused or unsupported captures | Available observations and specific reasons preserved; no automatic request for another EFI boot |
 | Unchanged previously reviewed files | Fresh byte/source checks followed by reuse of the verified result |
 | A previously prepared graph session | Receipt/media/source checks and collection of existing logs, without staging again |
@@ -148,6 +148,9 @@ This is an offline analysis route, not a workaround for a Windows policy block.
 availability and one next action. A LOCAL-checker `candidate` is a
 source/profile assessment, not unlock authorisation. Diagnostic results keep
 `hardware_tested` and `write_eligible` false.
+
+A saved-file status of `reviewed` means the analysis finished; individual
+stages can still report partial, refused or out-of-scope evidence.
 
 This launcher never calls profile generation, deep GPU probing, firmware asset
 preparation or an unlock stage. Specialised handlers and named-machine

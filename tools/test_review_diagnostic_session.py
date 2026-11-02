@@ -69,6 +69,16 @@ def gop_record(phase="phase", *, index=0, base="0", size="0"):
             "fb_base=%s fb_size=%s hres=1920 vres=1080\n" % (phase, index, base, size))
 
 
+def legacy_wrapper_log():
+    return ("GOP[0] handle=0xdeadbeef mode=0 max=14 info_bytes=36 framebuffer=0x7000000000 bytes=35389440\n"
+            "restore PCI command: actual=0x2 original=0x2 mask=0x6\n"
+            "BME containment: attribute_status=0 hardware_status=0 command=0x2 cached=0x200 pending=0\n"
+            "transaction result=0 containment=0 started=1 quiesced=1 fault=0 retained=0 maps=0 FLR=1\n"
+            "GOP SetMode status=0\n"
+            "BME containment: attribute_status=0 hardware_status=0 command=0x3 cached=0x200 pending=0\n"
+            "FINAL status=0x8000000000000007 stage=post-unlock-handoff attempted=1 driver_release=1 clean=0 containment=0 pci_available=1\n")
+
+
 class SessionReviewTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="private-session-")
@@ -450,6 +460,107 @@ class SessionReviewTests(unittest.TestCase):
                          {"command_records_partial_or_invalid", "gop_records_partial_or_invalid",
                           "command_markers_not_fully_reviewed", "gop_markers_not_fully_reviewed"})
         self.assertNotIn("PRIVATE-MALFORMED", json.dumps(result))
+        self.assert_scope(result)
+
+    def test_legacy_wrapper_preserves_reported_final_failure_without_recovery_or_cache_inference(self):
+        raw = b"\xef\xbb\xbf" + legacy_wrapper_log().replace("\n", "\r\n").encode("ascii")
+        path = self.write("PRIVATE-wrapper.TXT", raw)
+        result = session.review(self.root)
+        self.assertEqual(result["Status"], "reviewed", result)
+        self.assertEqual(len(result["Stages"]), 1)
+        stage = result["Stages"][0]
+        self.assertEqual((stage["Name"], stage["Status"]),
+                         ("legacy_wrapper", "partial"))
+        self.assertEqual(stage["TransactionRecords"][0]["Result"], 0)
+        self.assertEqual(stage["TransactionRecords"][0]["ContainmentStatus"], "0x0000000000000000")
+        self.assertEqual(stage["SetModeRecords"][0]["Status"], "0x0000000000000000")
+        final = stage["FinalRecords"][0]
+        self.assertEqual(final["Status"], "0x8000000000000007")
+        self.assertEqual(final["Phase"], "post-unlock-handoff")
+        self.assertFalse(final["CleanReported"])
+        self.assertEqual([row["ReportedCommand"] for row in stage["ContainmentRecords"]], [2, 3])
+        self.assertEqual([row["LoggedCachedAttributes"] for row in stage["ContainmentRecords"]],
+                         ["0x0000000000000200", "0x0000000000000200"])
+        self.assertTrue(all(not row["Pending"] for row in stage["ContainmentRecords"]))
+        for key in ("WrapperEntryRestorationVerified", "CacheConsistencyVerified",
+                    "WindowsRecoveryVerified", "UnlockVerified"):
+            self.assertFalse(stage[key])
+        self.assertEqual(result["Observations"][0]["Completion"], "partial")
+        self.assertEqual(path.read_bytes(), raw)
+        self.assertEqual(result["InputFiles"][0]["Sha256"], hashlib.sha256(raw).hexdigest())
+        for private in ("PRIVATE-wrapper", "0xdeadbeef", "0x7000000000"):
+            self.assertNotIn(private, json.dumps(result))
+        self.assert_scope(result)
+
+    def test_legacy_malformed_ambiguous_and_excess_records_stay_bounded_partial(self):
+        private = "PRIVATE-12345678-1234-1234-1234-123456789abc"
+        text = legacy_wrapper_log().replace("started=1", "started=2")
+        text += "transaction result=PRIVATE-MALFORMED\n"
+        text += "BME containment: attribute_status=0 hardware_status=0 command=0x10000 cached=0x200 pending=0\n"
+        text += ("FINAL status=0 stage=" + private +
+                 " attempted=1 driver_release=1 clean=1 containment=0 pci_available=1\n")
+        text += "GOP SetMode status=0\n" * 40
+        self.write("PRIVATE-wrapper.LOG", text.encode("ascii"))
+        result = session.review(self.root)
+        self.assertEqual(result["Status"], "reviewed", result)
+        stage = result["Stages"][0]
+        self.assertEqual(stage["Status"], "partial")
+        self.assertEqual(stage["MalformedRecordCount"], 3)
+        self.assertEqual(stage["TransactionRecords"], [])
+        self.assertEqual(len(stage["FinalRecords"]), 2)  # no last-record-wins success
+        self.assertEqual(stage["FinalRecords"][1]["Phase"], "unclassified_phase")
+        self.assertEqual(stage["FinalRecords"][1]["PhaseSha256"],
+                         hashlib.sha256(private.encode("ascii")).hexdigest())
+        self.assertEqual(len(stage["SetModeRecords"]), 32)
+        self.assertEqual(stage["TruncatedRecordCount"], 9)
+        self.assertNotIn(private, json.dumps(result))
+        self.assertNotIn("PRIVATE-MALFORMED", json.dumps(result))
+        self.assertFalse(stage["UnlockVerified"])
+        self.assertFalse(stage["WindowsRecoveryVerified"])
+        self.assert_scope(result)
+
+        # Reject excessive numeric text before int conversion, independently of
+        # Python's version-specific global decimal-conversion limit.
+        oversized = ("transaction result=" + "9" * 60000 +
+                     " containment=0 started=1 quiesced=1 fault=0 retained=0 maps=0 FLR=1\n")
+        with patch.object(session, "int", side_effect=AssertionError("numeric conversion must not run"),
+                          create=True):
+            bounded = session._legacy_wrapper_values(oversized)
+        self.assertEqual(bounded["MalformedRecordCount"], 1)
+        self.assertEqual(bounded["TransactionRecords"], [])
+
+        # The C producer prints EFI containment status and cached attributes as
+        # UINT64 hex values; JSON must preserve all bits across Windows readers.
+        nonzero = legacy_wrapper_log().replace("containment=0", "containment=0x8000000000000007")
+        nonzero = nonzero.replace("cached=0x200", "cached=0x8000000000000200")
+        reported = session._legacy_wrapper_values(nonzero)
+        self.assertEqual(reported["MalformedRecordCount"], 0)
+        self.assertEqual(reported["TransactionRecords"][0]["ContainmentStatus"], "0x8000000000000007")
+        self.assertEqual(reported["FinalRecords"][0]["ContainmentStatus"], "0x8000000000000007")
+        self.assertEqual(reported["ContainmentRecords"][0]["LoggedCachedAttributes"],
+                         "0x8000000000000200")
+        short_final = ("FINAL status=0x8000000000000007 stage=post-unlock-handoff "
+                       "attempted=1 driver_release=1 clean=0\n")
+        reported = session._legacy_wrapper_values(short_final)
+        self.assertEqual(reported["MalformedRecordCount"], 0)
+        self.assertEqual(reported["FinalRecords"][0]["Status"], "0x8000000000000007")
+        self.assertIsNone(reported["FinalRecords"][0]["ContainmentStatus"])
+        self.assertIsNone(reported["FinalRecords"][0]["PciAvailableReported"])
+
+    def test_unknown_saved_text_gets_explicit_partial_stage_and_preserved_hash(self):
+        raw = b"Unrecognized PRIVATE data format\n\xffnot valid UTF-8"
+        self.write("PRIVATE-unfamiliar.txt", raw)
+        result = session.review(self.root)
+        self.assertEqual(result["Status"], "reviewed", result)
+        stage = result["Stages"][0]
+        self.assertEqual((stage["Name"], stage["Status"], stage["Code"]),
+                         ("saved_text", "partial", "unrecognized_text_format"))
+        self.assertEqual(stage["Scope"], "saved_bytes_only")
+        self.assertEqual(len(result["Observations"]), 1)
+        self.assertEqual(result["Observations"][0]["Completion"], "partial")
+        self.assertEqual(result["InputFiles"][0]["Sha256"], hashlib.sha256(raw).hexdigest())
+        self.assertNotIn("PRIVATE", json.dumps(result))
+        self.assertEqual(result["NextAction"]["Code"], "review_existing_evidence")
         self.assert_scope(result)
 
 

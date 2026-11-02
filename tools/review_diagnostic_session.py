@@ -464,6 +464,10 @@ def _text_readers(name, data):
         kinds.append("command")
     if re.search(rb"^GOPDIAG", raw, re.M):
         kinds.append("gop")
+    if re.search(rb"^(?:transaction result=|FINAL |GOP\[)", raw, re.M):
+        kinds.append("wrapper")
+    if not kinds and not DIAG.fullmatch(name):
+        kinds.append("unrecognized")
     return tuple(kinds)
 
 
@@ -543,10 +547,108 @@ def _gop_values(row, text):
             "SetModeAuthorized": False, "ConnectControllerAuthorized": False}
 
 
+def _legacy_wrapper_values(text):
+    """Project a few recorded legacy fields, without interpreting readiness."""
+    def integer(value, maximum=0xffffffff):
+        return _observed_integer(int(value, 0) if value.startswith("0x") else int(value),
+                                 maximum=maximum)
+
+    def status(value):
+        return "0x%016x" % integer(value, 0xffffffffffffffff)
+
+    def signed(value):
+        return _observed_integer(int(value), -(2 ** 63), 2 ** 63 - 1)
+
+    def flag(value):
+        return integer(value, 1) == 1
+
+    def transaction(values):
+        result, containment, started, quiesced, fault, retained, maps, flrs = values
+        return {"Result": signed(result), "ContainmentStatus": status(containment),
+                "Started": flag(started), "Quiesced": flag(quiesced), "Fault": integer(fault),
+                "Retained": flag(retained), "Maps": integer(maps, 10000000),
+                "Flrs": integer(flrs, 10000000)}
+
+    def containment(values):
+        attribute, hardware, command, cached, pending = values
+        return {"AttributeStatus": status(attribute), "HardwareStatus": status(hardware),
+                "ReportedCommand": integer(command, 0xffff),
+                "LoggedCachedAttributes": status(cached), "Pending": flag(pending)}
+
+    def final(values):
+        result, phase, attempted, released, clean, containment_result, pci = values
+        return {"Status": status(result),
+                "Phase": phase if phase == "post-unlock-handoff" else "unclassified_phase",
+                "PhaseSha256": hashlib.sha256(phase.encode("ascii")).hexdigest(),
+                "Attempted": flag(attempted), "DriverReleaseReported": flag(released),
+                "CleanReported": flag(clean),
+                "ContainmentStatus": status(containment_result) if containment_result is not None else None,
+                "PciAvailableReported": flag(pci) if pci is not None else None}
+
+    number = r"(0x[0-9a-f]{1,16}|[0-9]{1,20})"
+    specifications = (
+        ("TransactionRecords", "transaction result=",
+         r"transaction result=(-?[0-9]{1,20}) containment=" + number +
+         r" started=([01]) quiesced=([01]) fault=([0-9]{1,20}) retained=([01]) maps=([0-9]{1,20}) FLR=([0-9]{1,20})",
+         transaction),
+        ("ContainmentRecords", "BME containment:",
+         r"BME containment: attribute_status=" + number + r" hardware_status=" + number +
+         r" command=" + number + r" cached=" + number + r" pending=([01])", containment),
+        ("FinalRecords", "FINAL ",
+         r"FINAL status=" + number + r" stage=([A-Za-z0-9_.-]{1,64}) attempted=([01]) driver_release=([01]) clean=([01])(?: containment=" + number + r" pci_available=([01]))?",
+         final),
+        ("SetModeRecords", "GOP SetMode",
+         r"GOP SetMode status=" + number, lambda values: {"Status": status(values[0])}),
+        ("RestoreRecords", "restore PCI command:",
+         r"restore PCI command: actual=" + number + r" original=" + number + r" mask=" + number,
+         lambda values: dict(zip(("Actual", "TransactionOriginal", "Mask"),
+                                (integer(value, 0xffff) for value in values)))),
+    )
+    records = {name: [] for name, *_ in specifications}
+    marker_counts = {name: 0 for name in records}
+    malformed = truncated = 0
+    for sequence, line in enumerate(text.splitlines(), 1):
+        for name, prefix, pattern, convert in specifications:
+            if not line.startswith(prefix):
+                continue
+            marker_counts[name] += 1
+            match = re.fullmatch(pattern, line)
+            try:
+                if match is None:
+                    raise ValueError("unreviewed record")
+                row = convert(match.groups())
+            except (ValueError, TypeError, OverflowError):
+                malformed += 1
+                continue
+            if len(records[name]) < 32:
+                records[name].append(dict(Sequence=sequence, **row))
+            else:
+                truncated += 1
+    # The wrapper contains additional code/configuration/ownership details this
+    # projection does not validate. Even all-zero records remain partial evidence.
+    return {"Status": "partial", "Code": "legacy_wrapper_observations_only",
+            "MarkerCounts": marker_counts, "MalformedRecordCount": malformed,
+            "TruncatedRecordCount": truncated,
+            "GopIndexMarkerCount": len(re.findall(r"^GOP\[", text, re.M)),
+            "WrapperEntryRestorationVerified": False, "CacheConsistencyVerified": False,
+            "WindowsRecoveryVerified": False, "UnlockVerified": False, **records}
+
+
 def _saved_text_stage(kind, data, readers, file_id):
-    stage = {"Name": "command_boundaries" if kind == "command" else "gop_records",
+    names = {"command": "command_boundaries", "gop": "gop_records",
+             "wrapper": "legacy_wrapper", "unrecognized": "saved_text"}
+    stage = {"Name": names[kind],
              "FileId": file_id, "Scope": "recorded_text_values_only",
              "hardware_independently_verified": False, "write_eligible": False}
+    if kind == "unrecognized":
+        return dict(stage, Status="partial", Code="unrecognized_text_format", Scope="saved_bytes_only")
+    if kind == "wrapper":
+        try:
+            text = _decode_text(data)
+            values = _legacy_wrapper_values(text)
+        except (UnicodeError, ValueError, TypeError, OverflowError):
+            return dict(stage, Status="partial", Code="wrapper_text_not_reviewable")
+        return dict(stage, NormalizedTextSha256=hashlib.sha256(text.encode("utf-8")).hexdigest(), **values)
     reader = getattr(readers, kind)
     if reader is None:
         return dict(stage, Status="unavailable", Code="reader_unavailable")
