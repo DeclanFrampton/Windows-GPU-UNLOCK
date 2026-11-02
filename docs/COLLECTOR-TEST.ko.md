@@ -10,11 +10,13 @@ Python, 일반 PowerShell 창이 필요합니다. 관리자 권한, 재부팅, U
 다운로드한 소스 폴더에서 다음 **명령 하나**를 실행하세요.
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\test-collector.ps1
+powershell -NoProfile -File .\tools\test-collector.ps1
 ```
 
-실행 정책 옵션은 이 PowerShell 프로세스에만 적용되며 시스템 정책을 저장하거나
-변경하지 않습니다. 조직 정책으로 차단되면 정책을 바꾸지 말고 중단한 뒤 메시지를 알려주세요.
+실행 정책으로 차단되면 중단하고 개인 정보를 지운 짧은 오류를 알려주세요.
+정책 변경, 파일 차단 해제, process bypass 또는 다른 실행 경로로 우회하지 마세요.
+스크립트가 시작되지 않으면 result.json이 없는 것이 정상입니다.
+소스 hash나 ZIP manifest는 publisher trust를 입증하지 않습니다.
 
 예상 결과는 `Result: PASS`입니다. 스크립트가 새
 `문서\GPU-Unlock-Collector-Test-<id>` 폴더 위치를 표시합니다.
@@ -55,3 +57,8 @@ CP932 stderr를 검사합니다. Dell 2504/c9741028은 합성 fixture이며 사�
 재현이나 프로필 지원 증거가 아닙니다. PR176의 기존 binary subprocess capture가
 이 경로를 수정합니다. 같은 launcher가 Windows inventory 전에 회귀를 실행합니다.
 Secure Boot를 활성화 상태로 유지하세요. PASS는 firmware 경로나 프로필 승인이 아닙니다.
+
+#201 사용자는 실행 전 unsigned-script 정책 차단을 보고하고 요청대로 중단했습니다.
+결과 파일은 생성되지 않았으며 일본어 호스트 수집기 실행은 미검증입니다.
+해당 정책에서 신뢰되는 publisher/signing 배포 경로가 확인되지 않았습니다.
+이는 배포 선행 조건이며 새 inventory 실행이나 정책 완화 요청이 아닙니다.

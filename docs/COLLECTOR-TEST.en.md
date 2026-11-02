@@ -10,12 +10,13 @@ USB, EFI or firmware-setting change is required.
 From the downloaded source folder, run this **one command**:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\test-collector.ps1
+powershell -NoProfile -File .\tools\test-collector.ps1
 ```
 
-The execution-policy option applies to this PowerShell process; it does not save
-a machine policy change. If an organizational policy blocks it, stop and report
-the message rather than changing policy.
+If execution policy blocks the script, stop and report the short sanitized
+message. Do not change policy, unblock files, add a process bypass, or switch
+execution routes to avoid the block. If the script never starts, no result.json
+is expected. A source hash or ZIP manifest does not establish publisher trust.
 
 Expected: `Result: PASS`. The script prints the new
 `Documents\GPU-Unlock-Collector-Test-<id>` folder. In `inventory.json`, expect
@@ -59,3 +60,9 @@ this does not reproduce the owner's machine or establish profile support.
 Binary subprocess capture already fixes this path in PR176. The same launcher
 runs this regression before reading Windows inventory. Keep Secure Boot enabled;
 no firmware route or profile is approved by PASS.
+
+The #201 reporter subsequently encountered an unsigned-script policy block
+before execution and stopped as requested. No result file was created and the
+Japanese-host collector run remains unverified. The distributed script has no
+established trusted publisher/signing route for that policy; this is a delivery
+prerequisite, not a request for another inventory run or weaker policy.
