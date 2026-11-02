@@ -141,3 +141,30 @@ partial evidence rejection, synthetic completed-receipt collection and repeated
 stage refusal. The default read-only probe also rebuilt/PE-verified. Receipt
 fault tests and simulated staging are local proof only; the new live rearm is
 not yet demonstrated. No raw captures or NVIDIA payloads were committed.
+
+## 2026-11-02 boot-history review and rearm hold
+
+Christian's v2 report (1566610577361600632) confirms the failed display-return
+Windows session started00:09:47.500Z, then stopped00:12:21.752Z; recovery Windows
+started00:12:44.500Z. Kernel-General stop and EventLog shutdown records exist.
+Both sessions and the successful first23:26:59 session record BootType0 and the
+same NOEXECUTE/FVEBOOT/NOVGA option strings. These records do not identify a new
+boot-mode difference or justify changing BCD/Fast Startup settings. The recovery
+query cannot expose the earlier GPU/display state; no causal firmware correction
+has been established. No new armed attempt is justified by this evidence.
+
+The current run-christian-rearm.ps1 now rejects Stage before any storage access;
+Collect stays available. msi-rearm-policy.ps1 separates matching EFI receipts,
+automatic Windows return and normal display return. Manual power-off, late/unknown
+picture, missing receipts or mismatched identity block qualification. A clean
+review result still never authorizes execution. WindowsPowerShell5.1 tests passed
+all these refusal cases and the staging hold; replay of the actual EFI/display
+reports is blocked specifically for manual display recovery. This does not revoke
+old pinned downloads; preserve the existing markers and do not reuse them.
+
+The exact MSI first attended unlock/same-boot performance evidence remains valid.
+Receipt rearm EFI completion remains valid. Reliable display return, reusable
+rearm, unattended deployment and permanence are not established. Maintainer review
+of the post-FLR/display handoff needs a justified change or additional diagnostic
+capability before another informed hardware attempt. Further generic collectors
+or repeated unchanged EFI runs are not a substitute for that missing diagnosis.

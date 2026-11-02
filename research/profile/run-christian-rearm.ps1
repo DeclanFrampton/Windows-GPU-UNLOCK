@@ -2,6 +2,7 @@
 param([ValidateSet('Stage','Collect')][string]$Mode='Stage',
       [ValidatePattern('^[A-Za-z]$')][string]$Drive='G',[string]$Root='C:\GPU-Unlock',[switch]$AcceptRearmRisk)
 $ErrorActionPreference='Stop'
+if($Mode -eq 'Stage'){throw 'MSI staging is on display-recovery hold after the receipt-enabled attempt needed manual power-off. Preserve markers; no new armed run is available until a reviewed fix is validated. Collect remains available.'}
 $revision='8d914d820b5a6ab2402fedb002affd7c4a4c76a4'
 $volume=Get-Volume -DriveLetter $Drive
 $parts=@(Get-Partition -DriveLetter $Drive)
