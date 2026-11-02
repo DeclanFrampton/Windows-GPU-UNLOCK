@@ -5,6 +5,10 @@ param([ValidatePattern('^[D-Zd-z]$')][string]$Drive, [switch]$Collect,
       [string]$Clang='clang', [string]$LldLink='lld-link', [string]$Python='python',[string]$OutputRoot,[switch]$PackagedGraph)
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'collection-host.ps1')
+function Assert-GraphUnsignedBootPolicy($State) {
+ # A false-like string/integer is not a verified firmware policy result.
+ if($State -isnot [bool] -or $State){throw 'Secure Boot is enabled or unknown; do not prepare/stage or change settings.'}
+}
 function Get-GraphHash([string]$Path) {
  $h=[Security.Cryptography.SHA256]::Create();$f=[IO.File]::OpenRead($Path)
  try {([BitConverter]::ToString($h.ComputeHash($f))).Replace('-','').ToLowerInvariant()}
@@ -137,7 +141,7 @@ Assert-GraphMachine $Machine (Get-CimInstance Win32_BaseBoard) (Get-CimInstance 
 . (Join-Path $PSScriptRoot 'encryption-state.ps1')
 Assert-GuDecryptedVolume
 try {$secure=Confirm-SecureBootUEFI} catch {throw 'Secure Boot state could not be verified. Stop and report; do not change settings.'}
-if($secure -ne $false){throw 'Secure Boot must already be off for this unsigned test. Do not change it for this script.'}
+Assert-GraphUnsignedBootPolicy $secure
 $windows=@(Get-Partition | Where-Object {$_.IsSystem -and $_.Guid})
 if($windows.Count -ne 1 -or $windows[0].DiskNumber -eq $part.DiskNumber){throw 'Cannot uniquely pin the current internal Windows ESP.'}
 Write-Host 'ONE attended EFI graph test: firmware protocol/GOP metadata and PCI-header reads, USB log, then attempted Windows boot.'
@@ -168,7 +172,7 @@ if(@($configuration.KnownNonPciAdapters | Where-Object {$_}).Count){
 }
 Assert-GuDecryptedVolume
 try {$freshSecure=Confirm-SecureBootUEFI} catch {throw 'Secure Boot recheck failed; do not stage.'}
-if($freshSecure -isnot [bool] -or $freshSecure){throw 'Secure Boot policy changed or is unknown; do not stage or change settings.'}
+Assert-GraphUnsignedBootPolicy $freshSecure
 $receipt=Copy-GraphBoot $usb (Join-Path $built 'GRAPH-ONLY.EFI') $manifest.EfiSha256 $Machine
 $receipt['ConfigurationSha256']=$configurationHash
 $receipt | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $usb 'RTX3090-UNLOCK/graph-stage.json') -Encoding utf8
