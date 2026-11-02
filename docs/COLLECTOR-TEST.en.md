@@ -50,3 +50,12 @@ Enterprise LTSC build 26100, without administrator rights or settings changes.
 Both reviewed attachments match the same collector hash, zero exits, complete
 inventory and the expected `2504 / 1043:881d` GPU tuple. This is a second
 contributor collector confirmation, not EFI or unlock validation.
+# Japanese Windows decoding report (#201)
+
+The shared regression now exercises a real child process with UTF-8 Japanese
+inventory and CP932 stderr beginning with byte 0x83, matching the reported
+decoding boundary. The Dell 2504/c9741028 identity is synthetic fixture data;
+this does not reproduce the owner's machine or establish profile support.
+Binary subprocess capture already fixes this path in PR176. The same launcher
+runs this regression before reading Windows inventory. Keep Secure Boot enabled;
+no firmware route or profile is approved by PASS.

@@ -48,3 +48,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\test-collector.ps1
 변경 없이 이전 Unicode 오류 없는 PASS를 보고했습니다. 검토한 두 첨부는 같은
 수집기 해시, 종료 코드 0, 완전한 목록, 예상 GPU `2504 / 1043:881d`와 일치합니다.
 두 번째 기여자 수집기 확인이며 EFI나 언락 검증은 아닙니다.
+# 일본어 Windows 디코딩 보고 (#201)
+
+공통 회귀는 실제 child process의 UTF-8 일본어 inventory와 0x83으로 시작하는
+CP932 stderr를 검사합니다. Dell 2504/c9741028은 합성 fixture이며 사용자 시스템의
+재현이나 프로필 지원 증거가 아닙니다. PR176의 기존 binary subprocess capture가
+이 경로를 수정합니다. 같은 launcher가 Windows inventory 전에 회귀를 실행합니다.
+Secure Boot를 활성화 상태로 유지하세요. PASS는 firmware 경로나 프로필 승인이 아닙니다.
