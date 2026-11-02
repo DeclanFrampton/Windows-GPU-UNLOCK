@@ -1,6 +1,6 @@
 # Pure configuration/inventory mocks; no hardware or disk staging.
 [CmdletBinding()]
-param([switch]$Report,[ValidateSet('151','196')][string]$Case='151')
+param([switch]$Report,[ValidateSet('151','196','200')][string]$Case='151')
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'prepare-graph.ps1')
 function Reject([scriptblock]$Action){$failed=$false;try{& $Action}catch{$failed=$true};if(!$failed){throw 'Expected refusal.'}}
@@ -66,6 +66,22 @@ for($omit=0;$omit -lt $pci196.Count;$omit++){
  Reject {Assert-GraphMachine 'issue196' $board196 $bios196 $cpu196 $remaining}
 }
 $temp=Join-Path ([IO.Path]::GetTempPath()) ('graph-config-'+[guid]::NewGuid().ToString('N'))
+# Issue200's Meta name/version cannot identify a firmware adapter. Even signed
+# ROOT/SWD metadata stays unknown; another card's board/subsystem cannot match.
+$case200=Read-GraphConfiguration 'issue200'
+$board200=[pscustomobject]@{Manufacturer='ASUSTeK COMPUTER INC.';Product=$case200.Board}
+$bios200=[pscustomobject]@{SMBIOSBIOSVersion='3636'}
+$cpu200=[pscustomobject]@{Name='AMD Ryzen 7 5800X3D 8-Core Processor'}
+$pci200=[pscustomobject]@{PNPDeviceID='PCI\VEN_10DE&DEV_2216&SUBSYS_48973842\PRIVATE'}
+Assert-GraphMachine 'issue200' $board200 $bios200 $cpu200 @($pci200)
+foreach($id in @($null,'ROOT\PRIVATE','SWD\PRIVATE')){
+ $meta=[pscustomobject]@{Name='Meta Virtual Monitor';DriverVersion='5.3.57.114';PNPDeviceID=$id}
+ $signed=[pscustomobject]@{DeviceID=$id;DriverProviderName='Meta';DriverVersion='5.3.57.114';IsSigned=$true}
+ Reject {Assert-GraphMachine 'issue200' $board200 $bios200 $cpu200 @($pci200,$meta) @($signed)}
+}
+$bios200.SMBIOSBIOSVersion='3621';Reject {Assert-GraphMachine 'issue200' $board200 $bios200 $cpu200 @($pci200)};$bios200.SMBIOSBIOSVersion='3636'
+$other200=[pscustomobject]@{PNPDeviceID='PCI\VEN_10DE&DEV_2216&SUBSYS_403F1458\PRIVATE'}
+Reject {Assert-GraphMachine 'issue200' $board200 $bios200 $cpu200 @($other200)}
 New-Item -ItemType Directory -Path $temp|Out-Null
 $good=Get-Content (Join-Path $PSScriptRoot 'graph-configurations/issue33.json') -Raw
 foreach($bad in @(
@@ -94,6 +110,7 @@ if($Report){
  New-Item -ItemType Directory -Path $folder|Out-Null
  $summary=[ordered]@{Test='graph-configuration-v2';Passed=$true;Case='151';FixtureOnly=$true;PhysicalAdapterPins=2;UnknownDisplayCasesRefused=6;MissingDisplayRefused=$true;Other2216SubsystemRefused=$true;HardwareInventoryRead=$false;HardwareUnlockTested=$false;VirtualAdapterAdmissionGranted=$false;WriteEligible=$false}
  if($Case -ceq '196'){$summary=[ordered]@{Test='graph-configuration-v3';Passed=$true;Case='196';FixtureOnly=$true;PhysicalAdapterPins=3;MissingPhysicalAdapterCasesRefused=3;A4000Required=$true;DisabledIgpuProvesPrebootGop=$false;HardwareInventoryRead=$false;HardwareUnlockTested=$false;VirtualAdapterAdmissionGranted=$false;WriteEligible=$false}}
+ if($Case -ceq '200'){$summary=[ordered]@{Test='graph-configuration-v4';Passed=$true;Case='200';FixtureOnly=$true;PhysicalAdapterPins=1;UnknownMetaCasesRefused=3;OtherBiosRefused=$true;OtherSubsystemRefused=$true;HardwareInventoryRead=$false;HardwareUnlockTested=$false;VirtualAdapterAdmissionGranted=$false;WriteEligible=$false}}
  $path=Join-Path $folder 'graph-configuration.json'
  $summary|ConvertTo-Json|Set-Content -LiteralPath $path -Encoding UTF8
  Write-Host ('Return only '+$path+'. This tests fixtures, not your hardware. No EFI, settings changes or reboot.')
