@@ -1,6 +1,6 @@
-# Optional USB boot animation
+# Optional boot animation
 
-The research USB wrapper can play a prerendered 1920×1080 animation before
+The research USB and internal headless wrappers can play a prerendered 1920×1080 animation before
 attempting the unlock. Esc is available during the three-second countdown.
 The final burst plays immediately before driver release. Existing machine
 profiles, preflight checks and Windows handoff rules still apply.
@@ -13,9 +13,15 @@ python .\research\headless\render-splash.py
 python .\research\headless\pack-splash.py .\splash-preview.mp4 .\SPLASH.BIN
 ```
 
-Add `-SplashAsset .\SPLASH.BIN` to the existing
-`research/headless/build-usb.ps1` invocation. Use the usual
-`research/headless/stage-usb.ps1` workflow to copy the resulting package.
+Add `-SplashAsset .\SPLASH.BIN` to the existing build invocation:
+
+- **USB:** use `research/headless/build-usb.ps1` and stage with
+  `research/headless/stage-usb.ps1`.
+- **Dedicated internal ESP:** use `research/headless/build-unlock.ps1` and
+  stage with `internal-boot/Headless.ps1`. Use its existing manual registration
+  and confirmation workflow. The installer refuses to replace a different
+  installed file, including an older wrapper or splash asset.
+
 The wrapper pins the asset length and SHA-256 at build time. The default
 build retains the existing text prompt.
 
