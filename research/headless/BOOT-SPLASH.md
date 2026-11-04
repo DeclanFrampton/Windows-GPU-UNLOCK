@@ -25,14 +25,16 @@ Add `-SplashAsset .\SPLASH.BIN` to the existing build invocation:
 The wrapper pins the asset length and SHA-256 at build time. The default
 build retains the existing text prompt.
 
-The player decodes independent RGB565 frames. On a compatible 1920×1080
-linear surface, it compares the initial GOP copy with streaming writes to
-the framebuffer reported by GOP. It selects direct writes when measured
-faster and skips unchanged pixel groups. Playback follows elapsed time and
-can skip frames on slower firmware. Graphics activity and allocations end
+The player decodes independent RGB565 frames. On a compatible linear surface,
+it compares an initial centered Full HD GOP copy with streaming writes to
+the framebuffer reported by GOP. When direct writes are faster, it can fill
+the largest centered 16:9 viewport up to 3840×2160 if the initial decode and
+copy fit within 24 ms. Otherwise it keeps the centered Full HD viewport.
+Playback skips unchanged pixel groups and follows elapsed time, so slower
+firmware may present fewer frames. Graphics activity and allocations end
 before driver release.
 
 Missing or invalid assets, unsupported displays and an unavailable timestamp
 protocol fall back to the existing prompt. This is an experimental option
-for the firmware's manual boot menu. The log reports the selected copy path
-and the number of countdown frames presented.
+for the firmware's manual boot menu. The log reports the selected copy path,
+viewport width and number of countdown frames presented.

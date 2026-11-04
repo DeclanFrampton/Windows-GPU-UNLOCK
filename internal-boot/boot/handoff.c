@@ -285,6 +285,7 @@ static EFI_STATUS FullChoice(VOID *Context,BOOLEAN *Skip) {
 #ifdef GU_BOOT_SPLASH
   if(GuBootSplashBegin(Table,Root)==EFI_SUCCESS) {
     EFI_STATUS s=Record(NULL,"boot-splash-direct",(EFI_STATUS)GuBootSplashDirect());
+    if(s==EFI_SUCCESS)(void)Record(NULL,"boot-splash-width",(EFI_STATUS)GuBootSplashWidth());
     UINTN before=GuBootSplashFrames();
     if(s==EFI_SUCCESS)s=GuBootSplashPlay(TRUE,Skip);
     if(s==EFI_SUCCESS)s=Record(NULL,"boot-splash-countdown-frames",(EFI_STATUS)(GuBootSplashFrames()-before));

@@ -8,4 +8,5 @@ EFI_STATUS GuBootSplashPlay(BOOLEAN Countdown, BOOLEAN *Skip);
 EFI_STATUS GuBootSplashEnd(VOID);
 BOOLEAN GuBootSplashVisible(VOID);
 BOOLEAN GuBootSplashDirect(VOID);
+UINTN GuBootSplashWidth(VOID);
 UINTN GuBootSplashFrames(VOID);

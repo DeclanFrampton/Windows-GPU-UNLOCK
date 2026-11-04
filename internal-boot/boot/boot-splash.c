@@ -40,6 +40,9 @@ static BOOLEAN Geometry(VOID) {
 #define MATRIX_FRAMES 112U
 #define MATRIX_PIXELS (MATRIX_WIDTH * MATRIX_HEIGHT)
 #define MATRIX_LIMIT (192U * 1024U * 1024U)
+#define MATRIX_MAX_WIDTH (2U * MATRIX_WIDTH)
+#define MATRIX_MAX_HEIGHT (2U * MATRIX_HEIGHT)
+#define MATRIX_PROBE_BUDGET_US 24000U
 
 static EFI_FILE_PROTOCOL *MatrixVolume;
 static UINT8 *MatrixAsset;
@@ -47,6 +50,8 @@ static UINT16 *MatrixCurrent, *MatrixPrevious;
 static PIXEL *MatrixPixels;
 static UINT32 MatrixOffsets[MATRIX_FRAMES + 1];
 static UINTN MatrixFrame;
+static UINTN MatrixOutputWidth=MATRIX_WIDTH, MatrixOutputHeight=MATRIX_HEIGHT;
+static UINT16 MatrixColumns[MATRIX_MAX_WIDTH], MatrixRows[MATRIX_MAX_HEIGHT];
 static BOOLEAN MatrixHasFrame, MatrixDirect;
 
 /* Decode one independent LZ4 block. Every length and backreference is bounded. */
@@ -92,6 +97,7 @@ static EFI_STATUS MatrixClose(VOID) {
  }
  MatrixAsset=NULL;MatrixCurrent=NULL;MatrixPrevious=NULL;MatrixPixels=NULL;
  MatrixHasFrame=FALSE;MatrixDirect=FALSE;
+ MatrixOutputWidth=MATRIX_WIDTH;MatrixOutputHeight=MATRIX_HEIGHT;
  return status;
 }
 
@@ -140,6 +146,8 @@ static EFI_STATUS MatrixLoad(VOID) {
  return EFI_SUCCESS;
 }
 
+static UINTN MatrixLeft(UINTN width) {return ((Width-width)/2U)&~(UINTN)3U;}
+
 static EFI_STATUS MatrixCopy(UINTN x,UINTN y,UINTN width,UINTN height) {
  for(UINTN row=y;row<y+height;row++)for(UINTN col=x;col<x+width;col++){
   UINTN i=row*MATRIX_WIDTH+col;
@@ -147,7 +155,7 @@ static EFI_STATUS MatrixCopy(UINTN x,UINTN y,UINTN width,UINTN height) {
   UINT8 red=(UINT8)(color>>11),green=(UINT8)((color>>5)&63U),blue=(UINT8)(color&31U);
   MatrixPixels[i]=(PIXEL){(UINT8)((blue<<3)|(blue>>2)),(UINT8)((green<<2)|(green>>4)),(UINT8)((red<<3)|(red>>2)),0};
  }
- return Gop->Blt(Gop,MatrixPixels,EfiBltBufferToVideo,x,y,(Width-MATRIX_WIDTH)/2+x,(Height-MATRIX_HEIGHT)/2+y,width,height,MATRIX_WIDTH*sizeof(PIXEL));
+ return Gop->Blt(Gop,MatrixPixels,EfiBltBufferToVideo,x,y,MatrixLeft(MATRIX_WIDTH)+x,(Height-MATRIX_HEIGHT)/2+y,width,height,MATRIX_WIDTH*sizeof(PIXEL));
 }
 
 static BOOLEAN MatrixChanged(UINTN x,UINTN y) {
@@ -167,18 +175,18 @@ typedef UINT32 MATRIX_QUAD __attribute__((vector_size(16)));
 
 /* Only the linear pixel surface explicitly exposed by the current GOP mode.
  * Leave hardware registers, PCI mappings and cache attributes alone. */
-static BOOLEAN MatrixFramebuffer(MATRIX_FRAMEBUFFER *surface) {
- if(!Geometry()||Width!=MATRIX_WIDTH||Height!=MATRIX_HEIGHT)return FALSE;
+static BOOLEAN MatrixFramebuffer(MATRIX_FRAMEBUFFER *surface,UINTN width,UINTN height) {
+ if(!Geometry()||!width||width>Width||width%4U||!height||height>Height)return FALSE;
  EFI_GRAPHICS_OUTPUT_MODE_INFORMATION *info=Mode->Info;
  if(info->PixelFormat!=PixelRedGreenBlueReserved8BitPerColor&&
     info->PixelFormat!=PixelBlueGreenRedReserved8BitPerColor)return FALSE;
- if(info->PixelsPerScanLine<MATRIX_WIDTH||info->PixelsPerScanLine>8192)return FALSE;
+ if(info->PixelsPerScanLine<Width||info->PixelsPerScanLine>8192||Height>4320)return FALSE;
  UINTN pitch=(UINTN)info->PixelsPerScanLine*4U;
- UINTN used=(MATRIX_HEIGHT-1U)*pitch+MATRIX_WIDTH*4U;
+ UINTN used=Height*pitch;
  UINT64 base=Mode->FrameBufferBase;
  if(!base||(base&15U)||(pitch&15U)||used>Mode->FrameBufferSize||
     base>(UINT64)(UINTN)-1-used)return FALSE;
- surface->Base=(UINTN)base;
+ surface->Base=(UINTN)base+((Height-height)/2U)*pitch+MatrixLeft(width)*4U;
  surface->Pitch=pitch;
  surface->Rgb=info->PixelFormat==PixelRedGreenBlueReserved8BitPerColor;
  return TRUE;
@@ -215,24 +223,103 @@ static VOID MatrixWriteFramebuffer(const MATRIX_FRAMEBUFFER *surface,BOOLEAN del
  __builtin_ia32_sfence();
 }
 
+static UINTN MatrixFitUnits(VOID) {
+ UINTN horizontal=Width/16U,vertical=Height/9U;
+ UINTN units=horizontal<vertical?horizontal:vertical;
+ return units<MATRIX_MAX_WIDTH/16U?units:MATRIX_MAX_WIDTH/16U;
+}
+
+static VOID MatrixWriteDouble(const MATRIX_FRAMEBUFFER *surface,BOOLEAN delta) {
+ for(UINTN y=0;y<MATRIX_HEIGHT;y++){
+  const UINT16 *row=MatrixCurrent+y*MATRIX_WIDTH;
+  const UINT16 *previous=MatrixPrevious+y*MATRIX_WIDTH;
+  UINTN top=surface->Base+2U*y*surface->Pitch;
+  UINTN bottom=top+surface->Pitch;
+  for(UINTN x=0;x<MATRIX_WIDTH;x+=16){
+   if(delta){
+    UINTN i=0;
+    while(i<16&&row[x+i]==previous[x+i])i++;
+    if(i==16)continue;
+   }
+   for(UINTN i=x;i<x+16;i+=2){
+    UINT32 first=MatrixPacked(row[i],surface->Rgb),second=MatrixPacked(row[i+1],surface->Rgb);
+    MATRIX_QUAD pixels={first,first,second,second};
+    __builtin_nontemporal_store(pixels,(volatile MATRIX_QUAD *)(top+i*8U));
+    __builtin_nontemporal_store(pixels,(volatile MATRIX_QUAD *)(bottom+i*8U));
+   }
+  }
+ }
+ __builtin_ia32_sfence();
+}
+
+static VOID MatrixWriteScaled(const MATRIX_FRAMEBUFFER *surface,UINTN width,UINTN height,BOOLEAN delta) {
+ if(width==MATRIX_MAX_WIDTH&&height==MATRIX_MAX_HEIGHT){MatrixWriteDouble(surface,delta);return;}
+ for(UINTN y=0;y<height;y++){
+  const UINT16 *row=MatrixCurrent+MatrixRows[y]*MATRIX_WIDTH;
+  const UINT16 *previous=MatrixPrevious+MatrixRows[y]*MATRIX_WIDTH;
+  UINTN destination=surface->Base+y*surface->Pitch;
+  for(UINTN x=0;x<width;x+=4){
+   UINTN a=MatrixColumns[x],b=MatrixColumns[x+1],c=MatrixColumns[x+2],d=MatrixColumns[x+3];
+   if(delta&&row[a]==previous[a]&&row[b]==previous[b]&&row[c]==previous[c]&&row[d]==previous[d])continue;
+   MATRIX_QUAD pixels={MatrixPacked(row[a],surface->Rgb),MatrixPacked(row[b],surface->Rgb),
+                       MatrixPacked(row[c],surface->Rgb),MatrixPacked(row[d],surface->Rgb)};
+   __builtin_nontemporal_store(pixels,(volatile MATRIX_QUAD *)(destination+x*4U));
+  }
+ }
+ __builtin_ia32_sfence();
+}
+
+static VOID MatrixPrepareScale(UINTN width,UINTN height) {
+ for(UINTN x=0;x<width;x++)MatrixColumns[x]=(UINT16)(x*MATRIX_WIDTH/width);
+ for(UINTN y=0;y<height;y++)MatrixRows[y]=(UINT16)(y*MATRIX_HEIGHT/height);
+}
+
+static BOOLEAN MatrixFitsBudget(UINT64 decodeUs,UINT64 writeUs) {
+ return decodeUs&&writeUs&&decodeUs<MATRIX_PROBE_BUDGET_US&&writeUs<=MATRIX_PROBE_BUDGET_US-decodeUs;
+}
+
+static EFI_STATUS MatrixProbeScale(const MATRIX_FRAMEBUFFER *native,UINT64 decodeUs) {
+ UINTN units=MatrixFitUnits(),width=units*16U,height=units*9U;
+ MATRIX_FRAMEBUFFER surface;
+ if(width<=MATRIX_WIDTH||!MatrixFramebuffer(&surface,width,height))return EFI_SUCCESS;
+ if(width!=MATRIX_MAX_WIDTH||height!=MATRIX_MAX_HEIGHT)MatrixPrepareScale(width,height);
+ UINT64 start=Stamp();
+ MatrixWriteScaled(&surface,width,height,FALSE);
+ if(MatrixFitsBudget(decodeUs,Micros(start,Stamp()))){
+  MatrixOutputWidth=width;MatrixOutputHeight=height;
+  return EFI_SUCCESS;
+ }
+ PIXEL black={0,0,0,0};
+ EFI_STATUS status=Gop->Blt(Gop,&black,EfiBltVideoFill,0,0,MatrixLeft(width),(Height-height)/2U,width,height,0);
+ if(status==EFI_SUCCESS)MatrixWriteFramebuffer(native,FALSE);
+ return status;
+}
+
 static VOID MatrixDraw(UINTN frame) {
  if(!Geometry()){Visible=FALSE;return;}
  if(frame>=MATRIX_FRAMES||(MatrixHasFrame&&frame==MatrixFrame))return;
+ UINT64 start=Stamp();
  UINT32 offset=MatrixOffsets[frame];
  const UINTN headerBytes=(5+MATRIX_FRAMES+1)*sizeof(UINT32);
  if(!MatrixDecode(MatrixAsset+headerBytes+offset,MatrixOffsets[frame+1]-offset,MatrixCurrent)){Visible=FALSE;return;}
- UINT64 start=Stamp();
+ UINT64 decodeUs=Micros(start,Stamp());
+ start=Stamp();
  EFI_STATUS status=EFI_SUCCESS;
  MATRIX_FRAMEBUFFER surface;
- if(MatrixDirect&&MatrixFramebuffer(&surface))MatrixWriteFramebuffer(&surface,TRUE);
+ if(MatrixDirect){
+  if(!MatrixFramebuffer(&surface,MatrixOutputWidth,MatrixOutputHeight)){Visible=FALSE;return;}
+  if(MatrixOutputWidth==MATRIX_WIDTH)MatrixWriteFramebuffer(&surface,TRUE);
+  else MatrixWriteScaled(&surface,MatrixOutputWidth,MatrixOutputHeight,TRUE);
+ }
  else if(!MatrixHasFrame){
   status=MatrixCopy(0,0,MATRIX_WIDTH,MATRIX_HEIGHT);
   UINT64 gopTime=Micros(start,Stamp());
-  if(status==EFI_SUCCESS&&gopTime&&MatrixFramebuffer(&surface)){
+  if(status==EFI_SUCCESS&&gopTime&&MatrixFramebuffer(&surface,MATRIX_WIDTH,MATRIX_HEIGHT)){
    UINT64 directStart=Stamp();
    MatrixWriteFramebuffer(&surface,FALSE);
    UINT64 directTime=Micros(directStart,Stamp());
    MatrixDirect=directTime&&directTime<gopTime-gopTime/8;
+   if(MatrixDirect&&MatrixFitsBudget(decodeUs,directTime))status=MatrixProbeScale(&surface,decodeUs);
   }
  }
  else {
@@ -303,7 +390,12 @@ EFI_STATUS GuBootSplashBegin(EFI_SYSTEM_TABLE *table, EFI_FILE_PROTOCOL *volume)
  if(status==EFI_SUCCESS)status=MatrixLoad();
  if(status==EFI_SUCCESS){
   Visible=TRUE;
-  MatrixDraw(0);
+  if(Width!=MATRIX_WIDTH||Height!=MATRIX_HEIGHT){
+   PIXEL black={0,0,0,0};
+   status=Gop->Blt(Gop,&black,EfiBltVideoFill,0,0,0,0,Width,Height,0);
+  }
+  if(status==EFI_SUCCESS)MatrixDraw(0);
+  else Visible=FALSE;
   if(Visible)return EFI_SUCCESS;
   status=EFI_DEVICE_ERROR;
  }
@@ -345,4 +437,5 @@ EFI_STATUS GuBootSplashPlay(BOOLEAN countdown, BOOLEAN *skip) {
 
 BOOLEAN GuBootSplashVisible(VOID){return Visible;}
 BOOLEAN GuBootSplashDirect(VOID){return MatrixDirect;}
+UINTN GuBootSplashWidth(VOID){return MatrixOutputWidth;}
 UINTN GuBootSplashFrames(VOID){return PresentedFrames;}
