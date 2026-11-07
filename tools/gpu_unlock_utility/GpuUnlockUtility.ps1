@@ -518,15 +518,16 @@ function Export-WindowsDiagnosticDump([string]$TargetDir) {
     try {
         $smiXml = & nvidia-smi -q -x 2>&1
         $smiXml | Set-Content -LiteralPath (Join-Path $dumpFolder "NVIDIA-SMI-DUMP.XML") -Encoding utf8
-    } catch {}
+    }
+    catch {}
 
     # 3. System & Pre-Flight Summary
     $audit = Get-GpuHardwareInfo
     $preflight = Get-PreflightChecks
     $summary = [ordered]@{
         GeneratedUtc = [DateTime]::UtcNow.ToString("o")
-        Audit = $audit
-        Preflight = $preflight
+        Audit        = $audit
+        Preflight    = $preflight
     }
     $summary | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $dumpFolder "SYSTEM-SUMMARY.JSON") -Encoding utf8
 
@@ -541,15 +542,16 @@ function Export-WindowsDiagnosticDump([string]$TargetDir) {
                 if ($edidBytes) {
                     $edidHex = ($edidBytes | ForEach-Object { '{0:x2}' -f $_ }) -join ''
                     $edidEntries += [ordered]@{
-                        Path = $m.PSPath
+                        Path     = $m.PSPath
                         EDID_Hex = $edidHex
-                        Bytes = $edidBytes.Length
+                        Bytes    = $edidBytes.Length
                     }
                 }
             }
         }
         $edidEntries | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $dumpFolder "DISPLAY-EDID.JSON") -Encoding utf8
-    } catch {}
+    }
+    catch {}
 
     # 5. Readme Summary
     $readme = @"
@@ -579,7 +581,8 @@ function Export-EfiDiagnosticCaptures([string]$TargetDir, [string]$DeviceId = $n
         $ampere = $info.GPUs | Where-Object { $_.IsAmpere } | Select-Object -First 1
         if ($ampere -and $ampere.PCI) {
             $DeviceId = "$($ampere.PCI.Device)$($ampere.PCI.Vendor)"
-        } else {
+        }
+        else {
             $DeviceId = "220410de"
         }
     }
@@ -1153,9 +1156,9 @@ Add-Type -AssemblyName System.Windows.Forms
                                 <TextBlock Text="Generate Diagnostic Dumps &amp; Hardware Captures:" FontWeight="Bold" FontSize="13" Foreground="#F9E2AF" Margin="0,0,0,6"/>
                                 <TextBlock Text="Generate comprehensive diagnostic packages for compatibility review, bug reporting, or stage the pre-boot probe to USB:" FontSize="11" Foreground="#A6ADC8" Margin="0,0,0,10" TextWrapping="Wrap"/>
                                 <WrapPanel>
-                                    <Button Name="BtnGenWindowsDump" Content="📄 Generate Windows Diag Dump" Margin="0,0,10,6" Padding="12,7" Background="#313244" Foreground="#CDD6F4"/>
-                                    <Button Name="BtnGenEfiCaptures" Content="⚡ Generate Diagnostic Captures (DIAG/PROM)" Margin="0,0,10,6" Padding="12,7" Background="#313244" Foreground="#89B4FA"/>
-                                    <Button Name="BtnStageProbeUsb" Content="💾 Prepare Diagnostic Probe USB" Margin="0,0,10,6" Padding="12,7" Background="#313244" Foreground="#A6E3A1"/>
+                                    <Button Name="BtnGenWindowsDump" Content="Generate Windows Diag Dump" Margin="0,0,10,6" Padding="12,7" Background="#313244" Foreground="#CDD6F4"/>
+                                    <Button Name="BtnGenEfiCaptures" Content="Generate Diagnostic Captures (DIAG/PROM)" Margin="0,0,10,6" Padding="12,7" Background="#313244" Foreground="#89B4FA"/>
+                                    <Button Name="BtnStageProbeUsb" Content="Prepare Diagnostic Probe USB" Margin="0,0,10,6" Padding="12,7" Background="#313244" Foreground="#A6E3A1"/>
                                 </WrapPanel>
                             </StackPanel>
                         </Border>
@@ -1593,7 +1596,9 @@ function Update-CompatibilityResultsView($res) {
             }
         }
         $txtObsGpu.Text = "Target GPU: $gpuText"
-        $txtObsChip.Text = "Chip ID: $(if ($obs.chip_id) { $obs.chip_id } else { 'null' }) | Memory: $(if ($obs.device_memory_size_mib) { $obs.device_memory_size_mib + ' MiB' } else { 'null' })"
+        $memText = if ($obs.device_memory_size_mib) { "$($obs.device_memory_size_mib) MiB" } else { "null" }
+        $chipText = if ($obs.chip_id) { "$($obs.chip_id)" } else { "null" }
+        $txtObsChip.Text = "Chip ID: $chipText | Memory: $memText"
         $txtObsDisplays.Text = "Displays: $($obs.nvidia_display_count) NVIDIA, $($obs.other_display_count) Other (GOP Handles: $($obs.gop_handle_count))"
         $txtObsNvgop.Text = "NVGOP Bindings: $(if ($obs.firmware_bindings) { $obs.firmware_bindings.Count } else { 0 }) observed"
     }
