@@ -83,13 +83,12 @@ VOID GuLogText(const char *Text) {
     LogError();
     return;
   }
-  if (!Gu.armed || (Text[0] == 'A' && Text[1] == 'R') ||
-      (Text[0] == 'F' && Text[1] == 'I') ||
-      (Text[0] == 't' && Text[1] == 'r')) {
-    EFI_STATUS flush_status = Report->Flush(Report);
-    if (((INTN)flush_status) < 0)
-      LogError();
-  }
+}
+VOID GuLogFlush(VOID) {
+  if (!Report) return;
+  EFI_STATUS flush_status = Report->Flush(Report);
+  if (((INTN)flush_status) < 0)
+    LogError();
 }
 VOID GuLog(const char *Format, ...) {
   char text[1024];
@@ -243,6 +242,7 @@ EFI_STATUS GuIoOpen(EFI_HANDLE Image, EFI_SYSTEM_TABLE *St) {
         "writes, DMA, reset and driver release are blocked.\n",
         (unsigned)slot);
 #endif
+    GuLogFlush();
     return GuLogReady() ? EFI_SUCCESS : EFI_DEVICE_ERROR;
   }
   return EFI_VOLUME_FULL;
