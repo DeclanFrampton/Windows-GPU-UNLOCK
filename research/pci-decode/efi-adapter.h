@@ -7,6 +7,7 @@
 /* One zero-initialized context. Treat initialized fields as private/immutable.
  * Caller retains the exclusive claim, input storage and interface lifetimes,
  * serializes the operation, and separately authorizes any future physical use.
+ * Per-image workspace rejects Init/Run from callbacks, including fresh contexts.
  * Observing an open record does not acquire or lock a protocol. */
 typedef struct {
   BOOLEAN InitUsed,Ready,RunUsed,Busy,WriteSpent,OwnershipFault;
@@ -19,7 +20,7 @@ typedef struct {
   EFI_HANDLE OwnerImage;
   const GU_DS_EFI_BINDING *InputBindings;
   const GU_DS_SNAPSHOT *InputExpected;
-  const VOID *CallerContext,*ActiveTransaction;
+  const VOID *CallerContext,*ActiveTransaction,*ActiveOutput;
   EFI_STATUS OwnershipStatus,CleanupStatus,DisableIoStatus;
   GU_DS_EFI_DEVICE Devices[1+GU_DS_EFI_MAX_PARENTS];
   GU_DS_SNAPSHOT Expected;

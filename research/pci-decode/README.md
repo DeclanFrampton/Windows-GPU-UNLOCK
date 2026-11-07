@@ -59,7 +59,7 @@ dword of the GPU and all 16 parents, full attribute/token/location drift, and
 attempts to reuse a transaction. All protocol effects are RAM callbacks; no GPU,
 firmware, boot setting or physical media is accessed. Passing this model grants
 no hardware support, LOCAL write evidence or permission to run a correction.
-The optional mutation checks compile twenty-eight deliberately broken copies in the ignored
+The optional mutation checks compile thirty-four deliberately broken copies in the ignored
 output directory and require the host tests to reject them. A compile failure does
 not count as detecting a broken guard. Original source files remain unchanged.
 
@@ -181,14 +181,53 @@ The host runner includes the owned caller: 822,653 lifecycle assertions cover
 1–15 parents, segment boundaries, every service error/warning, empty/63/64-record
 opener boundaries, same-agent references, borrowed buffers, missing output,
 Open partial effects, Close uncertainty, post-close claim recreation, reentry and
-caller-input mutation. Twenty-eight compiled guard mutants cover the combined
+caller-input mutation. Thirty-four compiled guard mutants cover the combined
 libraries. All effects are RAM mocks; none is a physical driver-release proof.
 
-Freestanding x64 COFF compilation also passes, but existing core/adapter automatic
-snapshots still create function frames up to 11,176 bytes under clang 20. The
-collector-only stack result below does not cover correction. This lifecycle has
-not been linked into a deployable EFI or qualified for firmware stack limits;
-stack/workspace engineering and the pre-Stop integration gap remain next gates.
+The full lifecycle now also compiles/links into an invalid-target synthetic EFI
+for PE/import and function-stack checks. This is not a deployment package; it is
+never executed or staged. The workspace and remaining integration limits follow.
+
+## Bounded correction workspaces and link checks
+
+Core ops/policy/current snapshots and adapter active context/read-pair/Disable
+snapshots use bounded private per-image storage. The core refuses a fresh
+transaction while any core call is active. Adapter Initialize/Run likewise refuse
+fresh contexts before changing caller state or shared storage. Normal nested
+Owned -> Adapter -> Core calls remain valid. Every completed or failed session
+releases its workspace guard; spent caller objects remain spent. Callers still
+serialize CPUs and retain storage/interfaces; these flags are not locks.
+
+The adapter's pool checks protect the complete private active context, both read
+snapshots, Disable snapshot and the current Core Read output. The pure internal
+`GuDecodeWorkspaceOverlap` helper also protects the complete core ops/pin/now
+region when query buffers arrive outside an active Read. Known borrowed/partly
+overlapping storage is never freed as a firmware pool allocation. Arbitrary pool
+pointer authenticity still depends on the firmware contract.
+
+The host suite exercises fresh-context reentry in protocol and log callbacks,
+normal sessions after every failure, and 21 whole/interior/boundary-overlapping
+private-storage aliases. Address-probe helpers exist only under an explicitly
+hosted test define; freestanding compilation rejects that define and the linked
+image must contain no address-probe symbol.
+
+```powershell
+python -I research/pci-decode/test-owned-image.py --clang C:\TOOLS\LLVM20\bin\clang.exe --lld-link C:\TOOLS\LLVM20\bin\lld-link.exe --stack-mutations --output research/pci-decode/build/your-new-owned-link
+```
+
+This test retains the actual capture/claim/adapter/core code behind a volatile
+entry dispatch with an invalid target. It verifies PE/imports, required lifecycle
+symbols and compiler stack records, with a 2 KiB per-function frame limit. Tested
+clang 20 flags report 248 bytes maximum across the linked implementation, compared
+with historical 11,176-byte frames. Four negative variants separately restore
+automatic core snapshots, adapter context, read pair or Disable snapshot. Each
+must compile and then fail the freestanding link for `__chkstk`; compile failures
+do not count. No stub, disabled probing or hardware execution is used.
+
+A per-function limit does not measure the maximum dynamic call-chain stack, external
+firmware stack or physical safety. Passing PE/link checks does not authorize this
+synthetic image, acquire a real claim or solve the production pre-Stop/cache-order
+gap. No production/probe/LOCAL/staging path links correction as a result.
 
 The GPU controller route uses the existing bounded PNP0A03/PNP0A08 parser. Two to
 sixteen PCI nodes correspond to one to fifteen immediate parent bridges. Each

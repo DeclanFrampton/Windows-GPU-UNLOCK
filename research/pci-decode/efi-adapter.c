@@ -4,6 +4,19 @@
 #include "efi-path.h"
 
 static EFI_GUID PciGuid=EFI_PCI_IO_PROTOCOL_GUID,PathGuid=EFI_DEVICE_PATH_PROTOCOL_GUID;
+/* One serialized run per image, shared by the public and internal callbacks. */
+static GU_DS_EFI_CONTEXT ActiveAdapter;
+static GU_DS_SNAPSHOT ReadSnapshots[2],DisableSnapshot;
+static BOOLEAN WorkspaceBusy;
+#ifdef GU_DS_HOST_WORKSPACE_TEST
+#if !__STDC_HOSTED__
+#error Workspace address probes are exclusively for hosted RAM tests
+#endif
+const VOID *GuDsTestAdapterWorkspace(UINTN index) {
+  return index==0?(const VOID *)&ActiveAdapter:index==1?(const VOID *)&ReadSnapshots[0]:
+    index==2?(const VOID *)&ReadSnapshots[1]:index==3?(const VOID *)&DisableSnapshot:ActiveAdapter.ActiveOutput;
+}
+#endif
 static BOOLEAN Bytes(const VOID *a,const VOID *b,UINTN n) {
   const UINT8 *x=a,*y=b;for(UINTN i=0;i<n;i++)if(x[i]!=y[i])return FALSE;return TRUE;
 }
@@ -30,6 +43,7 @@ EFI_STATUS GuDsEfiInitialize(GU_DS_EFI_CONTEXT *c,EFI_BOOT_SERVICES *boot,EFI_HA
   const GU_DS_EFI_BINDING *bindings,UINTN count,const GU_DS_SNAPSHOT *expected,
   BOOLEAN (*log)(VOID *,const char *),VOID *logContext) {
   if(!c)return EFI_INVALID_PARAMETER;
+  if(WorkspaceBusy)return EFI_ALREADY_STARTED;
   if(c->InitUsed!=FALSE)return EFI_ALREADY_STARTED;
   /* Never reset a used context, including when Init is called from a callback. */
   c->InitUsed=TRUE;c->Ready=FALSE;
@@ -40,6 +54,7 @@ EFI_STATUS GuDsEfiInitialize(GU_DS_EFI_CONTEXT *c,EFI_BOOT_SERVICES *boot,EFI_HA
   c->Boot=boot;c->HandleProtocol=boot->HandleProtocol;c->LocateDevicePath=boot->LocateDevicePath;
   c->OpenProtocolInformation=boot->OpenProtocolInformation;c->FreePool=boot->FreePool;c->OwnerImage=owner;
   c->InputBindings=bindings;c->InputExpected=expected;
+  c->ActiveOutput=NULL;
   c->OwnershipStatus=c->CleanupStatus=c->DisableIoStatus=EFI_NOT_STARTED;
   c->Expected=*expected;c->DurableLog=log;c->LogContext=logContext;
   for(UINTN i=0;i<count;i++) {
@@ -65,8 +80,11 @@ static EFI_STATUS OwnerStatus(GU_DS_EFI_CONTEXT *c,EFI_STATUS s) {
 static BOOLEAN PoolRange(GU_DS_EFI_CONTEXT *c,const VOID *p,UINTN count) {
   UINTN n=(count && count<=GU_DS_EFI_MAX_OPENERS)?count*sizeof(EFI_OPEN_PROTOCOL_INFORMATION_ENTRY):sizeof(EFI_OPEN_PROTOCOL_INFORMATION_ENTRY);
   if((UINTN)p%sizeof(UINTN) || (UINTN)p>~(UINTN)0-n ||
+     GuDecodeWorkspaceOverlap(p,n) ||
      Overlap(p,n,c,sizeof(*c)) || Overlap(p,n,c->CallerContext,sizeof(*c)) ||
      Overlap(p,n,c->ActiveTransaction,sizeof(GU_DS_TRANSACTION)) ||
+     Overlap(p,n,c->ActiveOutput,sizeof(GU_DS_SNAPSHOT)) ||
+     Overlap(p,n,ReadSnapshots,sizeof(ReadSnapshots)) || Overlap(p,n,&DisableSnapshot,sizeof(DisableSnapshot)) ||
      Overlap(p,n,c->InputBindings,sizeof(*c->InputBindings)*(1+c->Expected.ParentCount)) ||
      Overlap(p,n,c->InputExpected,sizeof(*c->InputExpected)) || Overlap(p,n,c->Boot,sizeof(*c->Boot)) ||
      Overlap(p,n,c->OwnerImage,1))return FALSE;
@@ -151,34 +169,36 @@ static EFI_STATUS ReadOne(GU_DS_EFI_CONTEXT *c,UINTN index,UINT32 sentinel,GU_DS
 }
 static EFI_STATUS ReadLocked(GU_DS_EFI_CONTEXT *c,GU_DS_SNAPSHOT *out) {
   if(ObserveOwner(c)!=EFI_SUCCESS)return EFI_NOT_READY;
-  GU_DS_SNAPSHOT first={0},second={0};
-  first.ParentCount=second.ParentCount=c->Expected.ParentCount;
+  GU_DS_SNAPSHOT *first=&ReadSnapshots[0],*second=&ReadSnapshots[1];
+  *first=(GU_DS_SNAPSHOT){0};*second=(GU_DS_SNAPSHOT){0};
+  first->ParentCount=second->ParentCount=c->Expected.ParentCount;
   for(UINTN pass=0;pass<2;pass++) {
-    GU_DS_SNAPSHOT *s=pass?&second:&first;
+    GU_DS_SNAPSHOT *s=pass?second:first;
     for(UINTN i=0;i<1+c->Expected.ParentCount;i++) {
       GU_DS_DEVICE *d=i?&s->Parents[i-1]:&s->Gpu;
       if(ReadOne(c,i,pass?0x5a5a5a5aU:0xa5a5a5a5U,d)!=EFI_SUCCESS)return EFI_NOT_READY;
     }
     s->Complete=TRUE;
   }
-  if(!AllCaps(c) || !GuDecodeSnapshotMatches(&second,&first,FALSE))return EFI_NOT_READY;
+  if(!AllCaps(c) || !GuDecodeSnapshotMatches(second,first,FALSE))return EFI_NOT_READY;
   if(ObserveOwner(c)!=EFI_SUCCESS)return EFI_NOT_READY;
-  *out=second;return EFI_SUCCESS;
+  *out=*second;return EFI_SUCCESS;
 }
 static EFI_STATUS AdapterRead(VOID *context,GU_DS_SNAPSHOT *out) {
   GU_DS_EFI_CONTEXT *c=context;
   if(!out || Overlap(c,sizeof(*c),out,sizeof(*out)))return EFI_INVALID_PARAMETER;
   *out=(GU_DS_SNAPSHOT){0};
   if(c->Ready!=TRUE || c->Busy!=FALSE)return EFI_NOT_READY;
+  c->ActiveOutput=out; /* protect the core's output through Read, Log and Disable */
   c->Busy=TRUE;EFI_STATUS s=ReadLocked(c,out);c->Busy=FALSE;return s;
 }
 static EFI_STATUS AdapterDisable(VOID *context) {
   GU_DS_EFI_CONTEXT *c=context;
   if(c->Ready!=TRUE || c->Busy!=FALSE || c->WriteSpent!=FALSE)return EFI_ACCESS_DENIED;
   c->Busy=TRUE;c->WriteSpent=TRUE;
-  GU_DS_SNAPSHOT now={0};EFI_STATUS s=ReadLocked(c,&now);
+  GU_DS_SNAPSHOT *now=&DisableSnapshot;*now=(GU_DS_SNAPSHOT){0};EFI_STATUS s=ReadLocked(c,now);
   EFI_OPEN_PROTOCOL_INFORMATION_ENTRY *held=NULL;
-  if(s==EFI_SUCCESS && GuDecodeSnapshotMatches(&now,&c->Expected,FALSE))s=OpenOwner(c,&held);
+  if(s==EFI_SUCCESS && GuDecodeSnapshotMatches(now,&c->Expected,FALSE))s=OpenOwner(c,&held);
   else s=EFI_NOT_READY;
   if(s==EFI_SUCCESS && AllCaps(c)) {
     GU_DS_EFI_DEVICE *g=&c->Devices[0];
@@ -200,18 +220,19 @@ static BOOLEAN AdapterLog(VOID *context,const char *event) {
   c->Busy=FALSE;return ok==TRUE;
 }
 GU_DS_RESULT GuDsEfiRun(GU_DS_EFI_CONTEXT *c,GU_DS_TRANSACTION *t) {
+  if(c && t && WorkspaceBusy)return GU_DS_REUSED;
   if(!c || !t || Overlap(c,sizeof(*c),t,sizeof(*t)) || c->Ready!=TRUE)return GU_DS_INVALID;
   if(c->RunUsed!=FALSE || c->Busy!=FALSE)return GU_DS_REUSED;
-  c->RunUsed=TRUE;
+  WorkspaceBusy=TRUE;c->RunUsed=TRUE;
   /* Keep caller-owned binding/policy edits out of an in-flight transaction. */
-  GU_DS_EFI_CONTEXT active=*c;c->Busy=TRUE;
-  active.CallerContext=c;active.ActiveTransaction=t;
-  const GU_DS_OPS ops={&active,AdapterRead,AdapterDisable,AdapterLog};
-  GU_DS_RESULT result=GuDecodeSync(t,&ops,&active.Expected);
-  c->WriteSpent=active.WriteSpent;c->RunUsed=TRUE;c->Busy=FALSE;
-  c->OwnershipFault=active.OwnershipFault;c->OwnershipStatus=active.OwnershipStatus;
-  c->CleanupStatus=active.CleanupStatus;c->DisableIoStatus=active.DisableIoStatus;
-  c->OwnershipObserved=active.OwnershipObserved;c->CleanupObserved=active.CleanupObserved;
-  c->DisableInvoked=active.DisableInvoked;
+  GU_DS_EFI_CONTEXT *active=&ActiveAdapter;*active=*c;c->Busy=TRUE;
+  active->CallerContext=c;active->ActiveTransaction=t;active->ActiveOutput=NULL;
+  const GU_DS_OPS ops={active,AdapterRead,AdapterDisable,AdapterLog};
+  GU_DS_RESULT result=GuDecodeSync(t,&ops,&active->Expected);
+  c->WriteSpent=active->WriteSpent;c->RunUsed=TRUE;c->Busy=FALSE;
+  c->OwnershipFault=active->OwnershipFault;c->OwnershipStatus=active->OwnershipStatus;
+  c->CleanupStatus=active->CleanupStatus;c->DisableIoStatus=active->DisableIoStatus;
+  c->OwnershipObserved=active->OwnershipObserved;c->CleanupObserved=active->CleanupObserved;
+  c->DisableInvoked=active->DisableInvoked;WorkspaceBusy=FALSE;
   return result;
 }
