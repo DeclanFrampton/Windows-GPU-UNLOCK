@@ -187,7 +187,7 @@ Inspects host platform topology and determines target GPU eligibility:
 ---
 
 ### Tab 2: Pre-Flight Safety
-Before attempting any UEFI boot unlock, four critical safety prerequisites are evaluated:
+Before attempting any UEFI boot unlock, five critical safety checks are evaluated:
 
 1. **UEFI Secure Boot**:
    - Status: `[OK]` (Disabled) or `[FAIL]` (Enabled).
@@ -198,8 +198,16 @@ Before attempting any UEFI boot unlock, four critical safety prerequisites are e
 3. **BitLocker C: Encryption**:
    - Status: `[OK]` (Off / Fully Decrypted) or `[WARN]` (Protection On).
    - *Requirement*: Modifying boot chains while BitLocker is active may trigger a recovery key prompt on boot. Back up your BitLocker recovery key or suspend encryption before proceeding.
-4. **Release EFI Binary & Firmware Assets**:
-   - Checks presence and SHA-256 hashes of `release\EFI\BOOT\BOOTX64.EFI` and assets in `unlock\assets.json`.
+4. **Pre-Compiled UEFI Bootloader (`BOOTX64.EFI`)**:
+   - Status: `[OK]` (Green - Valid) or `[FAIL]` (Red - Missing/Checksum mismatch).
+   - Verifies the compiled `release\EFI\BOOT\BOOTX64.EFI` binary against SHA-256 provenance in `release\provenance.json`.
+5. **Firmware Asset Files (`assets/*.bin` - GA102 Blobs)**:
+   - Status: `[OK]` (Green - 5/5 verified) or `[!]` (Gold - Missing/Incomplete).
+   - *Why is this gold initially?* Proprietary NVIDIA firmware binaries cannot legally be redistributed inside public Git repositories (see `docs/ASSETS.en.md`).
+   - *Understanding the filenames*: `booter_load_ga102.bin` is **not** an invalid PC bootloader; it is NVIDIA's Falcon microcontroller firmware booter for GA102 GPUs.
+   - *Quick Actions*:
+     - **Import Assets...**: Click to choose any folder containing the 5 extracted `.bin` files (e.g. from Downloads). The utility checks all SHA-256 hashes and copies valid files into `assets\`.
+     - **How to Get Assets**: Opens `docs/ASSETS.en.md` and displays instructions to generate them using the upstream tool (`make inputs firmware`).
 
 ---
 
@@ -302,7 +310,7 @@ The utility supports full automation through the `-Cli` parameter. This is ideal
 | Parameter | Type | Allowed Values / Description |
 | :--- | :--- | :--- |
 | `-Cli` | Switch | Enables headless command-line execution (suppresses WPF GUI). |
-| `-Action` | String | `Audit`, `Preflight`, `CheckUsb`, `DeployUsb`, `RestoreWindows`, `Telemetry`, `CheckCaptures`, `CompareReports`, `GenerateDumps`. |
+| `-Action` | String | `Audit`, `Preflight`, `CheckUsb`, `DeployUsb`, `RestoreWindows`, `Telemetry`, `CheckCaptures`, `CompareReports`, `GenerateDumps`, `DownloadAssets`. |
 | `-DriveLetter` | String | Target drive letter for USB or ESP operations (e.g., `E` or `E:`). |
 | `-CapturePath` | String | Folder containing `DIAGnn.TXT`, `IMGnn.BIN`, `PROM.BIN` for analysis. |
 | `-DumpType` | String | For `GenerateDumps`: `Windows`, `EfiCaptures`, or `ProbeUsb`. |
@@ -376,6 +384,12 @@ The utility supports full automation through the `-Cli` parameter. This is ideal
 .\tools\gpu_unlock_utility\GpuUnlockUtility.ps1 -Cli -Action RestoreWindows
 ```
 
+#### 12. Automated 1-Click Firmware Assets Download & Verification
+```powershell
+.\tools\gpu_unlock_utility\GpuUnlockUtility.ps1 -Cli -Action DownloadAssets
+```
+*Downloads the official pinned NVIDIA open kernel module source and nvidia-utils package, synthesizes the V67 image, extracts all 5 required GA102 firmware assets, and verifies SHA-256 hashes against `unlock\assets.json`.*
+
 ---
 
 ## 6. Diagnostic Dumps & Hardware Captures
@@ -402,12 +416,22 @@ Sets up a removable FAT32 USB drive to capture live pre-boot hardware state on c
 
 The `tools\gpu_unlock_utility\` directory includes dedicated helper scripts:
 
-### Check-Assets.ps1 (Firmware Integrity & Import)
-Validates files in `assets\` against the project's SHA-256 specification in `unlock\assets.json`.
+### download_assets.py (Automated Firmware Asset Acquisition)
+Downloads the pinned official NVIDIA open kernel module source archive (`610.43.03`) and `nvidia-utils` package, synthesizes the V67 signature payload, extracts Falcon microcontroller and GSP boot assets, and verifies all 5 files against `unlock\assets.json`:
+
+```powershell
+python .\tools\gpu_unlock_utility\download_assets.py
+```
+
+### Check-Assets.ps1 (Firmware Integrity, Download & Import)
+Validates files in `assets\` against the project's SHA-256 specification in `unlock\assets.json`. Can also automatically trigger the download pipeline or scan external folders:
 
 ```powershell
 # Verify current assets
 .\tools\gpu_unlock_utility\Check-Assets.ps1
+
+# Automatically download, extract, and copy all 5 firmware assets into assets/
+.\tools\gpu_unlock_utility\Check-Assets.ps1 -Download
 
 # Scan an external folder (e.g. Downloads) and automatically import matching assets
 .\tools\gpu_unlock_utility\Check-Assets.ps1 -ImportFrom "C:\Users\<User>\Downloads\Firmware"

@@ -30,7 +30,7 @@
 [CmdletBinding()]
 param(
     [switch]$Cli,
-    [ValidateSet('Audit', 'Preflight', 'CheckUsb', 'DeployUsb', 'RestoreWindows', 'Telemetry', 'CheckCaptures', 'CompareReports', 'GenerateDumps')]
+    [ValidateSet('Audit', 'Preflight', 'CheckUsb', 'DeployUsb', 'RestoreWindows', 'Telemetry', 'CheckCaptures', 'CompareReports', 'GenerateDumps', 'DownloadAssets')]
     [string]$Action = 'Audit',
     [ValidateSet('Windows', 'EfiCaptures', 'ProbeUsb')]
     [string]$DumpType = 'Windows',
@@ -402,7 +402,17 @@ function Deploy-ToUsb([string]$Letter) {
     }
     Copy-Item -LiteralPath $Script:ReleaseEfi -Destination (Join-Path $targetBootDir "BOOTX64.EFI") -Force
 
-    # Copy Assets if present
+    # Ensure Assets are present; auto-download if missing
+    $localAssets = if (Test-Path -LiteralPath $Script:AssetsPath) { @(Get-ChildItem -LiteralPath $Script:AssetsPath -Filter "*.bin" -File) } else { @() }
+    if ($localAssets.Count -lt 5) {
+        Write-Host "[*] Firmware assets missing from assets/. Automatically acquiring now..." -ForegroundColor Yellow
+        $downScript = Join-Path $scriptDir "download_assets.py"
+        if (Test-Path -LiteralPath $downScript) {
+            & python -I $downScript --output $Script:AssetsPath
+        }
+    }
+
+    # Copy Assets
     $assetsCopied = 0
     if (Test-Path -LiteralPath $Script:AssetsPath) {
         $assets = Get-ChildItem -LiteralPath $Script:AssetsPath -Filter "*.bin" -File
@@ -720,6 +730,19 @@ function Invoke-CompareCompatibilityReports {
     return ($res -join "`r`n")
 }
 
+function Invoke-DownloadAssets {
+    $script = Join-Path $scriptDir "download_assets.py"
+    if (-not (Test-Path -LiteralPath $script)) {
+        throw "download_assets.py not found at $script"
+    }
+    Write-Host "[+] Executing automated firmware asset download and extraction..." -ForegroundColor Yellow
+    & python -I $script --output $Script:AssetsPath
+    if ($LASTEXITCODE -ne 0) {
+        throw "Automated asset acquisition exited with code $LASTEXITCODE."
+    }
+    return "All 5 firmware assets downloaded, verified, and placed into assets/."
+}
+
 # --- CLI DISPATCHER ---
 
 if ($Cli) {
@@ -820,6 +843,11 @@ if ($Cli) {
                     Write-Host $msg -ForegroundColor Green
                 }
             }
+        }
+        'DownloadAssets' {
+            Write-Host "`n[+] Downloading and preparing firmware assets..." -ForegroundColor Yellow
+            $msg = Invoke-DownloadAssets
+            Write-Host "[+] $msg" -ForegroundColor Green
         }
     }
     exit 0
@@ -1109,17 +1137,38 @@ Add-Type -AssemblyName System.Windows.Forms
                             </Grid>
                         </Border>
 
-                        <!-- Item: Release Binary & Assets -->
+                        <!-- Item 4: Pre-Compiled Release EFI Bootloader -->
                         <Border Background="#252538" CornerRadius="6" Padding="14" Margin="0,0,0,10" BorderBrush="#313244" BorderThickness="1">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Name="IconAssets" Grid.Column="0" Text="[OK]" FontSize="16" FontWeight="Bold" Foreground="#A6E3A1" VerticalAlignment="Center" Margin="0,0,14,0"/>
+                                <TextBlock Name="IconReleaseEfi" Grid.Column="0" Text="[OK]" FontSize="16" FontWeight="Bold" Foreground="#A6E3A1" VerticalAlignment="Center" Margin="0,0,14,0"/>
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                    <TextBlock Text="Release EFI Binary &amp; Firmware Assets" FontWeight="Bold" FontSize="13" Foreground="#CDD6F4"/>
+                                    <TextBlock Text="Pre-Compiled UEFI Bootloader (BOOTX64.EFI)" FontWeight="Bold" FontSize="13" Foreground="#CDD6F4"/>
+                                    <TextBlock Name="TxtDetailReleaseEfi" Text="Checking..." FontSize="12" Foreground="#A6ADC8" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <!-- Item 5: Firmware Assets (NVIDIA GA102 Blobs) -->
+                        <Border Background="#252538" CornerRadius="6" Padding="14" Margin="0,0,0,10" BorderBrush="#313244" BorderThickness="1">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Name="IconAssets" Grid.Column="0" Text="[OK]" FontSize="16" FontWeight="Bold" Foreground="#A6E3A1" VerticalAlignment="Center" Margin="0,0,14,0"/>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,10,0">
+                                    <TextBlock Text="Firmware Asset Files (GA102 Falcon &amp; GSP Blobs)" FontWeight="Bold" FontSize="13" Foreground="#CDD6F4"/>
                                     <TextBlock Name="TxtDetailAssets" Text="Checking..." FontSize="12" Foreground="#A6ADC8" TextWrapping="Wrap"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Button Name="BtnDownloadAssets" Content="Download Assets (1-Click)" Margin="0,0,6,0" Padding="12,6" Background="#A6E3A1" Foreground="#11111B" FontWeight="Bold"/>
+                                    <Button Name="BtnImportAssets" Content="Import Folder..." Margin="0,0,6,0" Padding="10,6" Background="#313244" Foreground="#CDD6F4"/>
+                                    <Button Name="BtnAssetsGuide" Content="How to Get Assets" Padding="10,6" Background="#313244" Foreground="#CDD6F4"/>
                                 </StackPanel>
                             </Grid>
                         </Border>
@@ -1460,8 +1509,13 @@ $txtDetailFastStartup = $window.FindName('TxtDetailFastStartup')
 $btnDisableFastStartup = $window.FindName('BtnDisableFastStartup')
 $iconBitLocker = $window.FindName('IconBitLocker')
 $txtDetailBitLocker = $window.FindName('TxtDetailBitLocker')
+$iconReleaseEfi = $window.FindName('IconReleaseEfi')
+$txtDetailReleaseEfi = $window.FindName('TxtDetailReleaseEfi')
 $iconAssets = $window.FindName('IconAssets')
 $txtDetailAssets = $window.FindName('TxtDetailAssets')
+$btnDownloadAssets = $window.FindName('BtnDownloadAssets')
+$btnImportAssets = $window.FindName('BtnImportAssets')
+$btnAssetsGuide = $window.FindName('BtnAssetsGuide')
 
 # Tab 3
 $comboUsbDrives = $window.FindName('ComboUsbDrives')
@@ -1601,11 +1655,20 @@ function Refresh-PreflightData {
         $iconBitLocker.Text = "[i]"; $iconBitLocker.Foreground = [System.Windows.Media.Brushes]::SkyBlue
     }
 
-    # Assets & Binary
-    $as = $checks['FirmwareAssets']
+    # Release EFI Bootloader
     $rel = $checks['ReleaseEFI']
-    $txtDetailAssets.Text = "$($rel.Detail)`n$($as.Detail)"
-    if ($as.Status -eq 'PASS' -and $rel.Status -eq 'PASS') {
+    $txtDetailReleaseEfi.Text = $rel.Detail
+    if ($rel.Status -eq 'PASS') {
+        $iconReleaseEfi.Text = "[OK]"; $iconReleaseEfi.Foreground = [System.Windows.Media.Brushes]::LightGreen
+    }
+    else {
+        $iconReleaseEfi.Text = "[!]"; $iconReleaseEfi.Foreground = [System.Windows.Media.Brushes]::Tomato
+    }
+
+    # Firmware Assets
+    $as = $checks['FirmwareAssets']
+    $txtDetailAssets.Text = $as.Detail
+    if ($as.Status -eq 'PASS') {
         $iconAssets.Text = "[OK]"; $iconAssets.Foreground = [System.Windows.Media.Brushes]::LightGreen
     }
     else {
@@ -1757,6 +1820,80 @@ $btnDisableFastStartup.Add_Click({
             Write-GuiLog "Error disabling Fast Startup: $($_.Exception.Message)"
             [System.Windows.MessageBox]::Show($_.Exception.Message, "Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error) | Out-Null
         }
+    })
+
+$btnDownloadAssets.Add_Click({
+        Write-GuiLog "Starting automated download and extraction of NVIDIA firmware assets..."
+        $btnDownloadAssets.IsEnabled = $false
+        $btnDownloadAssets.Content = "Downloading..."
+        $window.Cursor = [System.Windows.Input.Cursors]::Wait
+        try {
+            $script = Join-Path $scriptDir "download_assets.py"
+            $out = & python -I $script --output $Script:AssetsPath 2>&1
+            foreach ($line in $out) {
+                Write-GuiLog $line
+            }
+            Refresh-PreflightData
+            Write-GuiLog "Firmware assets acquired and verified successfully."
+            [System.Windows.MessageBox]::Show("All 5 required GA102 firmware assets were successfully downloaded, verified, and placed into assets/!", "Download Complete", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information) | Out-Null
+        }
+        catch {
+            Write-GuiLog "Download error: $($_.Exception.Message)"
+            [System.Windows.MessageBox]::Show("Error downloading assets:`n$($_.Exception.Message)", "Download Failed", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error) | Out-Null
+        }
+        finally {
+            $btnDownloadAssets.IsEnabled = $true
+            $btnDownloadAssets.Content = "Download Assets (1-Click)"
+            $window.Cursor = [System.Windows.Input.Cursors]::Arrow
+        }
+    })
+
+$btnImportAssets.Add_Click({
+        $fbd = New-Object System.Windows.Forms.FolderBrowserDialog
+        $fbd.Description = "Select folder containing the 5 GA102 firmware .bin files (e.g. from upstream Zagitta/gpu-unlock)"
+        if ($fbd.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+            $folder = $fbd.SelectedPath
+            Write-GuiLog "Importing firmware assets from '$folder'..."
+            try {
+                $scriptCheckAssets = Join-Path $scriptDir "Check-Assets.ps1"
+                & powershell -NoProfile -ExecutionPolicy Bypass -File $scriptCheckAssets -ImportFrom $folder
+                Refresh-PreflightData
+                Write-GuiLog "Asset import check completed. Pre-flight status refreshed."
+                [System.Windows.MessageBox]::Show("Asset verification finished. Check the Activity Log and Pre-Flight status.", "Import Completed", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information) | Out-Null
+            }
+            catch {
+                Write-GuiLog "Error during asset import: $($_.Exception.Message)"
+                [System.Windows.MessageBox]::Show($_.Exception.Message, "Import Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error) | Out-Null
+            }
+        }
+    })
+
+$btnAssetsGuide.Add_Click({
+        $doc = Join-Path $Script:RepoRoot "docs\ASSETS.en.md"
+        $msg = @"
+Why are firmware assets missing?
+Under NVIDIA's licensing terms, proprietary firmware binaries cannot be redistributed directly inside Git repositories.
+
+How to generate them:
+1. In WSL or Linux, run:
+   git clone https://github.com/Zagitta/gpu-unlock.git gpu-unlock-firmware-source
+   cd gpu-unlock-firmware-source
+   git checkout --detach 0ebdb1c6308b6a2072be5bf04513472942541956
+   make inputs firmware PYTHON=python3.14 INPUTS="`$PWD/inputs" ASSETS="`$PWD/assets"
+
+2. Once generated, click 'Import Assets...' and select that folder, or copy the 5 .bin files into the repository's 'assets\' directory:
+   - booter_load_ga102.bin
+   - v67-ga102-610.43.03.bin
+   - gsp_ga10x.bin
+   - gsp_boot_ga102.bin
+   - gsp_boot_desc_ga102.bin
+
+Documentation: docs/ASSETS.en.md
+"@
+        if (Test-Path -LiteralPath $doc) {
+            Start-Process $doc -ErrorAction SilentlyContinue
+        }
+        [System.Windows.MessageBox]::Show($msg, "How to Get Firmware Assets", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information) | Out-Null
     })
 
 $btnRefreshUsb.Add_Click({

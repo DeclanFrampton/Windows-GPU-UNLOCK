@@ -1,14 +1,18 @@
 <#
 .SYNOPSIS
-    Firmware Asset Verifier and Importer for Windows GPU UNLOCK
+    Firmware Asset Verifier, Downloader and Importer for Windows GPU UNLOCK
 .DESCRIPTION
     Checks the local 'assets/' folder against unlock/assets.json SHA-256 specifications.
-    Can also scan an external folder (e.g. downloads) to import and verify matching files.
+    Can also scan an external folder to import matching files, or automatically download
+    and extract them from official pinned sources.
 .PARAMETER ImportFrom
     Optional path to a folder containing candidate firmware .bin files to inspect and import.
+.PARAMETER Download
+    Automatically downloads and extracts the 5 required firmware assets into assets/.
 #>
 param(
-    [string]$ImportFrom
+    [string]$ImportFrom,
+    [switch]$Download
 )
 
 $ErrorActionPreference = 'Stop'
@@ -30,6 +34,20 @@ Write-Host "`n========================================================" -Foregro
 Write-Host " Windows GPU UNLOCK - Firmware Asset Verifier" -ForegroundColor White
 Write-Host " Target Directory: $assetsDir" -ForegroundColor DarkGray
 Write-Host "========================================================`n" -ForegroundColor Cyan
+
+# Optional Automated Download
+if ($Download) {
+    $downScript = Join-Path $PSScriptRoot "download_assets.py"
+    if (Test-Path -LiteralPath $downScript) {
+        Write-Host "[*] Executing automated asset download pipeline..." -ForegroundColor Yellow
+        & python -I $downScript --output $assetsDir
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "Automated download failed with code $LASTEXITCODE."
+        }
+    } else {
+        Write-Error "download_assets.py not found at $downScript"
+    }
+}
 
 # Optional Import
 if ($ImportFrom) {
