@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Windows GPU UNLOCK - Executive Control, Compatibility Checker & Deployment Utility
 .DESCRIPTION
@@ -1469,65 +1469,94 @@ Add-Type -AssemblyName System.Windows.Forms
                                 </StackPanel>
                             </Grid>
                         </Border>
+
+                        <!-- Item 6: LLVM / Clang Toolchain -->
+                        <Border Background="#252538" CornerRadius="6" Padding="14" Margin="0,0,0,10" BorderBrush="#313244" BorderThickness="1">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Name="IconLlvm" Grid.Column="0" Text="[OK]" FontSize="16" FontWeight="Bold" Foreground="#A6E3A1" VerticalAlignment="Center" Margin="0,0,14,0"/>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,10,0">
+                                    <TextBlock Text="LLVM / Clang Toolchain (Custom Unlock Compiler)" FontWeight="Bold" FontSize="13" Foreground="#CDD6F4"/>
+                                    <TextBlock Name="TxtDetailLlvm" Text="Checking..." FontSize="12" Foreground="#A6ADC8" TextWrapping="Wrap"/>
+                                </StackPanel>
+                                <Button Name="BtnInstallLlvm" Grid.Column="2" Content="Install LLVM (winget)" Background="#89B4FA" Foreground="#11111B" FontWeight="Bold" VerticalAlignment="Center" Padding="12,6" Visibility="Collapsed"/>
+                            </Grid>
+                        </Border>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
 
             <!-- TAB 3: USB UNLOCK DEPLOYER -->
             <TabItem Header="USB Unlock Deployer">
-                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16">
-                    <StackPanel>
-                        <TextBlock Text="Headless USB Route (Direct Windows Boot)" FontSize="16" FontWeight="Bold" Foreground="#89B4FA" Margin="0,0,0,10"/>
-                        <TextBlock Text="Deploys the safe Diagnostic Probe or custom compiled Headless Unlock bootloader onto a FAT32 USB drive. The bootloader unlocks GPU registers and immediately chain-loads Windows Boot Manager directly without resetting the GPU or dropping back to BIOS." FontSize="12" Foreground="#A6ADC8" Margin="0,0,0,14" TextWrapping="Wrap"/>
+                <Grid>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16">
+                        <StackPanel>
+                            <TextBlock Text="Headless USB Route (Direct Windows Boot)" FontSize="16" FontWeight="Bold" Foreground="#89B4FA" Margin="0,0,0,10"/>
+                            <TextBlock Text="Deploys the safe Diagnostic Probe or custom compiled Headless Unlock bootloader onto a FAT32 USB drive. The bootloader unlocks GPU registers and immediately chain-loads Windows Boot Manager directly without resetting the GPU or dropping back to BIOS." FontSize="12" Foreground="#A6ADC8" Margin="0,0,0,14" TextWrapping="Wrap"/>
 
-                        <!-- Hardware Route & Toolchain Detection Banner -->
-                        <Border Background="#252538" CornerRadius="6" Padding="14" Margin="0,0,0,14" BorderBrush="#313244" BorderThickness="1">
-                            <StackPanel>
-                                <TextBlock Text="Target Deployment Profile &amp; Prerequisites:" FontWeight="Bold" FontSize="13" Foreground="#F9E2AF" Margin="0,0,0,8"/>
-                                <TextBlock Name="TxtUsbRouteInfo" Text="Route: Detecting..." Foreground="#CDD6F4" Margin="0,2"/>
-                                <TextBlock Name="TxtUsbCompilerInfo" Text="Toolchain: Detecting..." Foreground="#A6ADC8" Margin="0,2"/>
-                                <TextBlock Name="TxtUsbEspInfo" Text="Windows ESP: Detecting..." Foreground="#A6ADC8" Margin="0,2"/>
-                                <TextBlock Name="TxtUsbCaptureStatus" Text="Hardware Captures on USB: Select a drive below" FontWeight="SemiBold" Foreground="#89DCEB" Margin="0,4,0,0"/>
-                            </StackPanel>
-                        </Border>
+                            <!-- Hardware Route & Toolchain Detection Banner -->
+                            <Border Background="#252538" CornerRadius="6" Padding="14" Margin="0,0,0,14" BorderBrush="#313244" BorderThickness="1">
+                                <StackPanel>
+                                    <TextBlock Text="Target Deployment Profile &amp; Prerequisites:" FontWeight="Bold" FontSize="13" Foreground="#F9E2AF" Margin="0,0,0,8"/>
+                                    <TextBlock Name="TxtUsbRouteInfo" Text="Route: Detecting..." Foreground="#CDD6F4" Margin="0,2"/>
+                                    <TextBlock Name="TxtUsbCompilerInfo" Text="Toolchain: Detecting..." Foreground="#A6ADC8" Margin="0,2"/>
+                                    <TextBlock Name="TxtUsbEspInfo" Text="Windows ESP: Detecting..." Foreground="#A6ADC8" Margin="0,2"/>
+                                    <TextBlock Name="TxtUsbCaptureStatus" Text="Hardware Captures on USB: Select a drive below" FontWeight="SemiBold" Foreground="#89DCEB" Margin="0,4,0,0"/>
+                                </StackPanel>
+                            </Border>
 
-                        <Border Background="#252538" CornerRadius="6" Padding="14" Margin="0,0,0,14" BorderBrush="#313244" BorderThickness="1">
-                            <StackPanel>
-                                <TextBlock Text="Select Target USB Drive:" FontWeight="Bold" FontSize="13" Foreground="#CDD6F4" Margin="0,0,0,8"/>
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-                                    <ComboBox Name="ComboUsbDrives" Grid.Column="0" Height="32" Background="#313244" Foreground="#CDD6F4" VerticalContentAlignment="Center" Padding="8,4"/>
-                                    <Button Name="BtnRefreshUsb" Grid.Column="1" Content="Refresh Disks" Margin="10,0,0,0"/>
-                                </Grid>
-                                <TextBlock Text="* Drive must be formatted as FAT32. Existing files will be preserved." FontSize="11" Foreground="#6C7086" Margin="0,6,0,0"/>
-                            </StackPanel>
-                        </Border>
+                            <Border Background="#252538" CornerRadius="6" Padding="14" Margin="0,0,0,14" BorderBrush="#313244" BorderThickness="1">
+                                <StackPanel>
+                                    <TextBlock Text="Select Target USB Drive:" FontWeight="Bold" FontSize="13" Foreground="#CDD6F4" Margin="0,0,0,8"/>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <ComboBox Name="ComboUsbDrives" Grid.Column="0" Height="32" Background="#313244" Foreground="#CDD6F4" VerticalContentAlignment="Center" Padding="8,4"/>
+                                        <Button Name="BtnRefreshUsb" Grid.Column="1" Content="Refresh Disks" Margin="10,0,0,0"/>
+                                    </Grid>
+                                    <TextBlock Text="* Drive must be formatted as FAT32. Existing files will be preserved." FontSize="11" Foreground="#6C7086" Margin="0,6,0,0"/>
+                                </StackPanel>
+                            </Border>
 
-                        <WrapPanel Margin="0,0,0,14">
-                            <Button Name="BtnStageProbeDirect" Content="1. Stage Diagnostic Probe (Windows Direct Boot)" Background="#313244" Foreground="#A6E3A1" FontWeight="Bold" FontSize="12" Padding="14,10" Margin="0,0,10,6"/>
-                            <Button Name="BtnDeployUsb" Content="2. Build &amp; Stage Custom Unlock Bootloader" Background="#89B4FA" Foreground="#11111B" FontWeight="Bold" FontSize="12" Padding="14,10" Margin="0,0,10,6"/>
-                        </WrapPanel>
+                            <WrapPanel Margin="0,0,0,14">
+                                <Button Name="BtnStageProbeDirect" Content="1. Stage Diagnostic Probe (Windows Direct Boot)" Background="#313244" Foreground="#A6E3A1" FontWeight="Bold" FontSize="12" Padding="14,10" Margin="0,0,10,6"/>
+                                <Button Name="BtnDeployUsb" Content="2. Build &amp; Stage Custom Unlock Bootloader" Background="#89B4FA" Foreground="#11111B" FontWeight="Bold" FontSize="12" Padding="14,10" Margin="0,0,10,6" IsEnabled="False" Opacity="0.5" ToolTip="Requires both hardware captures (DIAG00.TXT &amp; DIAG01.TXT). Stage the diagnostic probe (Button 1) and cold boot twice."/>
+                            </WrapPanel>
 
-                        <Border Background="#252538" CornerRadius="6" Padding="14" BorderBrush="#313244" BorderThickness="1">
-                            <StackPanel>
-                                <TextBlock Text="Motherboard One-Time Boot Menu Guide (Headless Direct Route):" FontWeight="Bold" FontSize="13" Foreground="#F9E2AF" Margin="0,0,0,8"/>
-                                <TextBlock Text="Step 1: Record Pre-Boot Hardware Captures" FontWeight="Bold" Foreground="#89DCEB" Margin="0,4,0,2"/>
-                                <TextBlock Text="1. Click '1. Stage Diagnostic Probe' above onto your FAT32 USB drive." Foreground="#CDD6F4" Margin="10,1"/>
-                                <TextBlock Text="2. Fully shut down your PC (Power Off, do not restart)." Foreground="#CDD6F4" Margin="10,1"/>
-                                <TextBlock Text="3. Power on and press your motherboard Boot Menu hotkey (ASUS: F8 / Gigabyte: F12 / MSI: F11 / ASRock: F11)." Foreground="#CDD6F4" Margin="10,1"/>
-                                <TextBlock Text="4. Select 'UEFI: [USB Drive]'. The probe safely records your card's VBIOS &amp; BAR layout, then IMMEDIATELY starts Windows Boot Manager (no BIOS loops!)." Foreground="#CDD6F4" Margin="10,1"/>
-                                <TextBlock Text="5. Once in Windows, repeat once more (Cold Shutdown -> Boot USB) to obtain 2 agreeing cold boot captures." Foreground="#CDD6F4" Margin="10,1"/>
-                                <TextBlock Text="Step 2: Custom Headless Unlock" FontWeight="Bold" Foreground="#89DCEB" Margin="0,6,0,2"/>
-                                <TextBlock Text="6. Reopen this utility and click '2. Build &amp; Stage Custom Unlock Bootloader'." Foreground="#CDD6F4" Margin="10,1"/>
-                                <TextBlock Text="7. The utility automatically generates your card's profile, validates host tests, and compiles the unlocker targeting your Windows ESP." Foreground="#CDD6F4" Margin="10,1"/>
-                                <TextBlock Text="8. Boot the USB to unlock the GPU and seamlessly load Windows!" Foreground="#CDD6F4" Margin="10,1"/>
-                            </StackPanel>
-                        </Border>
-                    </StackPanel>
-                </ScrollViewer>
+                            <Border Background="#252538" CornerRadius="6" Padding="14" BorderBrush="#313244" BorderThickness="1">
+                                <StackPanel>
+                                    <TextBlock Text="Motherboard One-Time Boot Menu Guide (Headless Direct Route):" FontWeight="Bold" FontSize="13" Foreground="#F9E2AF" Margin="0,0,0,8"/>
+                                    <TextBlock Text="Step 1: Record Pre-Boot Hardware Captures" FontWeight="Bold" Foreground="#89DCEB" Margin="0,4,0,2"/>
+                                    <TextBlock Text="1. Click '1. Stage Diagnostic Probe' above onto your FAT32 USB drive." Foreground="#CDD6F4" Margin="10,1"/>
+                                    <TextBlock Text="2. Fully shut down your PC (Power Off, do not restart)." Foreground="#CDD6F4" Margin="10,1"/>
+                                    <TextBlock Text="3. Power on and press your motherboard Boot Menu hotkey (ASUS: F8 / Gigabyte: F12 / MSI: F11 / ASRock: F11)." Foreground="#CDD6F4" Margin="10,1"/>
+                                    <TextBlock Text="4. Select 'UEFI: [USB Drive]'. The probe safely records your card's VBIOS &amp; BAR layout, then IMMEDIATELY starts Windows Boot Manager (no BIOS loops!)." Foreground="#CDD6F4" Margin="10,1"/>
+                                    <TextBlock Text="5. Once in Windows, repeat once more (Cold Shutdown -> Boot USB) to obtain 2 agreeing cold boot captures." Foreground="#CDD6F4" Margin="10,1"/>
+                                    <TextBlock Text="Step 2: Custom Headless Unlock" FontWeight="Bold" Foreground="#89DCEB" Margin="0,6,0,2"/>
+                                    <TextBlock Text="6. Reopen this utility and click '2. Build &amp; Stage Custom Unlock Bootloader'." Foreground="#CDD6F4" Margin="10,1"/>
+                                    <TextBlock Text="7. The utility automatically generates your card's profile, validates host tests, and compiles the unlocker targeting your Windows ESP." Foreground="#CDD6F4" Margin="10,1"/>
+                                    <TextBlock Text="8. Boot the USB to unlock the GPU and seamlessly load Windows!" Foreground="#CDD6F4" Margin="10,1"/>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <!-- Progress / Wait Overlay -->
+                    <Border Name="UsbProgressOverlay" Background="#E611111B" Visibility="Collapsed" CornerRadius="8" Margin="8" BorderBrush="#89B4FA" BorderThickness="1">
+                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <ProgressBar Name="UsbProgressBar" IsIndeterminate="True" Width="300" Height="8" Margin="0,0,0,18" Foreground="#89B4FA" Background="#313244" BorderThickness="0"/>
+                            <TextBlock Name="TxtUsbOverlayTitle" Text="Building Custom Unlock Bootloader..." FontSize="16" FontWeight="Bold" Foreground="#89B4FA" HorizontalAlignment="Center" Margin="0,0,0,8"/>
+                            <TextBlock Name="TxtUsbOverlayDetail" Text="Running offline verification harness (22 test suites) and compiling EFI binaries. Please wait, this may take 30-60 seconds..." FontSize="12" Foreground="#CDD6F4" HorizontalAlignment="Center" TextWrapping="Wrap" MaxWidth="500" TextAlignment="Center" Margin="0,0,0,14"/>
+                            <TextBlock Text="PLEASE WAIT - DO NOT REMOVE THE USB DRIVE OR CLOSE THIS WINDOW" FontSize="11" FontWeight="Bold" Foreground="#F9E2AF" HorizontalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+                </Grid>
             </TabItem>
 
             <!-- TAB 4: INTERNAL ESP & BCD -->
@@ -1860,6 +1889,9 @@ $txtDetailAssets = $window.FindName('TxtDetailAssets')
 $btnDownloadAssets = $window.FindName('BtnDownloadAssets')
 $btnImportAssets = $window.FindName('BtnImportAssets')
 $btnAssetsGuide = $window.FindName('BtnAssetsGuide')
+$iconLlvm = $window.FindName('IconLlvm')
+$txtDetailLlvm = $window.FindName('TxtDetailLlvm')
+$btnInstallLlvm = $window.FindName('BtnInstallLlvm')
 
 # Tab 3
 $comboUsbDrives = $window.FindName('ComboUsbDrives')
@@ -1870,6 +1902,10 @@ $txtUsbRouteInfo = $window.FindName('TxtUsbRouteInfo')
 $txtUsbCompilerInfo = $window.FindName('TxtUsbCompilerInfo')
 $txtUsbEspInfo = $window.FindName('TxtUsbEspInfo')
 $txtUsbCaptureStatus = $window.FindName('TxtUsbCaptureStatus')
+$usbProgressOverlay = $window.FindName('UsbProgressOverlay')
+$usbProgressBar = $window.FindName('UsbProgressBar')
+$txtUsbOverlayTitle = $window.FindName('TxtUsbOverlayTitle')
+$txtUsbOverlayDetail = $window.FindName('TxtUsbOverlayDetail')
 
 # Tab 4
 $btnRunInternalConfigure = $window.FindName('BtnRunInternalConfigure')
@@ -2031,6 +2067,51 @@ function Refresh-PreflightData {
     else {
         $iconAssets.Text = "[!]"; $iconAssets.Foreground = [System.Windows.Media.Brushes]::Gold
     }
+
+    # LLVM / Clang Toolchain
+    if ($iconLlvm) {
+        $toolchain = Get-ClangToolchain
+        if ($toolchain.Available) {
+            $iconLlvm.Text = "[OK]"; $iconLlvm.Foreground = [System.Windows.Media.Brushes]::LightGreen
+            $txtDetailLlvm.Text = "LLVM Clang & LLD-Link Ready: $($toolchain.Clang)"
+            $btnInstallLlvm.Visibility = [System.Windows.Visibility]::Collapsed
+        }
+        else {
+            $iconLlvm.Text = "[!]"; $iconLlvm.Foreground = [System.Windows.Media.Brushes]::Gold
+            $txtDetailLlvm.Text = "LLVM Clang / LLD not found. Required to build custom unlock bootloader for non-reference systems."
+            $btnInstallLlvm.Visibility = [System.Windows.Visibility]::Visible
+        }
+    }
+}
+
+function Show-UsbProgressOverlay([string]$Title, [string]$Detail) {
+    if ($usbProgressOverlay) {
+        $txtUsbOverlayTitle.Text = $Title
+        $txtUsbOverlayDetail.Text = $Detail
+        $usbProgressOverlay.Visibility = [System.Windows.Visibility]::Visible
+        $btnStageProbeDirect.IsEnabled = $false
+        $btnDeployUsb.IsEnabled = $false
+        $comboUsbDrives.IsEnabled = $false
+        $btnRefreshUsb.IsEnabled = $false
+        if ($window.Dispatcher) {
+            $window.Dispatcher.Invoke([Action]{}, [System.Windows.Threading.DispatcherPriority]::Render)
+        }
+        [System.Windows.Forms.Application]::DoEvents()
+    }
+}
+
+function Hide-UsbProgressOverlay {
+    if ($usbProgressOverlay) {
+        $usbProgressOverlay.Visibility = [System.Windows.Visibility]::Collapsed
+        $btnStageProbeDirect.IsEnabled = $true
+        $comboUsbDrives.IsEnabled = $true
+        $btnRefreshUsb.IsEnabled = $true
+        Update-UsbTabInfo
+        if ($window.Dispatcher) {
+            $window.Dispatcher.Invoke([Action]{}, [System.Windows.Threading.DispatcherPriority]::Render)
+        }
+        [System.Windows.Forms.Application]::DoEvents()
+    }
 }
 
 function Update-UsbTabInfo {
@@ -2063,15 +2144,30 @@ function Update-UsbTabInfo {
                 if ($status.Count -ge 2) {
                     $txtUsbCaptureStatus.Text = "Hardware Captures on $($letter): $($status.Count) of 2 complete [READY FOR CUSTOM UNLOCK BUILD]"
                     $txtUsbCaptureStatus.Foreground = [System.Windows.Media.Brushes]::LightGreen
+                    if ($btnDeployUsb) {
+                        $btnDeployUsb.IsEnabled = $true
+                        $btnDeployUsb.Opacity = 1.0
+                        $btnDeployUsb.ToolTip = "Both hardware captures detected ($($status.Count)/2). Ready to build and stage custom unlock bootloader."
+                    }
                 }
                 else {
                     $txtUsbCaptureStatus.Text = "Hardware Captures on $($letter): $($status.Count) of 2 complete [COLD BOOT PROBE REQUIRED]"
                     $txtUsbCaptureStatus.Foreground = [System.Windows.Media.Brushes]::Gold
+                    if ($btnDeployUsb) {
+                        $btnDeployUsb.IsEnabled = $false
+                        $btnDeployUsb.Opacity = 0.5
+                        $btnDeployUsb.ToolTip = "Requires both hardware captures (DIAG00.TXT & DIAG01.TXT). Stage the diagnostic probe (Button 1) and cold boot the USB twice."
+                    }
                 }
             }
             else {
                 $txtUsbCaptureStatus.Text = "Hardware Captures on USB: No drive selected"
                 $txtUsbCaptureStatus.Foreground = [System.Windows.Media.Brushes]::Gray
+                if ($btnDeployUsb) {
+                    $btnDeployUsb.IsEnabled = $false
+                    $btnDeployUsb.Opacity = 0.5
+                    $btnDeployUsb.ToolTip = "Select a FAT32 USB drive first."
+                }
             }
         }
     } catch {}
@@ -2327,6 +2423,36 @@ Documentation: docs/ASSETS.en.md
         [System.Windows.MessageBox]::Show($msg, "How to Get Firmware Assets", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information) | Out-Null
     })
 
+$btnInstallLlvm.Add_Click({
+        $confirm = [System.Windows.MessageBox]::Show("Install the LLVM compiler toolchain (clang & lld-link) automatically via Windows Package Manager (winget)?`n`nCommand: winget install --id LLVM.LLVM --exact", "Install LLVM Toolchain", [System.Windows.MessageBoxButton]::YesNo, [System.Windows.MessageBoxImage]::Question)
+        if ($confirm -eq [System.Windows.MessageBoxResult]::Yes) {
+            $btnInstallLlvm.IsEnabled = $false
+            $btnInstallLlvm.Content = "Installing..."
+            Write-GuiLog "Starting automated LLVM installation via winget..."
+            $window.Cursor = [System.Windows.Input.Cursors]::Wait
+            [System.Windows.Forms.Application]::DoEvents()
+            try {
+                $out = & winget install --id LLVM.LLVM --exact --accept-source-agreements --accept-package-agreements 2>&1
+                foreach ($line in $out) {
+                    Write-GuiLog $line
+                }
+                Refresh-PreflightData
+                Update-UsbTabInfo
+                Write-GuiLog "LLVM toolchain installation completed. Safety pre-flight status refreshed."
+                [System.Windows.MessageBox]::Show("LLVM installation process finished! Pre-flight checks refreshed.", "LLVM Installation", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information) | Out-Null
+            }
+            catch {
+                Write-GuiLog "LLVM installation error: $($_.Exception.Message)"
+                [System.Windows.MessageBox]::Show("LLVM installation failed: $($_.Exception.Message)`n`nYou can manually install LLVM from terminal by running:`nwinget install LLVM.LLVM", "Installation Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error) | Out-Null
+            }
+            finally {
+                $btnInstallLlvm.IsEnabled = $true
+                $btnInstallLlvm.Content = "Install LLVM (winget)"
+                $window.Cursor = [System.Windows.Input.Cursors]::Arrow
+            }
+        }
+    })
+
 $btnRefreshUsb.Add_Click({
         Refresh-UsbList
         Write-GuiLog "Refreshed connected removable USB drive list."
@@ -2345,16 +2471,22 @@ $btnStageProbeDirect.Add_Click({
         $letter = $selected.Substring(0, 1)
         $confirm = [System.Windows.MessageBox]::Show("Stage read-only Diagnostic Probe on drive $letter`:`\?`n`nWhen booted, the probe records physical DIAGnn.TXT, IMGnn.BIN, and PROM.BIN captures from this PC, and IMMEDIATELY boots into Windows without hanging or returning to BIOS.`n`nTwo agreeing cold-boot captures are required for custom unlock profile generation.", "Confirm Diagnostic Probe Staging", [System.Windows.MessageBoxButton]::YesNo, [System.Windows.MessageBoxImage]::Question)
         if ($confirm -eq [System.Windows.MessageBoxResult]::Yes) {
+            Show-UsbProgressOverlay -Title "Staging Diagnostic Probe..." -Detail "Identifying system Windows ESP GUID, compiling tailored probe binary, and writing files to USB drive..."
             try {
                 Write-GuiLog "Compiling and staging Diagnostic Probe on $letter`:..."
                 $msg = Stage-DiagnosticProbeUsb -Letter $letter
                 Write-GuiLog $msg
                 Update-UsbTabInfo
+                Hide-UsbProgressOverlay
                 [System.Windows.MessageBox]::Show("Diagnostic Probe staged successfully on drive $letter`:`\!`n`nNext steps:`n1. Power off PC completely (Cold Shutdown, do not use Restart).`n2. Turn on and press Boot Menu key (ASUS F8).`n3. Select UEFI USB drive. The probe safely records your card's pre-boot registers and hands off directly to Windows!`n4. Once in Windows, repeat once more (Cold Shutdown -> Boot USB) to obtain 2 agreeing captures.`n5. Reopen this utility and click 'Build & Stage Custom Unlock Bootloader'!", "Diagnostic Probe Staged (Step 1)", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information) | Out-Null
             }
             catch {
+                Hide-UsbProgressOverlay
                 Write-GuiLog "Error staging probe: $($_.Exception.Message)"
                 [System.Windows.MessageBox]::Show($_.Exception.Message, "Staging Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error) | Out-Null
+            }
+            finally {
+                Hide-UsbProgressOverlay
             }
         }
     })
@@ -2366,24 +2498,33 @@ $btnDeployUsb.Add_Click({
             return
         }
         $letter = $selected.Substring(0, 1)
-        $confirm = [System.Windows.MessageBox]::Show("Deploy/Build Unlock files onto drive $letter`:`\?`n`nFor non-reference systems (e.g. Intel B460 + ASUS RTX 3090), this checks for pre-boot captures and compiles a custom Headless Unlock bootloader tailored to your card.`n`nProceed?", "Confirm USB Deployment", [System.Windows.MessageBoxButton]::YesNo, [System.Windows.MessageBoxImage]::Question)
-        if ($confirm -eq [System.Windows.MessageBoxResult]::Yes) {
-            try {
-                Write-GuiLog "Starting USB deployment / build on $letter`:..."
-                $res = Deploy-ToUsb $letter
-                Write-GuiLog "Operation complete: $($res.Status)"
-                Update-UsbTabInfo
 
-                if ($res.IsProbe) {
-                    [System.Windows.MessageBox]::Show("Diagnostic Probe staged on drive $letter`:`\! ($($res.Captures)/2 captures found)`n`nYour machine requires 2 pre-boot hardware captures before the custom unlock bootloader can be compiled.`n`nNext steps:`n1. Power off PC completely (Cold Shutdown).`n2. Boot USB from Boot Menu (ASUS F8). It logs registers and starts Windows directly.`n3. Repeat once more for the 2nd capture.`n4. Reopen this utility and click this button again!", "Diagnostic Probe Staged (Step 1 of 2)", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information) | Out-Null
-                }
-                else {
-                    [System.Windows.MessageBox]::Show("Custom Headless Unlock bootloader deployed successfully to $letter`:`\!`n`nWhen booted, the custom unlocker will apply the tensor selector registers and directly launch Windows Boot Manager.`n`nReboot your PC and press your Boot Menu key (ASUS F8 / Gigabyte F12 / MSI F11) to boot.", "Unlock Deployment Success (Step 2)", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information) | Out-Null
-                }
+        # Enforce that both cold-boot captures are detected before allowing build
+        $captureStatus = Get-UsbProbeCaptureStatus -Letter $letter
+        if ($captureStatus.Count -lt 2) {
+            [System.Windows.MessageBox]::Show("Building the custom unlock bootloader requires both cold-boot hardware captures on drive $letter`:`\ (DIAG00.TXT and DIAG01.TXT).`n`nCurrent captures detected: $($captureStatus.Count) of 2.`n`nPlease click '1. Stage Diagnostic Probe' first, then power off and boot from the USB drive twice to collect both captures.", "Hardware Captures Required", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Warning) | Out-Null
+            return
+        }
+
+        $confirm = [System.Windows.MessageBox]::Show("Both hardware captures detected on drive $letter`:`\!`n`nBuild and stage the custom Headless Unlock bootloader now?`n`nThis will compile your card's custom profile, run host safety verification tests (22 test suites), and copy the bootloader and firmware assets to $letter`:.", "Confirm Custom Unlock Build", [System.Windows.MessageBoxButton]::YesNo, [System.Windows.MessageBoxImage]::Question)
+        if ($confirm -eq [System.Windows.MessageBoxResult]::Yes) {
+            Show-UsbProgressOverlay -Title "Building & Staging Custom Unlock Bootloader..." -Detail "Generating machine profile, running offline verification tests (22 test suites), compiling EFI binaries, and staging verified assets to USB drive. Please wait, this takes ~30-60 seconds..."
+            try {
+                Write-GuiLog "Starting custom unlock build and staging on $letter`:..."
+                $msg = Build-And-Stage-Local-Unlock -Letter $letter
+                Write-GuiLog $msg
+                Update-UsbTabInfo
+                Hide-UsbProgressOverlay
+
+                [System.Windows.MessageBox]::Show("Custom Headless Unlock bootloader deployed successfully to $letter`:`\!`n`nWhen booted, the custom unlocker will apply the tensor selector registers and directly launch Windows Boot Manager.`n`nReboot your PC and press your Boot Menu key (ASUS F8 / Gigabyte F12 / MSI F11) to boot.", "Unlock Deployment Success (Step 2)", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information) | Out-Null
             }
             catch {
+                Hide-UsbProgressOverlay
                 Write-GuiLog "USB deployment error: $($_.Exception.Message)"
                 [System.Windows.MessageBox]::Show($_.Exception.Message, "Deployment Failed", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error) | Out-Null
+            }
+            finally {
+                Hide-UsbProgressOverlay
             }
         }
     })

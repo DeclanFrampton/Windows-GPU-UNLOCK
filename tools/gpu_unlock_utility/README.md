@@ -192,7 +192,7 @@ Inspects host platform topology and determines target GPU eligibility:
 ---
 
 ### Tab 2: Pre-Flight Safety
-Before attempting any UEFI boot unlock, five critical safety checks are evaluated:
+Before attempting any UEFI boot unlock, six critical safety checks and prerequisites are evaluated:
 
 1. **UEFI Secure Boot**:
    - Status: `[OK]` (Disabled) or `[FAIL]` (Enabled).
@@ -211,8 +211,13 @@ Before attempting any UEFI boot unlock, five critical safety checks are evaluate
    - *Why is this gold initially?* Proprietary NVIDIA firmware binaries cannot legally be redistributed inside public Git repositories (see `docs/ASSETS.en.md`).
    - *Understanding the filenames*: `booter_load_ga102.bin` is **not** an invalid PC bootloader; it is NVIDIA's Falcon microcontroller firmware booter for GA102 GPUs.
    - *Quick Actions*:
+     - **Download Assets (1-Click)**: Automated acquisition and checksum verification.
      - **Import Assets...**: Click to choose any folder containing the 5 extracted `.bin` files (e.g. from Downloads). The utility checks all SHA-256 hashes and copies valid files into `assets\`.
      - **How to Get Assets**: Opens `docs/ASSETS.en.md` and displays instructions to generate them using the upstream tool (`make inputs firmware`).
+6. **LLVM / Clang Toolchain (`clang.exe` and `lld-link.exe`)**:
+   - Status: `[OK]` (Green - Ready) or `[!]` (Gold - Missing).
+   - *Requirement*: Required for compiling machine-tailored Headless Unlock bootloaders for non-reference motherboards.
+   - *Quick Action*: If missing, an **Install LLVM (winget)** button appears, allowing 1-click installation via Windows Package Manager (`winget install --id LLVM.LLVM --exact`).
 
 ---
 
@@ -229,12 +234,14 @@ Stages either a standard pre-compiled unlock bootloader or guides you through th
      - *Action*: Power off PC completely, boot USB once (F8/F12). Repeat once more to capture two agreeing cold boots.
   2. **Capture Agreement Tracker**:
      - Real-time indicator tracks capture status: `0 of 2`, `1 of 2`, or `2 of 2 complete [READY FOR CUSTOM UNLOCK BUILD]`.
-  3. **Step 2: Build & Stage Custom Unlock Bootloader**:
-     - Unlocks once 2 agreeing captures are detected on the USB drive.
-     - Compiles your machine's hardware profile ([`profile-local.h`](../../internal-boot/unlock/profile-local.h)) locked to your exact PCIe BDF address, VBIOS PROM hash, and strap registers.
+  3. **Step 2: Build & Stage Custom Unlock Bootloader (Conditionally Enabled)**:
+     - Automatically disabled (50% opacity with tooltip guidance) until **2 of 2** agreeing cold-boot captures are detected on the target USB drive.
+     - Once enabled, compiling unlocks your machine's hardware profile ([`profile-local.h`](../../internal-boot/unlock/profile-local.h)) locked to your exact PCIe BDF address, VBIOS PROM hash, and strap registers.
      - Executes the mandatory 22-suite offline verification harness (`test-profile.ps1`) using LLVM/Clang.
      - Builds the parent loader (`BOOTX64.EFI`) and child unlock binary (`UNLOCK-HEADLESS.EFI`) featuring buffered I/O logging (eliminating USB flush stalls).
      - Copies the verified binaries and firmware assets to `E:\EFI\BOOT\` and `E:\EFI\WindowsGPUUnlock\`.
+  4. **Active Progress Overlay**:
+     - When either staging the probe or building the custom unlock bootloader, an animated progress overlay appears over the tab informing you of the background compilation/testing status and advising to keep the USB drive connected until complete.
 
 #### One-Time Boot Menu Guide:
 - **ASUS**: Press <kbd>F8</kbd> during POST
