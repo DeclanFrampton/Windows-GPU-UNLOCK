@@ -30,6 +30,8 @@ def main():
         (output / (name + '.log')).write_text(result.stdout + result.stderr, encoding='utf-8')
         if (result.returncode != 0) != expect_failure:
             raise RuntimeError(name + ': ' + (result.stdout + result.stderr)[-2000:])
+        if expect_failure and name.endswith('-run') and (result.returncode != 1 or 'FAIL ' not in result.stderr):
+            raise RuntimeError('Mutant must fail an assertion, not crash: ' + name)
         stages.append({'stage': name, 'exit': result.returncode})
         return result.stdout.strip()
 
@@ -51,13 +53,18 @@ def main():
         original = (HERE / 'stop-transition.c').read_text(encoding='utf-8')
         changes = {
             'ignore-late-config': ('for(UINTN i=0;i<64;i++)', 'for(UINTN i=0;i<16;i++)'),
-            'ignore-parents': ('i<before->ParentCount', 'i<0'),
+            'ignore-parents': ('i<before->ParentCount;i++)\n    if(!SameDevice(&before->Parents[i],&after->Parents[i],0,0))\n      return GU_DS_STOP_REFUSED;',
+                              'i<0;i++)\n    if(!SameDevice(&before->Parents[i],&after->Parents[i],0,0))\n      return GU_DS_STOP_REFUSED;'),
             'mask-unknown-cache': ('b->Attributes!=(a->Attributes&~cleared)',
                                    '(b->Attributes&0x700)!=(a->Attributes&~cleared)'),
             'forget-memory-support': ('if(missing && !(before->Gpu.Supported&GU_DS_MEMORY))', 'if(FALSE)'),
             'wrong-result': ('return missing?GU_DS_STOP_MEMORY_OFF:GU_DS_STOP_UNCHANGED;',
                              'return GU_DS_STOP_UNCHANGED;'),
             'accept-uncorrected-baseline': ('before->Gpu.Attributes!=GU_DS_MEMORY', 'FALSE'),
+            'allow-memory-on-released-state': ('(after->Gpu.Config[1]&0xffffU)!=0', 'FALSE'),
+            'derive-uncorrected-target': ('plan->PlannedGpu.Attributes=GU_DS_MEMORY;', 'plan->PlannedGpu.Attributes=before->Gpu.Attributes;'),
+            'ignore-planned-config': ('SameDevice(&plan->PlannedGpu,&derived.PlannedGpu,0,0)', 'TRUE'),
+            'accept-corrected-as-uncorrected': ('before->Gpu.Attributes!=(GU_DS_IO|GU_DS_MEMORY)', 'FALSE'),
         }
         for name, (old, new) in changes.items():
             if original.count(old) != 1:

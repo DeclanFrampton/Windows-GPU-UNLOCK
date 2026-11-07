@@ -28,10 +28,12 @@ def main():
         'static GU_DR_RESULT (*volatile Restore)(GU_DS_EFI_CONTEXT *,GU_DR_TRANSACTION *)=GuDsEfiRestoreRun;\n') if args.restore else ''
     if args.restore:
         extra+=('static GU_DS_CAPTURE PostCapture;\n'
-            'static EFI_STATUS (*volatile CaptureAfter)(GU_DS_CAPTURE *,EFI_BOOT_SERVICES *,const GU_DS_CAPTURE_TARGET *,const GU_DS_SNAPSHOT *)=GuDsEfiCaptureAfterStop;\n')
+            'static EFI_STATUS (*volatile CaptureAfter)(GU_DS_CAPTURE *,EFI_BOOT_SERVICES *,const GU_DS_CAPTURE_TARGET *,const GU_DS_SNAPSHOT *)=GuDsEfiCaptureAfterStop;\n'
+            'static EFI_STATUS (*volatile CaptureReleased)(GU_DS_CAPTURE *,EFI_BOOT_SERVICES *,const GU_DS_CAPTURE_TARGET *,const GU_DS_SNAPSHOT *)=GuDsEfiCaptureReleasedMismatch;\n')
     dispatch=(' if(((UINTN)image)&1)return InitRestore(&RestoreContext,table->BootServices,image,Pins,0,&Baseline,RejectLog,NULL);\n'
         ' if(((UINTN)image)&2)return Restore(&RestoreContext,&RestoreTransaction)==GU_DR_INVALID?EFI_UNSUPPORTED:EFI_ABORTED;\n') if args.restore else ''
     if args.restore:dispatch+=' if(((UINTN)image)&4)return CaptureAfter(&PostCapture,table->BootServices,&Target,&Baseline);\n'
+    if args.restore:dispatch+=' if(((UINTN)image)&8)return CaptureReleased(&PostCapture,table->BootServices,&Target,&Baseline);\n'
     entry.write_text('/* Invalid-target link fixture; never execute or install. */\n'
         '#include "efi-owned.h"\nstatic GU_DO_TRANSACTION Transaction;\nstatic GU_DS_CAPTURE_TARGET Target;\n'
         'static BOOLEAN RejectLog(VOID *c,const char *e){(void)c;(void)e;return FALSE;}\n'
@@ -81,7 +83,7 @@ def main():
     for name in ('GuDsOwnedRun','GuDsEfiCapture','GuDsEfiInitialize','GuDsEfiRun','GuDecodeSync'):
         if not re.search(r'\b'+name+r'\b',mapping):raise RuntimeError('Missing retained lifecycle symbol: '+name)
     if args.restore:
-        for name in ('GuDsEfiInitializeRestore','GuDsEfiRestoreRun','GuDsStopTransition','GuDsEfiCaptureAfterStop'):
+        for name in ('GuDsEfiInitializeRestore','GuDsEfiRestoreRun','GuDsStopTransition','GuDsEfiCaptureAfterStop','GuDsEfiCaptureReleasedMismatch','GuDsPlanReleasedMismatch'):
             if not re.search(r'\b'+name+r'\b',mapping):raise RuntimeError('Missing restore symbol: '+name)
     if re.search(r'\b(?:__chkstk|GuDsTestCoreWorkspace|GuDsTestAdapterWorkspace)\b',mapping):
         raise RuntimeError('Stack-probe stub or host-only address probe entered image')

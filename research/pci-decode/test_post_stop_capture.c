@@ -6,6 +6,7 @@
 static GU_DS_SNAPSHOT Before,ExpectedBefore;
 static BOOLEAN PostReentry,FreezeBefore,BeforeFrozen;
 static unsigned SwitchAt;
+static BOOLEAN ReleasedMode;
 static void PostHook(void) {
   if(PostReentry) {
     unsigned calls=M->Calls;GU_DS_CAPTURE fresh={0};
@@ -15,6 +16,8 @@ static void PostHook(void) {
       "post entry refuses fresh context before private baseline changes");
     Check(GuDsEfiCapture(&fresh,&M->Boot,&Target)==EFI_ALREADY_STARTED && !fresh.Used,
       "ordinary entry shares post entry workspace guard");
+    Check(GuDsEfiCaptureReleasedMismatch(&fresh,&M->Boot,&Target,&Before)==EFI_ALREADY_STARTED && !fresh.Used,
+      "released-mismatch entry shares the same workspace guard");
     Check(M->Calls==calls,"cross entry reentry makes no service call");
   }
   if(FreezeBefore && !BeforeFrozen){BeforeFrozen=TRUE;Before.Gpu.Config[63]^=1;}
@@ -28,9 +31,14 @@ static void PostSetup(MODEL *m,unsigned parents,UINTN segment,BOOLEAN off) {
   ExpectedBefore=Before;m->Devices[0].State.Attributes=off?0:GU_DS_MEMORY;
   if(off)m->Devices[0].State.Config[1]&=~2U;
   PostReentry=FreezeBefore=BeforeFrozen=FALSE;SwitchAt=0;CaptureExtraHook=PostHook;
+  ReleasedMode=FALSE;
+}
+static void ReleasedSetup(MODEL *m,unsigned parents,UINTN segment) {
+  PostSetup(m,parents,segment,TRUE);Before.Gpu.Attributes|=GU_DS_IO;ExpectedBefore=Before;ReleasedMode=TRUE;
 }
 static EFI_STATUS PostCollect(MODEL *m) {
-  return GuDsEfiCaptureAfterStop(&Capture,&m->Boot,&Target,&Before);
+  return ReleasedMode?GuDsEfiCaptureReleasedMismatch(&Capture,&m->Boot,&Target,&Before):
+    GuDsEfiCaptureAfterStop(&Capture,&m->Boot,&Target,&Before);
 }
 static void PostRefuse(MODEL *m) {
   Check(PostCollect(m)!=EFI_SUCCESS,"unsafe post capture refuses");
@@ -100,5 +108,38 @@ int main(void) {
     !memcmp(&saved,&Capture,sizeof(saved)) && !m.Calls,"baseline/target overlap refuses before mutation");
   Check(GuDsEfiCaptureAfterStop(&Capture,&m.Boot,&Target,(VOID *)&m.Boot)==EFI_INVALID_PARAMETER &&
     !memcmp(&saved,&Capture,sizeof(saved)) && !m.Calls,"baseline/Boot overlap refuses before mutation");
+  for(unsigned p=1;p<=15;p++)for(unsigned s=0;s<3;s++) {
+    ReleasedSetup(&m,p,s==2?0xffff:s);PostReentry=TRUE;
+    Check(PostCollect(&m)==EFI_SUCCESS && Capture.Ready,"hypothetical uncorrected baseline release capture");
+    GU_DS_RELEASE_PLAN plan;
+    Check(GuDsPlanReleasedMismatch(&Before,&Capture.Snapshot,&plan) &&
+      Before.Gpu.Attributes==0x300 && !Capture.Snapshot.Gpu.Attributes && plan.PlannedGpu.Attributes==GU_DS_MEMORY,
+      "actual cache observations and derived target stay separate");ReadOnly(&m);
+  }
+  ReleasedSetup(&m,2,0);Check(PostCollect(&m)==EFI_SUCCESS,"released-mismatch fault baseline");calls=m.Calls;
+  for(unsigned at=1;at<=calls;at++) {
+    for(unsigned warning=0;warning<2;warning++) {
+      ReleasedSetup(&m,2,0);m.FaultAt=at;m.FaultStatus=warning?EFI_WARN_UNKNOWN_GLYPH:EFI_DEVICE_ERROR;PostRefuse(&m);
+    }
+    ReleasedSetup(&m,2,0);m.DropAt=at;PostRefuse(&m);
+  }
+  for(unsigned bad=0;bad<8;bad++) {
+    ReleasedSetup(&m,2,0);
+    switch(bad) {
+      case 0:Before.Gpu.Attributes=GU_DS_MEMORY;break;
+      case 1:m.Devices[0].State.Attributes=GU_DS_IO;break;
+      case 2:m.Devices[0].State.Attributes=GU_DS_MEMORY;break;
+      case 3:m.Devices[0].State.Config[1]|=2;m.Devices[0].State.Attributes=GU_DS_MEMORY;break;
+      case 4:Before.Gpu.Config[63]^=1;break;
+      case 5:Before.Parents[1].Config[63]^=1;break;
+      case 6:m.Devices[0].State.Config[1]|=4;break;
+      case 7:Before.Gpu.Supported&=~GU_DS_MEMORY;break;
+    }
+    PostRefuse(&m);
+  }
+  ReleasedSetup(&m,2,0);FreezeBefore=FreezeTarget=TRUE;
+  Check(PostCollect(&m)==EFI_SUCCESS && BeforeFrozen && Frozen,"released-mismatch baseline frozen before callbacks");
+  GU_DS_RELEASE_PLAN frozenPlan;
+  Check(GuDsPlanReleasedMismatch(&ExpectedBefore,&Capture.Snapshot,&frozenPlan),"retained actual baseline revalidates observed release");
   printf("PASS %u post-Stop capture/composition assertions; RAM only\n",Checks);return 0;
 }

@@ -56,6 +56,8 @@ def main():
             'accept-fresh-reentry': ('c->Used!=FALSE || ActiveBusy!=FALSE', 'c->Used!=FALSE'),
             'skip-baseline-overlap': ('if(before && (Overlap(before,sizeof(*before),c,sizeof(*c)) ||',
                 'if(FALSE && before && (Overlap(before,sizeof(*before),c,sizeof(*c)) ||'),
+            'skip-released-mismatch-validation': ('if(!GuDsPlanReleasedMismatch(&ActiveBefore,v,&plan))goto done;', '(void)plan;'),
+            'use-mutable-release-baseline': ('GuDsPlanReleasedMismatch(&ActiveBefore,v,&plan)', 'GuDsPlanReleasedMismatch(before,v,&plan)'),
         }
         for name, (old, new) in changes.items():
             if text.count(old) != 1:

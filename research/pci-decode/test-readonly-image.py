@@ -23,8 +23,10 @@ def main():
     out.mkdir(parents=True)
     entry=out/'entry.c'
     extra=('static GU_DS_SNAPSHOT Before;\n'
-        'static EFI_STATUS (*volatile After)(GU_DS_CAPTURE *,EFI_BOOT_SERVICES *,const GU_DS_CAPTURE_TARGET *,const GU_DS_SNAPSHOT *)=GuDsEfiCaptureAfterStop;\n') if args.post_stop else ''
-    dispatch=(' if(((UINTN)image)&1)return After(&Capture,table->BootServices,&Target,&Before);\n') if args.post_stop else ''
+        'static EFI_STATUS (*volatile After)(GU_DS_CAPTURE *,EFI_BOOT_SERVICES *,const GU_DS_CAPTURE_TARGET *,const GU_DS_SNAPSHOT *)=GuDsEfiCaptureAfterStop;\n'
+        'static EFI_STATUS (*volatile Released)(GU_DS_CAPTURE *,EFI_BOOT_SERVICES *,const GU_DS_CAPTURE_TARGET *,const GU_DS_SNAPSHOT *)=GuDsEfiCaptureReleasedMismatch;\n') if args.post_stop else ''
+    dispatch=(' if(((UINTN)image)&1)return After(&Capture,table->BootServices,&Target,&Before);\n'
+        ' if(((UINTN)image)&2)return Released(&Capture,table->BootServices,&Target,&Before);\n') if args.post_stop else ''
     entry.write_text('/* Link test only. No valid target or boot configuration. Never execute. */\n'
         '#include "efi-capture.h"\nstatic GU_DS_CAPTURE Capture;\nstatic GU_DS_CAPTURE_TARGET Target;\n'
         'static EFI_STATUS (*volatile Collect)(GU_DS_CAPTURE *,EFI_BOOT_SERVICES *,const GU_DS_CAPTURE_TARGET *)=GuDsEfiCapture;\n'
@@ -51,7 +53,7 @@ def main():
             if r.returncode:raise RuntimeError('Readonly object compile failed: '+str(source))
             if obj.read_bytes()[:2]!=b'\x64\x86':raise RuntimeError('Unexpected COFF machine')
             if not args.post_stop and source.name=='efi-capture.c':
-                for symbol in (b'GuDsEfiCaptureAfterStop',b'GuDsStopTransition'):
+                for symbol in (b'GuDsEfiCaptureAfterStop',b'GuDsEfiCaptureReleasedMismatch',b'GuDsStopTransition',b'GuDsPlanReleasedMismatch'):
                     if symbol in obj.read_bytes():raise RuntimeError('Post-Stop symbol in ordinary collector object')
         binary=folder/'SYNTHETIC-READONLY-NOT-FOR-EXECUTION.efi';symbols=folder/'symbols.map'
         linked=run(folder/'link.log',[args.lld_link,'/nologo','/nodefaultlib','/subsystem:efi_application',
@@ -72,7 +74,7 @@ def main():
     forbidden=r'\b(?:GuDecodeSync|GuDsEfiRun|GuDsEfiInitialize|gpu_unlock_[A-Za-z_0-9]+)\b'
     if re.search(forbidden,symbols.read_text()):raise RuntimeError('Actuator symbol reached readonly image')
     if args.post_stop:
-        for symbol in ('GuDsEfiCaptureAfterStop','GuDsStopTransition'):
+        for symbol in ('GuDsEfiCaptureAfterStop','GuDsEfiCaptureReleasedMismatch','GuDsStopTransition','GuDsPlanReleasedMismatch'):
             if not re.search(r'\b'+symbol+r'\b',symbols.read_text()):raise RuntimeError('Missing post-Stop symbol '+symbol)
     spec=importlib.util.spec_from_file_location('readonly_verify_pe',ROOT/'internal-boot/unlock/verify_pe.py')
     verifier=importlib.util.module_from_spec(spec);spec.loader.exec_module(verifier)

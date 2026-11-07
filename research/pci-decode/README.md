@@ -402,7 +402,7 @@ python -I research/pci-decode/test-stop-transition.py --clang C:\TOOLS\LLVM20\bi
 
 Run from a host shell with the existing MSVC headers/libraries available. The
 runner builds a RAM executable and a freestanding COFF object, records source
-hashes and requires six broken guards to compile before their runtime rejection.
+hashes and requires ten broken guards to compile before explicit assertion failures.
 Fixtures sweep every config bit and metadata/attribute/support bit of the GPU
 and all 1..16 synthetic parents, over three PCI segments. They are synthetic
 models, not private captured snapshots or another hardware success. No EFI image
@@ -444,7 +444,7 @@ The host model runs the ordinary collector suite as well as the post-Stop cases,
 including cross-entry fresh-context reentry, callback faults, partial output,
 capability/target/parent drift, caller baseline edits, storage overlap and changes
 between scans. Each ordinary service-failure case is followed by a separate valid
-session to check guard release. Six broken guards must compile and fail at runtime;
+session to check guard release. Eight broken guards must compile and fail at runtime;
 define values 0 and 2 must fail compilation. The link test retains both read-only
 entries and the pure transition, checks PE/imports/no-actuator symbols and bounded
 function stack frames. Without `--post-stop`, it also checks that the ordinary
@@ -510,3 +510,51 @@ lifecycle, records PE/import/symbol and bounded stack evidence, and rejects five
 compiled automatic-storage variants. None of these synthetic images is executed,
 staged or a qualified deployment package. Production pre-Stop cache/claim ordering
 and physical hardware qualification remain unresolved.
+
+## Uncorrected-before release hypothesis: observation only
+
+The contributor's [pinned pre-step](https://github.com/kevinwwillis/Windows-GPU-UNLOCK/blob/ff93077/research/msi-x570-3090/prestep/prestep.c)
+opens PCI protocols using GET_PROTOCOL, not an exclusive claim. Its
+[core](https://github.com/kevinwwillis/Windows-GPU-UNLOCK/blob/ff93077/research/msi-x570-3090/prestep/decode-sync.c)
+first attempts Enable(IO), then Disable(IO). This differs from the shared
+held-claim correction contract and is not adopted here. The published wrapper log
+shows raw command2 before NVIDIA Stop and0 afterwards, with only the MEM raw bit
+changing across the complete GPU config; this boot followed the contributor's
+cache correction. It does **not** establish that Stop directly from an uncorrected
+cache300 state will reach raw0/cache0. That alternative remains a synthetic
+hypothesis, not another reported hardware success.
+
+`GuDsPlanReleasedMismatch(Before, After, Plan)` validates actual raw2/cache300
+and actual raw0/cache0 snapshots. All other GPU config/status, identity/location,
+support and every parent field must match exactly, and MEMORY must be supported.
+Only then does it produce `GU_DS_RELEASE_PLAN`: a separately named PlannedGpu with
+the original GPU config and target MEMORY attributes, plus the observed attribute
+values and MEMORY restore mask. This type contains no Snapshot/Complete field.
+It never rewrites either observation or labels the derived target as an observed
+corrected pre-Stop baseline. Disjoint failures clear the plan; overlap refusal
+preserves argument storage.
+
+`GuDsReleasePlanMatches` revalidates the supplied pair and the derived GPU fields.
+It is **not a fingerprint of earlier snapshots**: the plan stores no parent
+contents, so a different valid pair with the same GPU target and parent count can
+derive the same plan. A future actuator must retain private copies of the actual
+full original snapshots and the pinned paths, then revalidate those copies at use.
+Ready or a matching plan alone grants no Stop/claim/write permission.
+
+With the existing `GU_DS_POST_STOP_CAPTURE=1` research option,
+`GuDsEfiCaptureReleasedMismatch` freezes an actual cache300 baseline and collects
+only the restricted raw0/cache0 observation. Each full scan must produce a valid
+plan and both scans must agree exactly. The output remains the actual raw0/cache0
+snapshot. The corrected-before `GuDsEfiCaptureAfterStop` and ordinary capture
+contracts remain unchanged. The plan and collector are tested by the existing
+transition/post-Stop host runners and retained by the opt-in synthetic link tests.
+
+This alternate route adds no driver Stop, ownership acquisition or restoration.
+It is not passed into `GuDsEfiInitializeRestore`, whose corrected-observed-before
+contract still applies. A separate initializer that explicitly retains the actual
+observations and derived target would be required before reusing restoration.
+Production CapturePermit, Full.Attributes, RestoreDecode, final verification,
+profile/proven admission and handoff are unchanged. Relaxing only CapturePermit
+would be incorrect: the existing restoration/final verification would still
+expect the original300 attributes. Exact driver/console-release qualification
+and hardware evidence for the uncorrected Stop transition remain outstanding.

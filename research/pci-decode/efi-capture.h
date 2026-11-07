@@ -37,4 +37,10 @@ EFI_STATUS GuDsEfiCapture(GU_DS_CAPTURE *Context,EFI_BOOT_SERVICES *Boot,const G
  * single-use and current-return-status requirements above still apply. */
 EFI_STATUS GuDsEfiCaptureAfterStop(GU_DS_CAPTURE *Context,EFI_BOOT_SERVICES *Boot,
   const GU_DS_CAPTURE_TARGET *Target,const GU_DS_SNAPSHOT *Before);
+/* Separate hypothetical route: retain an actual raw2/cache300 baseline, and
+ * observe only raw0/cache0 with the exact restricted GPU/parent delta. Output
+ * Snapshot remains the actual observation; it is not a corrected-before value.
+ * No Stop or restoration is performed or qualified by this API. */
+EFI_STATUS GuDsEfiCaptureReleasedMismatch(GU_DS_CAPTURE *Context,EFI_BOOT_SERVICES *Boot,
+  const GU_DS_CAPTURE_TARGET *Target,const GU_DS_SNAPSHOT *Before);
 #endif
