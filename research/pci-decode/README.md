@@ -59,7 +59,7 @@ dword of the GPU and all 16 parents, full attribute/token/location drift, and
 attempts to reuse a transaction. All protocol effects are RAM callbacks; no GPU,
 firmware, boot setting or physical media is accessed. Passing this model grants
 no hardware support, LOCAL write evidence or permission to run a correction.
-The optional mutation checks compile twenty-one deliberately broken copies in the ignored
+The optional mutation checks compile twenty-eight deliberately broken copies in the ignored
 output directory and require the host tests to reject them. A compile failure does
 not count as detecting a broken guard. Original source files remain unchanged.
 
@@ -116,7 +116,79 @@ the real mismatch before NVIDIA Stop, whereas its exclusive claim is acquired
 after Stop in RestoreDecode. A self-exclusive adapter cannot simply replace the
 contributor pre-step while NVIDIA still owns the protocol. This change does not
 relax CapturePermit, stop a driver, force an exclusive OpenProtocol, restore decode,
-stage an image or qualify any of the reported machines.
+stage an image or qualify any of the reported machines. The separate research
+caller below adds a bounded claim lifecycle for an already unmanaged controller;
+it does not change that production ordering.
+
+## Research owned lifecycle caller
+
+`efi-owned.h/c` composes current-boot capture, exclusive protocol acquisition,
+the existing correction adapter, exact-tuple CloseProtocol and post-close checks.
+There is no EFI entry point or production/build/staging connection. Callers supply
+one zero-initialized `GU_DO_TRANSACTION`, their retained image handle, a qualified
+exact target and a durable logger. Calls require TPL_APPLICATION, serialized
+controller access and live interfaces/storage. A private per-image workspace and
+busy guard reject callback reentry even through a fresh transaction. They are not
+a multiprocessor lock; do not reset/recreate transactions to retry.
+
+The initial collector must accept the full GPU/parent snapshot. Already-consistent
+memory-only attributes receive another logged snapshot without acquiring a claim
+or writing. The correction path requires command=2/cache=0x300. Command 0/1 after
+a driver stop, BME-on states and other unqualified configurations refuse before
+claim acquisition. This caller does not enable decode to make them eligible.
+
+Before Open, two opener views allow only canonical passive records, with exact
+agent/controller/attribute/count preservation. Any existing reference by the
+same OwnerImage, managing/child/exclusive/unknown record or malformed output
+refuses. At most 63 passives leave room for the existing adapter's 64-record bound
+including one new self claim. A logged intent and repeated complete capture
+precede the final view. Its query allocation stays held across the single Open;
+no logging or FreePool callback intervenes. Boot/PCI methods are frozen.
+
+Importantly, [UEFI OpenProtocol](https://uefi.org/specs/UEFI/2.10/07_Services_Boot_Services.html#efi-boot-services-openprotocol)
+EXCLUSIVE can implicitly disconnect a BY_DRIVER consumer. This library never
+directly calls Stop/Disconnect, but cannot promise their absence if the opener
+state changes during Open. Observing no manager is not a lock. Trusted firmware
+and read-only callbacks plus caller serialization/quiescence remain prerequisites.
+[CloseProtocol](https://uefi.org/specs/UEFI/2.10/07_Services_Boot_Services.html#efi-boot-services-closeprotocol)
+removes the tuple's references; rejecting pre-existing self references is what
+allows this caller to attribute cleanup to its new acquisition.
+
+Open must succeed with the exact pinned interface and an observed self-exclusive,
+NULL-controller/count=1 record alongside the unchanged passives before adapter
+execution. Cleanup calls frozen Close at most once after strict Open success or
+an attributable observed self claim. An error/warning can leave a claim behind:
+an observable attributable claim is cleaned without promoting the failure; an
+unobservable error-side claim is left explicitly uncertain, without blind Close.
+No retry or automatic recovery/chainload capability is offered.
+
+Close is followed by an exact no-self/passive view, another full capture and a
+final opener view. The earlier view's failure cannot be erased by the later one.
+A reproduced host regression showed that a capture callback could recreate the
+self claim after the first no-self view; the final view now catches that case.
+All evidence still ends at finite callback boundaries. In particular, the final
+query's FreePool callback must obey the trusted contract: subsequent hidden
+mutation cannot be ruled out atomically by more finite samples.
+
+The report separates invocation flags from real Open/Close statuses and
+`ClaimMayRemain`. Lifecycle ownership/cleanup statuses are separate from the
+adapter's ownership/cleanup/Disable statuses, each with observed/invoked flags;
+an actual EFI_NOT_STARTED is never mistaken for an uncalled sentinel.
+`AfterObserved` records a complete capture even when its comparison fails.
+Neither a clean mock claim nor `GU_DO_FIXED` grants firmware eligibility.
+
+The host runner includes the owned caller: 822,653 lifecycle assertions cover
+1–15 parents, segment boundaries, every service error/warning, empty/63/64-record
+opener boundaries, same-agent references, borrowed buffers, missing output,
+Open partial effects, Close uncertainty, post-close claim recreation, reentry and
+caller-input mutation. Twenty-eight compiled guard mutants cover the combined
+libraries. All effects are RAM mocks; none is a physical driver-release proof.
+
+Freestanding x64 COFF compilation also passes, but existing core/adapter automatic
+snapshots still create function frames up to 11,176 bytes under clang 20. The
+collector-only stack result below does not cover correction. This lifecycle has
+not been linked into a deployable EFI or qualified for firmware stack limits;
+stack/workspace engineering and the pre-Stop integration gap remain next gates.
 
 The GPU controller route uses the existing bounded PNP0A03/PNP0A08 parser. Two to
 sixteen PCI nodes correspond to one to fifteen immediate parent bridges. Each

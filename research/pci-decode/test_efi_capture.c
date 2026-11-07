@@ -61,7 +61,11 @@ static void CaptureRefuse(MODEL *m) {
   for(unsigned i=0;i<16;i++)Check(!memcmp(&Capture.Bindings[i],&binding,sizeof(binding)),"failed capture publishes no partial binding");
   unsigned calls=m->Calls;Check(Collect(m)==EFI_ALREADY_STARTED && m->Calls==calls,"failed capture cannot be retried");ReadOnly(m);
 }
+#ifdef GU_DS_OWNED_TEST
+int capture_fixture_main(void) {
+#else
 int main(void) {
+#endif
   MODEL m;
   for(unsigned parents=1;parents<=15;parents++)for(unsigned segment=0;segment<3;segment++) {
     CaptureSetup(&m,parents,segment==2?0xffff:segment);CaptureReentry=TRUE;
