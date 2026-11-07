@@ -38,6 +38,9 @@ static EFI_STATUS Tick(void) {
 #ifdef GU_DS_OWNED_TEST
   OwnedTick();
 #endif
+#ifdef GU_DS_RESTORE_TEST
+  RestoreTick();
+#endif
   if(M->Reenter) {
     GU_DS_TRANSACTION fresh={0};
     Check(GuDsEfiRun(&M->Adapter,&fresh)==GU_DS_REUSED,"same adapter refuses reentry through a fresh transaction");

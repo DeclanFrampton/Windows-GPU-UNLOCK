@@ -14,12 +14,14 @@ Contributors report that disabling the IO attribute reconciled these values
 before running their separate unlock workflow. Their results concern specific
 firmware/builds; they do not establish a generic firmware correction.
 
-The independent implementation here offers exactly one write capability:
+The independent cache-correction core offers exactly one write capability:
 `DisableIo`. It does not adopt the contributor pre-step's initial IO-enable attempt.
 Its callback must eventually be bound to the reviewed GPU's
 `PciIo->Attributes(Disable, IO)`. The research library adapter described below is
 implemented and tested only against RAM-backed EFIAPI mocks; it is not connected
-to any boot image and has not been authorized or tested on physical hardware.
+to any shipped boot image and has not been authorized or tested on physical hardware.
+The separately gated MEMORY restoration experiment is described at the end of
+this document; it does not broaden the correction core's capabilities.
 
 `GuDecodeSync` requires an exact baseline GPU and 1–16 caller-verified immediate
 parent bridges, including location, handle/interface tokens, all 64 config
@@ -448,3 +450,63 @@ entries and the pure transition, checks PE/imports/no-actuator symbols and bound
 function stack frames. Without `--post-stop`, it also checks that the ordinary
 collector object contains no post-Stop entry or transition reference. The synthetic
 images are never executed or staged and are not deployment packages.
+
+## Opt-in held-claim MEMORY restoration
+
+`GU_DS_POST_STOP_RESTORE=1` additionally enables `GuDsEfiInitializeRestore` and
+`GuDsEfiRestoreRun` in the research adapter. Values 0 and 2 are compile errors.
+Ordinary builds contain neither restoration entry nor a transition dependency;
+no shipped builder selects this option. All translation units sharing adapter
+contexts must use the same feature definitions. Ordinary Run refuses restore-mode
+contexts, and RestoreRun refuses ordinary/noncanonical modes.
+
+Initialization freezes the corrected pre-Stop baseline and pinned bindings,
+requires MEMORY support and performs no firmware calls. The caller must already
+hold and retain the exact self-exclusive GPU claim; the adapter does not acquire
+or close it. The same target/path association, trusted firmware/callbacks,
+serialized access and retained storage/interface lifetimes remain prerequisites.
+Driver Stop, BAR/PROM/cold-state qualification and handoff checks are separate.
+
+The run validates two complete observations around a durable intent log. Each
+scan must satisfy the restricted post-Stop policy, both scans must agree, and the
+state after logging must equal the initial post-Stop state. If MEMORY is already
+enabled, the operation logs/rechecks without writing. Otherwise it holds the last
+validated ownership-query allocation across one frozen
+`Attributes(Enable, MEMORY, NULL)` call. No FreePool or log callback occurs between
+that final query and Enable. IO/BME enable, config/MMIO writes, retries and rollback
+are not offered. Retaining a query buffer is not an ownership lock or atomicity
+guarantee.
+
+Only exact EFI_SUCCESS is accepted. Enable warning/error remains failed even if
+its bounded post-observation matches the baseline. Cleanup uncertainty stops
+further work and preserves the raw status. Successful restoration requires exact
+GPU/parent equality with the corrected baseline, a durable observation log and
+another complete matching observation after that log. This does not exclude
+changes after the last sampled read or trusted callback.
+
+The single-use `GU_DR_TRANSACTION` separately records Started, EnableInvoked,
+PostObserved, raw EnableStatus and ObservationStatus. EnableStatus starts at
+EFI_NOT_STARTED; EnableInvoked distinguishes no call from that actual firmware
+error. PostObserved means a successful complete owned observation after Enable,
+not proof of a successful write. Existing adapter ownership/cleanup statuses and
+observed flags remain separate. Active policy/report/snapshots use private bounded
+storage and the shared workspace guard, including across fresh-context callbacks.
+Pool alias checks cover that storage and the actual restoration report size.
+
+```powershell
+python -I research/pci-decode/test-efi-restore.py --clang C:\TOOLS\LLVM20\bin\clang.exe --mutations --output research/pci-decode/build/your-new-restore-model
+python -I research/pci-decode/test-owned-image.py --restore --clang C:\TOOLS\LLVM20\bin\clang.exe --lld-link C:\TOOLS\LLVM20\bin\lld-link.exe --stack-mutations --output research/pci-decode/build/your-new-restore-link
+```
+
+The RAM model composes the real opt-in collector, held-claim restoration and final
+collector verification. It also runs the ordinary adapter suite, callback
+fault/warning/partial-output sweeps, no-effect and partial-effect Enable errors,
+cross-mode/reentry, policy/report edits, claim loss, log/cleanup failures and 21
+private/caller-report pool aliases. Eight broken variants must compile and fail
+explicit assertions; process crashes do not count. The stop-snapshot alias mutant
+removes both overlapping defenses, because either alone still protects that
+storage. The link fixture retains both experiments and the existing correction
+lifecycle, records PE/import/symbol and bounded stack evidence, and rejects five
+compiled automatic-storage variants. None of these synthetic images is executed,
+staged or a qualified deployment package. Production pre-Stop cache/claim ordering
+and physical hardware qualification remain unresolved.

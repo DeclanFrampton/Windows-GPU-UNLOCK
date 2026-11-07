@@ -17,21 +17,36 @@ def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--clang',default='clang');p.add_argument('--lld-link',default='lld-link')
     p.add_argument('--output',type=Path,required=True);p.add_argument('--stack-mutations',action='store_true')
+    p.add_argument('--restore',action='store_true',help='Retain research MEMORY restore APIs; never execute')
     args=p.parse_args();out=args.output.resolve()
     if out.exists():p.error('Output must be a new directory')
     out.mkdir(parents=True)
     entry=out/'entry.c'
+    extra=('static GU_DS_EFI_CONTEXT RestoreContext;static GU_DR_TRANSACTION RestoreTransaction;\n'
+        'static GU_DS_SNAPSHOT Baseline;static GU_DS_EFI_BINDING Pins[2];\n'
+        'static EFI_STATUS (*volatile InitRestore)(GU_DS_EFI_CONTEXT *,EFI_BOOT_SERVICES *,EFI_HANDLE,const GU_DS_EFI_BINDING *,UINTN,const GU_DS_SNAPSHOT *,BOOLEAN (*)(VOID *,const char *),VOID *)=GuDsEfiInitializeRestore;\n'
+        'static GU_DR_RESULT (*volatile Restore)(GU_DS_EFI_CONTEXT *,GU_DR_TRANSACTION *)=GuDsEfiRestoreRun;\n') if args.restore else ''
+    if args.restore:
+        extra+=('static GU_DS_CAPTURE PostCapture;\n'
+            'static EFI_STATUS (*volatile CaptureAfter)(GU_DS_CAPTURE *,EFI_BOOT_SERVICES *,const GU_DS_CAPTURE_TARGET *,const GU_DS_SNAPSHOT *)=GuDsEfiCaptureAfterStop;\n')
+    dispatch=(' if(((UINTN)image)&1)return InitRestore(&RestoreContext,table->BootServices,image,Pins,0,&Baseline,RejectLog,NULL);\n'
+        ' if(((UINTN)image)&2)return Restore(&RestoreContext,&RestoreTransaction)==GU_DR_INVALID?EFI_UNSUPPORTED:EFI_ABORTED;\n') if args.restore else ''
+    if args.restore:dispatch+=' if(((UINTN)image)&4)return CaptureAfter(&PostCapture,table->BootServices,&Target,&Baseline);\n'
     entry.write_text('/* Invalid-target link fixture; never execute or install. */\n'
         '#include "efi-owned.h"\nstatic GU_DO_TRANSACTION Transaction;\nstatic GU_DS_CAPTURE_TARGET Target;\n'
         'static BOOLEAN RejectLog(VOID *c,const char *e){(void)c;(void)e;return FALSE;}\n'
         'static GU_DO_RESULT (*volatile Run)(GU_DO_TRANSACTION *,EFI_BOOT_SERVICES *,EFI_HANDLE,const GU_DS_CAPTURE_TARGET *,BOOLEAN (*)(VOID *,const char *),VOID *)=GuDsOwnedRun;\n'
+        +extra+
         'EFI_STATUS EFIAPI efi_main(EFI_HANDLE image,EFI_SYSTEM_TABLE *table){\n'
+        +dispatch+
         ' return Run(&Transaction,table->BootServices,image,&Target,RejectLog,NULL)==GU_DO_INVALID?EFI_UNSUPPORTED:EFI_ABORTED;\n}\n')
     flags=[args.clang,'-target','x86_64-pc-windows-msvc','-std=c11','-ffreestanding','-fno-builtin',
         '-fno-stack-protector','-mno-red-zone','-fshort-wchar','-Os','-Wall','-Wextra','-Werror','-fstack-usage',
         '-I',str(HERE),'-I',str(ROOT/'deps/edk2/MdePkg/Include'),'-I',str(ROOT/'deps/edk2/MdePkg/Include/X64')]
     sources=[HERE/(name+'.c') for name in ('efi-owned','efi-capture','efi-adapter','decode-sync','snapshot')]
     sources += [ROOT/'internal-boot/efi_runtime.c',entry]
+    if args.restore:
+        flags.extend(('-DGU_DS_POST_STOP_RESTORE=1','-DGU_DS_POST_STOP_CAPTURE=1'));sources.append(HERE/'stop-transition.c')
 
     def build(folder,inputs):
         objects=[]
@@ -40,6 +55,9 @@ def main():
             result=subprocess.run([*flags,'-c',str(source),'-o',str(obj)],capture_output=True,text=True,timeout=30)
             (folder/(source.stem+'-compile.log')).write_text(result.stdout+result.stderr)
             if result.returncode:raise RuntimeError('Compile failed: '+source.name)
+            if not args.restore and source.name=='efi-adapter.c':
+                for name in (b'GuDsEfiInitializeRestore',b'GuDsEfiRestoreRun',b'GuDsStopTransition'):
+                    if name in obj.read_bytes():raise RuntimeError('Restore symbol in ordinary adapter object')
             objects.append(str(obj))
         image=folder/'owned-link-test.EFI';symbols=folder/'owned-link-test.map'
         linked=subprocess.run([args.lld_link,'/nologo','/nodefaultlib','/subsystem:efi_application','/entry:efi_main',
@@ -62,6 +80,9 @@ def main():
     mapping=symbols.read_text()
     for name in ('GuDsOwnedRun','GuDsEfiCapture','GuDsEfiInitialize','GuDsEfiRun','GuDecodeSync'):
         if not re.search(r'\b'+name+r'\b',mapping):raise RuntimeError('Missing retained lifecycle symbol: '+name)
+    if args.restore:
+        for name in ('GuDsEfiInitializeRestore','GuDsEfiRestoreRun','GuDsStopTransition','GuDsEfiCaptureAfterStop'):
+            if not re.search(r'\b'+name+r'\b',mapping):raise RuntimeError('Missing restore symbol: '+name)
     if re.search(r'\b(?:__chkstk|GuDsTestCoreWorkspace|GuDsTestAdapterWorkspace)\b',mapping):
         raise RuntimeError('Stack-probe stub or host-only address probe entered image')
     spec=importlib.util.spec_from_file_location('owned_pe_checker',ROOT/'internal-boot/unlock/verify_pe.py')
@@ -91,6 +112,13 @@ def main():
             'adapter-automatic-disable-snapshot':('efi-adapter.c',[
                 ('GU_DS_SNAPSHOT *now=&DisableSnapshot;', 'GU_DS_SNAPSHOT localNow;GU_DS_SNAPSHOT *now=&localNow;')]),
         }
+        if args.restore:
+            # The shared global is still used by RestoreRun. Only the ordinary
+            # Run is made automatic by this existing negative variant.
+            changes['adapter-automatic-context'][1].pop(0)
+            changes['restore-automatic-stop-snapshot']=('efi-adapter.c',[
+                ('GU_DS_EFI_CONTEXT *a=&ActiveAdapter;*a=*c;a->Busy=FALSE;',
+                 'GU_DS_SNAPSHOT RestoreInitial;GU_DS_EFI_CONTEXT *a=&ActiveAdapter;*a=*c;a->Busy=FALSE;')])
         for name,(file,replacements) in changes.items():
             folder=out/name;folder.mkdir();text=(HERE/file).read_text()
             for before,after in replacements:
@@ -104,7 +132,7 @@ def main():
             mutants.append({'name':name,'compiled':True,'link_rejected':True,'max_frame_bytes':max(r['bytes'] for r in bad_frames)})
     inputs=sources+list(HERE.glob('*.h'))
     summary={'synthetic_invalid_target':True,'hardware_access':False,'efi_executed':False,'staged':False,
-        'package_authorized':False,'actuator_sources_linked':True,'max_frame_bytes':maximum,'frames':frames,
+        'package_authorized':False,'actuator_sources_linked':True,'restore_opt_in':args.restore,'max_frame_bytes':maximum,'frames':frames,
         'stack_mutations':mutants,'source_sha256':{str(path.relative_to(ROOT) if path.is_relative_to(ROOT) else path):hashlib.sha256(path.read_bytes()).hexdigest() for path in inputs}}
     (out/'summary.json').write_text(json.dumps(summary,indent=2))
     print(f'PASS owned lifecycle EFI link/PE/import checks; maximum function frame {maximum} bytes; never executed')
