@@ -1,123 +1,482 @@
 # Windows GPU UNLOCK - Management & Deployment Utility
 
-A unified, executive Windows GUI and CLI application for the **Windows-GPU-UNLOCK** project. Designed to simplify hardware assessment, safety checks, offline compatibility checking and capture analysis, report comparisons, USB unlock staging, BCD configuration, live telemetry, and emergency system recovery.
+The **Windows GPU UNLOCK Management & Deployment Utility** (`GpuUnlockUtility.ps1`) is a unified, executive GUI and command-line application for the [Windows-GPU-UNLOCK](https://github.com/ahsanumair/Windows-GPU-UNLOCK) project. 
+
+It provides an end-to-end management toolkit for hardware auditing, safety pre-flight verification, offline EFI compatibility analysis, headless USB staging, BCD boot configuration, live GPU telemetry, and instant 1-click emergency recovery.
 
 ---
 
-## Key Features
+## Table of Contents
 
-1. **🔍 Offline Compatibility Checker & Analyser**
-   - **Pre-boot Capture Analysis**: Safely inspects diagnostic dumps (`DIAGnn.TXT`, `IMGnn.BIN`, `PROM.BIN`) without touching running hardware or modifying boot configurations.
-   - **Multi-Engine Evaluation**: Integrates directly with `research/profile/check-compatibility.py`.
-   - **Visual Assessment Badging**: Displays clear determination badges:
-     - `[CANDIDATE]` (Eligible for local profile generation)
-     - `[NEEDS DATA]` (Missing captures or firmware dump files)
-     - `[OUTSIDE SCOPE]` (GPU or display topology outside reviewed envelope)
-     - `[INVALID DATA]` (Inconsistent or corrupted observations)
-   - **Itemized Checks Breakdown**: Lists all individual check results (`observations_pass`, `images_pass`, `prom_pass`, etc.) with status pills.
-   - **Hardware & Firmware Observations**: Summarizes capture count, target GPU PCI IDs, BDF location, chip/memory size, NVGOP binding versions, and display controller topology.
-   - **Auto-Detection on USB**: 1-click scan across all connected USB drives to find EFI capture folders (`RTX3090-UNLOCK` or root `DIAG*.TXT`).
-   - **1-Click Export & Clipboard**: Export standard Format-2 JSON reports to file or copy to clipboard for GitHub issue submission.
-   - **Report Comparison Tool**: Built-in comparator (`compare-compatibility.py`) to compare reference vs probe reports side-by-side (`same`, `different`, `unavailable`).
-
-2. **🖥️ Hardware & GPU Compatibility Audit**
-   - Automatically detects GPU model, PCI VEN/DEV, Subsystem vendor/device, VRAM, and driver version.
-   - Identifies NVIDIA Ampere architectures (`GA102`, `GA104`, `GA106`) across RTX 3060, 3070, 3070 Ti, 3080, 3090, 3090 Ti.
-   - Evaluates hardware against known fixed profiles (`b650m-3090fe`, `b660m-3070ti`, `x870-3090ti`, `b660plus-3060`, `h610m-3060`, `b660m-3090ti`) or qualifies for the generic/local USB route.
-
-3. **🛡️ Pre-Flight Safety & Prerequisite Verification**
-   - **Secure Boot**: Checks if disabled (required for unsigned EFI bootloader execution).
-   - **BitLocker Protection**: Audits C: protection state to prevent bootloader recovery key lockouts.
-   - **Windows Fast Startup**: Audits hybrid sleep (`HiberbootEnabled`) and provides a 1-click disable button.
-   - **Asset Integrity**: Validates the presence and SHA-256 hashes of the required firmware assets against `unlock/assets.json`.
-   - **Binary Integrity**: Validates pre-compiled `release/EFI/BOOT/BOOTX64.EFI` against `provenance.json`.
-
-4. **💾 USB Unlock Stager (Headless USB Route)**
-   - Scans for connected removable FAT32 storage devices.
-   - 1-click staging of `BOOTX64.EFI` to `\EFI\BOOT\` and firmware assets to `\RTX3090-UNLOCK\ASSETS\`.
-   - Provides motherboard-specific one-time boot menu keys (ASUS `F8`, Gigabyte `F12`, MSI `F11`, ASRock `F11`).
-
-5. **⚙️ Internal ESP & BCD Manager**
-   - Detects secondary dedicated GPT FAT32 ESP partitions.
-   - Coordinates with `internal-boot/Configure.ps1` and `Headless.ps1`.
-   - Manages UEFI BCD boot priorities.
-
-6. **⚡ Live Telemetry & Verification**
-   - Real-time GPU telemetry via `nvidia-smi` (clock speeds, temperature, power draw, VRAM).
-   - Guidance on cuBLAS GEMM 4096 benchmark verification protocol (measuring the expected ~1.9x to 2.0x tensor throughput uplift post-unlock).
-
-7. **🚨 One-Click Emergency Recovery**
-   - Instantly restores Windows Boot Manager (`{bootmgr}`) as priority #1 in UEFI NVRAM (`{fwbootmgr}`).
-   - Safe revert with zero risk of boot lockout.
+- [1. Overview & Architecture](#1-overview--architecture)
+- [2. System Requirements & Prerequisites](#2-system-requirements--prerequisites)
+- [3. How to Launch](#3-how-to-launch)
+  - [Option A: One-Click Batch Launcher (Recommended)](#option-a-one-click-batch-launcher-recommended)
+  - [Option B: PowerShell Launcher](#option-b-powershell-launcher)
+  - [Option C: Direct Script Invocation](#option-c-direct-script-invocation)
+  - [Administrator vs Standard User Mode](#administrator-vs-standard-user-mode)
+- [4. Graphical User Interface (GUI) Guide](#4-graphical-user-interface-gui-guide)
+  - [Header & Global Controls](#header--global-controls)
+  - [Tab 1: System & GPU Audit](#tab-1-system--gpu-audit)
+  - [Tab 2: Pre-Flight Safety](#tab-2-pre-flight-safety)
+  - [Tab 3: USB Unlock Deployer (Recommended Route)](#tab-3-usb-unlock-deployer-recommended-route)
+  - [Tab 4: Internal ESP Setup (Advanced / Optional)](#tab-4-internal-esp-setup-advanced--optional)
+  - [Tab 5: Offline Compatibility Checker & Analyser](#tab-5-offline-compatibility-checker--analyser)
+  - [Tab 6: Verification & Telemetry](#tab-6-verification--telemetry)
+  - [Tab 7: Emergency Recovery](#tab-7-emergency-recovery)
+- [5. Command-Line Interface (CLI) Reference](#5-command-line-interface-cli-reference)
+  - [CLI Syntax & Parameters](#cli-syntax--parameters)
+  - [CLI Action Examples](#cli-action-examples)
+- [6. Diagnostic Dumps & Hardware Captures](#6-diagnostic-dumps--hardware-captures)
+- [7. Companion Helper Scripts](#7-companion-helper-scripts)
+  - [Check-Assets.ps1 (Firmware Integrity & Import)](#check-assetsps1-firmware-integrity--import)
+  - [generate_captures.py (Synthetic EFI Captures)](#generate_capturespy-synthetic-efi-captures)
+- [8. Recommended End-to-End Walkthrough](#8-recommended-end-to-end-walkthrough)
+- [9. Troubleshooting & FAQ](#9-troubleshooting--faq)
 
 ---
 
-## How to Launch
+## 1. Overview & Architecture
 
-### Option 1: Direct Double-Click (Batch Launcher)
-Double-click `Launch-Utility.cmd` in the repository root. It detects your permissions and prompts for Administrator elevation if desired.
+The utility orchestrates all components of the GPU unlock deployment lifecycle safely within Windows:
 
-### Option 2: PowerShell Launcher
+```
++-----------------------------------------------------------------------------------+
+|                        Windows GPU UNLOCK Utility GUI / CLI                       |
++-----------------------------------------------------------------------------------+
+       |                       |                      |                     |
+       v                       v                      v                     v
+ [System & GPU Audit]    [Safety Checks]       [USB / ESP Stager]   [Offline Checker]
+ - Win32 WMI / CIM       - Secure Boot         - FAT32 Auto-Detect  - DIAGnn.TXT
+ - GA102/104/106 Detect  - BitLocker C: State  - Release BOOTX64    - IMGnn / PROM
+ - PCIe VEN/DEV/SUBSYS   - Fast Startup Toggle - Assets Packaging   - Python Analysis
+       |                       |                      |                     |
+       +-----------------------+----------------------+---------------------+
+                                       |
+                                       v
+                      [Verification & Telemetry]
+                      - nvidia-smi Live Stats
+                      - cuBLAS 4096 Uplift Protocol
+                      - Emergency 1-Click BCD Revert
+```
+
+- **Read-Only Safety First**: Hardware probing and capture checks are strictly non-destructive. No firmware is written to the GPU ROM.
+- **Pre-Boot Selector Modulation**: Unlocks full tensor performance on NVIDIA Ampere GPUs by configuring Falcon/GSP selector registers (`SS0` and `SS1`) before the Windows display driver initializes.
+- **Fail-Safe Recovery**: Instant restoration of stock Windows Boot Manager (`{bootmgr}`) at any time.
+
+---
+
+## 2. System Requirements & Prerequisites
+
+### Supported Operating Systems
+- **Windows 10 (64-bit)** or **Windows 11 (64-bit)**
+- **Windows Server 2022+**
+- System must boot in **UEFI Mode** with a **GPT** partition table (Legacy MBR boot mode is not supported).
+
+### Supported Hardware
+- **NVIDIA Ampere Architecture GPUs**:
+  - NVIDIA GeForce RTX 3060 (GA104 & GA106)
+  - NVIDIA GeForce RTX 3070 & RTX 3070 Ti (GA104)
+  - NVIDIA GeForce RTX 3080 10GB & 12GB (GA102)
+  - NVIDIA GeForce RTX 3090 & RTX 3090 Ti (GA102)
+- **Removable Media**:
+  - One USB Flash Drive (1 GiB or larger), formatted as **FAT32**.
+
+### Software Dependencies
+- **PowerShell 5.1** (built into Windows) or **PowerShell 7+**
+- **Python 3.8+** (required for offline capture validation and report comparison; must be on your system `PATH`)
+- **NVIDIA Display Driver** with `nvidia-smi` available (standard with official NVIDIA drivers)
+
+---
+
+## 3. How to Launch
+
+The repository provides multiple convenient entry points to start the utility depending on your workflow:
+
+### Option A: One-Click Batch Launcher (Recommended)
+Double-click `Launch-Utility.cmd` located in the root of the repository:
+
+```bat
+Launch-Utility.cmd
+```
+
+1. If run as a standard user, it presents a menu:
+   ```text
+   [1] Launch with Administrator Elevation (Recommended)
+   [2] Launch in User Mode (Read-only diagnostics)
+   ```
+2. Choosing `1` prompts Windows UAC for elevation and opens the full GUI with administrative privileges enabled.
+
+### Option B: PowerShell Launcher
+Run the PowerShell wrapper script from the project root:
+
 ```powershell
 .\Launch-Utility.ps1
 ```
 
-### Option 3: Command-Line (CLI) Automation
-For automated scripts, test runners, or headless environments, use the `-Cli` flag:
+To run in CLI mode using the launcher:
+```powershell
+.\Launch-Utility.ps1 -Cli -Action Audit
+```
+
+### Option C: Direct Script Invocation
+You can launch the utility directly from a PowerShell console:
 
 ```powershell
-# 1. Run offline compatibility check on a capture folder (Human-readable summary)
-.\tools\gpu_unlock_utility\GpuUnlockUtility.ps1 -Cli -Action CheckCaptures -CapturePath "D:\RTX3090-UNLOCK"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\gpu_unlock_utility\GpuUnlockUtility.ps1
+```
 
-# 2. Run offline compatibility check with Korean explanation
-.\tools\gpu_unlock_utility\GpuUnlockUtility.ps1 -Cli -Action CheckCaptures -CapturePath "D:\RTX3090-UNLOCK" -Lang ko
+### Administrator vs Standard User Mode
+| Capability | Standard User | Administrator |
+| :--- | :---: | :---: |
+| System & GPU Hardware Audit | Yes | Yes |
+| Offline Compatibility Analysis (`DIAG*.TXT`) | Yes | Yes |
+| Generate Windows Diagnostic Dumps | Yes | Yes |
+| Stage Unlock / Probe Payload to USB | Yes | Yes |
+| Disable Windows Fast Startup | No | Yes |
+| Inspect BitLocker Key Protection State | Partial | Full |
+| Configure Internal BCD Boot Entries | No | Yes |
+| One-Click UEFI NVRAM Boot Order Restore | No | Yes |
 
-# 3. Output pure JSON report and export to file
-.\tools\gpu_unlock_utility\GpuUnlockUtility.ps1 -Cli -Action CheckCaptures -CapturePath "D:\RTX3090-UNLOCK" -Json -ExportPath ".\report.json"
+> [!TIP]
+> Always launch as **Administrator** if you plan to stage boot configurations, toggle Fast Startup, or modify UEFI BCD entries.
 
-# 4. Compare two compatibility report JSON files
-.\tools\gpu_unlock_utility\GpuUnlockUtility.ps1 -Cli -Action CompareReports -LeftReport ".\ref.json" -RightReport ".\probe.json"
+---
 
-# 5. Run hardware compatibility audit
-.\tools\gpu_unlock_utility\GpuUnlockUtility.ps1 -Cli -Action Audit
+## 4. Graphical User Interface (GUI) Guide
 
-# 6. Run safety pre-flight checks
-.\tools\gpu_unlock_utility\GpuUnlockUtility.ps1 -Cli -Action Preflight
+The modern dark-themed WPF interface is structured into seven distinct tabs along with a live status bar and execution console.
 
-# 7. Check connected USB storage devices
-.\tools\gpu_unlock_utility\GpuUnlockUtility.ps1 -Cli -Action CheckUsb
-
-# 8. Query live GPU telemetry
-.\tools\gpu_unlock_utility\GpuUnlockUtility.ps1 -Cli -Action Telemetry
-
-# 9. Stage unlock payload to a FAT32 USB drive (e.g. drive E:)
-.\tools\gpu_unlock_utility\GpuUnlockUtility.ps1 -Cli -Action DeployUsb -DriveLetter E
-
-# 10. Restore Windows Boot Manager priority in BCD
-.\tools\gpu_unlock_utility\GpuUnlockUtility.ps1 -Cli -Action RestoreWindows
-
-# 11. Generate Windows-side Diagnostic Dump (PCIe, WMI, EDID, nvidia-smi XML)
-.\tools\gpu_unlock_utility\GpuUnlockUtility.ps1 -Cli -Action GenerateDumps -DumpType Windows -DumpPath ".\diagnostics"
-
-# 12. Generate UEFI Pre-Boot Diagnostic Capture Templates (DIAG00.TXT, DIAG01.TXT, IMG00.BIN, PROM.BIN)
-.\tools\gpu_unlock_utility\GpuUnlockUtility.ps1 -Cli -Action GenerateDumps -DumpType EfiCaptures -DumpPath ".\my_captures"
+```
++------------------------------------------------------------------------------------+
+|  Windows GPU UNLOCK - Management & Deployment Utility             [ADMIN] [Refresh]|
++------------------------------------------------------------------------------------+
+| [System Audit] [Safety] [USB Deploy] [ESP Setup] [Checker] [Telemetry] [Recovery]  |
++------------------------------------------------------------------------------------+
+|                                                                                    |
+|                               Active Tab Content Area                              |
+|                                                                                    |
++------------------------------------------------------------------------------------+
+|  Activity & Execution Log                                                  [Clear] |
+|  [2026-11-07 11:00:00] System audit completed successfully.                        |
++------------------------------------------------------------------------------------+
 ```
 
 ---
 
-## 4. Diagnostic Dumps & Captures
+### Header & Global Controls
+- **Privilege Badge**: Displays `[ADMINISTRATOR]` (Green) or `[STANDARD USER]` (Yellow).
+- **Run as Admin Button**: Visible when not elevated; prompts for immediate UAC elevation.
+- **Refresh All Audits**: Re-runs hardware queries, safety audits, and USB detection.
+- **Activity & Execution Log**: Bottom console displaying real-time PowerShell output, file operations, and status messages. Click **Clear** to reset the view.
 
-The utility provides dedicated tools for capturing and analyzing diagnostic state:
+---
 
-1. **Windows Diagnostic Bundle**:
-   - Collects live PCIe topology, device instance IDs, WMI inventory, and monitor EDID data.
-   - Executes a comprehensive `nvidia-smi -q -x` XML state capture containing thermal, clock, power, BAR, and VBIOS details.
-   - Saves to a timestamped folder with an explanatory `README.TXT`.
+### Tab 1: System & GPU Audit
+Inspects host platform topology and determines target GPU eligibility:
 
-2. **UEFI Capture Generator**:
-   - Runs [`generate_captures.py`](file:///tools/gpu_unlock_utility/generate_captures.py) to synthesize or package pre-boot EFI capture artifacts (`DIAG00.TXT`, `DIAG01.TXT`, `IMG00.BIN`, and `PROM.BIN`).
-   - Allows immediate offline testing with the built-in Compatibility Checker before booting into hardware EFI environments.
+- **Host Platform Details**: Motherboard manufacturer, board model, BIOS release version, CPU model, and Windows build number.
+- **GPU Controller & PCI Details**:
+  - Detected GPU model name
+  - PCI Vendor ID (`VEN_10DE`), Device ID, Subsystem Vendor/Device
+  - Detected architecture (e.g., `GA102 Ampere`, `GA104 Ampere`)
+  - Dedicated VRAM size
+  - Installed display driver version
+- **Determination Banner**: Alerts you if the GPU matches a known fixed configuration profile (such as `b650m-3090fe`, `b660m-3070ti`, `x870-3090ti`) or qualifies for generic USB staging.
 
-3. **USB Probe Stager**:
-   - Copies pre-boot diagnostics collectors and logging directories directly onto a formatted FAT32 USB drive to gather live hardware captures during boot.
+---
 
+### Tab 2: Pre-Flight Safety
+Before attempting any UEFI boot unlock, four critical safety prerequisites are evaluated:
+
+1. **UEFI Secure Boot**:
+   - Status: `[OK]` (Disabled) or `[FAIL]` (Enabled).
+   - *Requirement*: Secure Boot must be disabled in your motherboard BIOS because the unlock bootloader is an unsigned custom EFI binary.
+2. **Windows Fast Startup (`HiberbootEnabled`)**:
+   - Status: `[OK]` (Disabled) or `[WARN]` (Enabled).
+   - *Requirement*: Hybrid sleep prevents full PCIe register power cycles. If enabled, click the **Disable Fast Startup** button to toggle it off automatically.
+3. **BitLocker C: Encryption**:
+   - Status: `[OK]` (Off / Fully Decrypted) or `[WARN]` (Protection On).
+   - *Requirement*: Modifying boot chains while BitLocker is active may trigger a recovery key prompt on boot. Back up your BitLocker recovery key or suspend encryption before proceeding.
+4. **Release EFI Binary & Firmware Assets**:
+   - Checks presence and SHA-256 hashes of `release\EFI\BOOT\BOOTX64.EFI` and assets in `unlock\assets.json`.
+
+---
+
+### Tab 3: USB Unlock Deployer (Recommended Route)
+Stages the pre-compiled unlock bootloader onto a removable FAT32 USB drive:
+
+1. Insert a USB thumb drive formatted as **FAT32**.
+2. Click **Refresh Disks**.
+3. Select your target USB drive letter from the dropdown menu.
+4. Click **Stage Unlock Files to Selected USB**.
+5. The utility creates:
+   - `\EFI\BOOT\BOOTX64.EFI`
+   - `\RTX3090-UNLOCK\ASSETS\` (with verified firmware blobs)
+6. Use the on-screen **One-Time Boot Menu Guide** to trigger the bootloader:
+   - **ASUS**: Press <kbd>F8</kbd> during POST
+   - **Gigabyte / AORUS**: Press <kbd>F12</kbd> during POST
+   - **MSI**: Press <kbd>F11</kbd> during POST
+   - **ASRock**: Press <kbd>F11</kbd> during POST
+
+---
+
+### Tab 4: Internal ESP Setup (Advanced / Optional)
+Configures an internal dedicated secondary EFI System Partition (ESP) on internal SSD storage:
+
+> [!WARNING]
+> This route is intended for advanced testing only. The partition **must** be a separate dedicated GPT FAT32 partition. **Never overwrite your primary Windows EFI system partition.**
+
+- **Configure Internal Boot Config**: Copies unlock files to the dedicated partition and registers a temporary BCD entry titled `GPU Headless UNLOCK - EXPERIMENTAL`.
+- **Restore Windows Boot Priority**: Re-establishes stock Windows Boot Manager as priority #1.
+
+---
+
+### Tab 5: Offline Compatibility Checker & Analyser
+Performs read-only inspection of pre-boot EFI capture artifacts (`DIAGnn.TXT`, `IMGnn.BIN`, `PROM.BIN`) using the project's multi-engine analysis suite:
+
+#### How to Run an Analysis:
+1. In **Capture Folder**, specify the path where captures are stored (e.g. `D:\RTX3090-UNLOCK` or `C:\captures`).
+2. Or click **Auto-Detect on USB** to scan all connected USB drives automatically for EFI capture directories.
+3. Choose your preferred output language (`English (en)` or `한국어 (ko)`).
+4. Click **Run Offline Compatibility Check**.
+
+#### Output Views:
+- **Assessment Badging**:
+  - `[CANDIDATE]`: Hardware and display topology match safe criteria. Ready for unlock generation.
+  - `[NEEDS DATA]`: Incomplete captures or missing cold-boot capture agreements.
+  - `[OUTSIDE SCOPE]`: Hardware or display controller topology outside reviewed envelope.
+  - `[INVALID DATA]`: Corrupted or inconsistent dump files.
+- **Next Step Guidance**: Contextual recommendations based on the findings.
+- **Sub-Tab 1: Structured Observations & Checks**:
+  - Detailed hardware breakdown: Target GPU, PCI bus location, chip/memory configuration, NVGOP version, and display controller handles.
+  - Itemized checks table showing status for `observations_pass`, `images_pass`, `prom_pass`, etc.
+- **Sub-Tab 2: Raw JSON Report**: Full Format-2 JSON report.
+- **Export & Clipboard Buttons**:
+  - **Export Report JSON...**: Saves the report to a `.json` file.
+  - **Copy JSON to Clipboard**: Copies formatted JSON to paste into a GitHub issue report.
+
+#### Report Comparison Suite:
+Located in the expandable panel at the bottom of Tab 5:
+1. Browse or enter **Left (Reference)** JSON report.
+2. Browse or enter **Right (Probe)** JSON report.
+3. Click **Compare Selected Reports** to generate an itemized comparison matrix showing `same`, `different`, or `unavailable` attributes.
+
+---
+
+### Tab 6: Verification & Telemetry
+After booting through the unlock bootloader into Windows, use this tab to verify operation:
+
+- **Live NVIDIA Telemetry**:
+  - Click **Refresh Telemetry** to query `nvidia-smi`.
+  - Displays GPU name, driver version, core temperature, VRAM utilization, power draw (Watts), SM clock speed, and memory clock speed.
+- **Expected Uplift Protocol**:
+  - Run a standard cuBLAS GEMM matrix multiplication benchmark (`4096 x 4096`).
+  - **Locked Baseline**: GA104 achieves ~40-44 TFLOPS; GA102 achieves ~65-70 TFLOPS in FP16/BF16.
+  - **Unlocked State**: GA104 achieves ~88 TFLOPS; GA102 achieves ~125-130 TFLOPS (~1.9x to 2.0x throughput uplift).
+  - Selector registers in unlocked state verify as `SS0 = 0x88888888` and `SS1 = 0x8`.
+
+---
+
+### Tab 7: Emergency Recovery
+Provides a 1-click failsafe mechanism to revert any bootloader adjustments:
+
+- **Restore Windows Boot Manager (1-Click)**:
+  - Invokes `bcdedit` and UEFI NVRAM commands to place Windows Boot Manager (`{bootmgr}`) at priority position #1 in `{fwbootmgr}` displayorder.
+  - Removes any experimental or secondary unlock boot entries.
+- **Black Screen Troubleshooting**:
+  - Provides quick instructions on monitor cable reconnection, display timeout intervals (30 seconds for Windows driver initialization), and cold power-cycle recovery.
+
+---
+
+## 5. Command-Line Interface (CLI) Reference
+
+The utility supports full automation through the `-Cli` parameter. This is ideal for CI testing, scheduled diagnostics, or remote administration.
+
+### CLI Syntax & Parameters
+
+```powershell
+.\tools\gpu_unlock_utility\GpuUnlockUtility.ps1 -Cli -Action <Action> [Parameters]
+```
+
+| Parameter | Type | Allowed Values / Description |
+| :--- | :--- | :--- |
+| `-Cli` | Switch | Enables headless command-line execution (suppresses WPF GUI). |
+| `-Action` | String | `Audit`, `Preflight`, `CheckUsb`, `DeployUsb`, `RestoreWindows`, `Telemetry`, `CheckCaptures`, `CompareReports`, `GenerateDumps`. |
+| `-DriveLetter` | String | Target drive letter for USB or ESP operations (e.g., `E` or `E:`). |
+| `-CapturePath` | String | Folder containing `DIAGnn.TXT`, `IMGnn.BIN`, `PROM.BIN` for analysis. |
+| `-DumpType` | String | For `GenerateDumps`: `Windows`, `EfiCaptures`, or `ProbeUsb`. |
+| `-DumpPath` | String | Destination path for generated diagnostic dumps. |
+| `-LeftReport` | String | Path to first JSON report for comparison. |
+| `-RightReport` | String | Path to second JSON report for comparison. |
+| `-ExportPath` | String | Destination file path to save compatibility JSON output. |
+| `-Lang` | String | Language for reports and descriptions: `en` (default) or `ko`. |
+| `-Json` | Switch | Emits pure JSON string to stdout (ideal for script piping). |
+
+---
+
+### CLI Action Examples
+
+#### 1. Hardware & GPU Compatibility Audit
+```powershell
+.\tools\gpu_unlock_utility\GpuUnlockUtility.ps1 -Cli -Action Audit
+```
+*Outputs JSON with Motherboard, BIOS, CPU, OS, and GPU PCI identifiers.*
+
+#### 2. Run Safety Pre-Flight Verification
+```powershell
+.\tools\gpu_unlock_utility\GpuUnlockUtility.ps1 -Cli -Action Preflight
+```
+*Evaluates Secure Boot, Fast Startup, BitLocker, and firmware asset integrity.*
+
+#### 3. Inspect Connected USB Storage Devices
+```powershell
+.\tools\gpu_unlock_utility\GpuUnlockUtility.ps1 -Cli -Action CheckUsb
+```
+*Lists all removable disks, filesystems, and capacity.*
+
+#### 4. Stage Unlock Payload to USB Drive
+```powershell
+.\tools\gpu_unlock_utility\GpuUnlockUtility.ps1 -Cli -Action DeployUsb -DriveLetter E
+```
+*Stages `BOOTX64.EFI` and firmware assets onto FAT32 drive `E:`.*
+
+#### 5. Offline Compatibility Check on Pre-boot Captures
+```powershell
+.\tools\gpu_unlock_utility\GpuUnlockUtility.ps1 -Cli -Action CheckCaptures -CapturePath "D:\RTX3090-UNLOCK"
+```
+
+#### 6. Export Pure JSON Compatibility Report
+```powershell
+.\tools\gpu_unlock_utility\GpuUnlockUtility.ps1 -Cli -Action CheckCaptures -CapturePath "D:\RTX3090-UNLOCK" -Json -ExportPath ".\my_report.json"
+```
+
+#### 7. Compare Two Compatibility Reports
+```powershell
+.\tools\gpu_unlock_utility\GpuUnlockUtility.ps1 -Cli -Action CompareReports -LeftReport ".\baseline.json" -RightReport ".\probe.json"
+```
+
+#### 8. Generate Windows Diagnostic State Dump
+```powershell
+.\tools\gpu_unlock_utility\GpuUnlockUtility.ps1 -Cli -Action GenerateDumps -DumpType Windows -DumpPath ".\diagnostics"
+```
+
+#### 9. Prepare a Diagnostic Capture Probe USB Drive
+```powershell
+.\tools\gpu_unlock_utility\GpuUnlockUtility.ps1 -Cli -Action GenerateDumps -DumpType ProbeUsb -DriveLetter E
+```
+
+#### 10. Query Real-Time GPU Telemetry
+```powershell
+.\tools\gpu_unlock_utility\GpuUnlockUtility.ps1 -Cli -Action Telemetry
+```
+
+#### 11. 1-Click Restore Windows Boot Manager
+```powershell
+.\tools\gpu_unlock_utility\GpuUnlockUtility.ps1 -Cli -Action RestoreWindows
+```
+
+---
+
+## 6. Diagnostic Dumps & Hardware Captures
+
+The utility offers built-in diagnostic routines to facilitate troubleshooting and community validation:
+
+### 1. Windows Diagnostic Bundle (`-DumpType Windows`)
+Gathers comprehensive system information and saves it into `diagnostics\GPU-UNLOCK-DIAG-<timestamp>\`:
+- `WINDOWS-INVENTORY.JSON`: Complete WMI and PCI hierarchy data.
+- `NVIDIA-SMI-DUMP.XML`: Clock limits, power draw, temperature, VBIOS versions, and BAR addresses.
+- `SYSTEM-SUMMARY.JSON`: Secure Boot, BitLocker, BIOS, and OS build information.
+- `DISPLAY-EDID.JSON`: Active display connection records and EDID hex blocks.
+- `README.TXT`: Diagnostic bundle manifest.
+
+### 2. UEFI Capture Generator (`-DumpType EfiCaptures`)
+Uses `generate_captures.py` to synthesize pre-boot EFI capture artifacts (`DIAG00.TXT`, `DIAG01.TXT`, `IMG00.BIN`, `PROM.BIN`). Enables full testing of the compatibility evaluation pipeline without requiring physical EFI reboots.
+
+### 3. USB Diagnostic Probe (`-DumpType ProbeUsb`)
+Sets up a removable FAT32 USB drive to capture live pre-boot hardware state on cold boot without applying unlock modifications.
+
+---
+
+## 7. Companion Helper Scripts
+
+The `tools\gpu_unlock_utility\` directory includes dedicated helper scripts:
+
+### Check-Assets.ps1 (Firmware Integrity & Import)
+Validates files in `assets\` against the project's SHA-256 specification in `unlock\assets.json`.
+
+```powershell
+# Verify current assets
+.\tools\gpu_unlock_utility\Check-Assets.ps1
+
+# Scan an external folder (e.g. Downloads) and automatically import matching assets
+.\tools\gpu_unlock_utility\Check-Assets.ps1 -ImportFrom "C:\Users\<User>\Downloads\Firmware"
+```
+
+### generate_captures.py (Synthetic EFI Captures)
+Generates mock or test pre-boot EFI capture sets for testing the compatibility engine:
+
+```powershell
+# Generate test captures for an RTX 3090 (Device ID 220410de)
+python .\tools\gpu_unlock_utility\generate_captures.py .\test_captures --device-id 220410de --count 2
+
+# Generate test captures with EDID driver image included
+python .\tools\gpu_unlock_utility\generate_captures.py .\test_captures --device-id 248210de --with-edid
+```
+
+---
+
+## 8. Recommended End-to-End Walkthrough
+
+Follow this standard procedure to unlock and verify your GPU:
+
+```
+[Step 1: Audit & Safety] ──> [Step 2: USB Staging] ──> [Step 3: Cold Boot] ──> [Step 4: Verify]
+  - Run Launch-Utility.cmd     - Format USB to FAT32      - Shut down PC           - Check Telemetry
+  - Disable Fast Startup       - Stage files via Tab 3    - F8/F12 Boot Menu       - Run cuBLAS GEMM
+  - Verify BitLocker status                               - Hand off to Windows    - Enjoy ~2x speedup
+```
+
+1. **Safety Pre-Flight**:
+   - Launch `Launch-Utility.cmd` as Administrator.
+   - In **Tab 2 (Pre-Flight Safety)**, verify that Secure Boot is disabled.
+   - If Windows Fast Startup is enabled, click **Disable Fast Startup**.
+2. **Stage USB Drive**:
+   - Insert a FAT32 USB drive.
+   - Navigate to **Tab 3 (USB Unlock Deployer)**.
+   - Select your USB drive and click **Stage Unlock Files to Selected USB**.
+3. **Execute One-Time Boot**:
+   - Perform a **full system shutdown** (do not use restart).
+   - Turn on the PC and immediately press your motherboard one-time boot key (<kbd>F8</kbd> for ASUS, <kbd>F12</kbd> for Gigabyte, <kbd>F11</kbd> for MSI/ASRock).
+   - Select `UEFI: <Your USB Drive>`.
+   - The bootloader initializes, applies the selector registers, and immediately transfers control to Windows Boot Manager.
+4. **Verify in Windows**:
+   - Once Windows loads, open the utility and go to **Tab 6 (Verification & Telemetry)**.
+   - Click **Refresh Telemetry** to ensure the GPU driver is active and running at normal operating parameters.
+   - Run a cuBLAS GEMM 4096 benchmark to confirm the ~1.9x to 2.0x tensor throughput improvement.
+
+---
+
+## 9. Troubleshooting & FAQ
+
+### Q: Why does the utility say "Administrator privileges are recommended"?
+Certain operations—such as reading BitLocker volume status, disabling Fast Startup in the registry, and updating UEFI NVRAM boot priorities via `bcdedit`—require elevated Windows permissions. Launch via `Launch-Utility.cmd` and select Option 1.
+
+### Q: My USB drive does not appear in the dropdown.
+The drive must be formatted with the **FAT32** filesystem to be recognized by UEFI firmware. Reformat the drive as FAT32 using Windows File Explorer or `diskpart`, then click **Refresh Disks**.
+
+### Q: The screen remains black after booting from the USB drive.
+- The unlock bootloader unbinds the pre-boot UEFI GOP driver to prepare hardware registers. The display will remain dark until the Windows graphics driver takes over.
+- **Wait 30 to 45 seconds** after boot for Windows to reach the lock screen.
+- Ensure your primary monitor is connected to a native **DisplayPort** connector on the GPU (DisplayPort 1.4 has the highest recovery and handoff success rate).
+
+### Q: How do I completely undo the unlock?
+- If using the **USB route**: Simply unplug the USB drive or boot normally from your internal drive. No permanent changes were written to your GPU.
+- If using the **Internal ESP route**: Open the utility, switch to **Tab 7 (Emergency Recovery)**, and click **Restore Windows Boot Manager (1-Click)**.
+
+### Q: PowerShell reports "Execution of scripts is disabled on this system".
+Run the following command in PowerShell to allow script execution for the current session:
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+```
+Alternatively, launch through `Launch-Utility.cmd`, which handles execution policy bypass automatically.
