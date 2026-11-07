@@ -465,19 +465,25 @@ Follow this standard procedure to unlock and verify your GPU:
    - Launch `tools\Launch-Utility.cmd` as Administrator (or right-click `Launch-Utility.cmd` in `tools\` and select Run as Administrator).
    - In **Tab 2 (Pre-Flight Safety)**, verify that Secure Boot is disabled.
    - If Windows Fast Startup is enabled, click **Disable Fast Startup**.
-2. **Stage USB Drive**:
+2. **Stage USB Drive (Intelligent Route Selection)**:
    - Insert a FAT32 USB drive.
    - Navigate to **Tab 3 (USB Unlock Deployer)**.
-   - Select your USB drive and click **Stage Unlock Files to Selected USB**.
-3. **Execute One-Time Boot**:
-   - Perform a **full system shutdown** (do not use restart).
+   - For non-reference systems (e.g. Intel B460 + ASUS RTX 3090, or any setup where monitors are plugged directly into the RTX GPU), the utility detects the **Headless Single-RTX / Local Profile Route**.
+   - **Step 1 (Diagnostic Probe)**: Click **1. Stage Diagnostic Probe** (or click Deploy). The utility automatically compiles a read-only probe embedded with your Windows ESP partition GUID.
+3. **Record Pre-Boot Hardware Captures**:
+   - Perform a **full system shutdown** (Power Off; do not use restart).
    - Turn on the PC and immediately press your motherboard one-time boot key (<kbd>F8</kbd> for ASUS, <kbd>F12</kbd> for Gigabyte, <kbd>F11</kbd> for MSI/ASRock).
    - Select `UEFI: <Your USB Drive>`.
-   - The bootloader initializes, applies the selector registers, and immediately transfers control to Windows Boot Manager.
-4. **Verify in Windows**:
-   - Once Windows loads, open the utility and go to **Tab 6 (Verification & Telemetry)**.
-   - Click **Refresh Telemetry** to ensure the GPU driver is active and running at normal operating parameters.
-   - Run a cuBLAS GEMM 4096 benchmark to confirm the ~1.9x to 2.0x tensor throughput improvement.
+   - The probe safely records your card's pre-boot registers (`DIAG00.TXT`, `IMG00.BIN`, `PROM.BIN`), and **immediately chain-loads Windows Boot Manager directly** (no BIOS loop).
+   - Repeat once more (Full Cold Shutdown -> Boot USB) so 2 agreeing captures are recorded.
+4. **Build & Stage Custom Unlock**:
+   - Reopen the utility in Windows and navigate to **Tab 3**.
+   - The capture counter will now show `2 of 2 complete [READY FOR CUSTOM UNLOCK BUILD]`.
+   - Click **2. Build & Stage Custom Unlock Bootloader**. The utility compiles your machine's custom profile, runs host verification tests, and stages the custom headless unlock bootloader and assets onto the USB.
+5. **Boot Staged Unlock & Verify**:
+   - Shut down PC, boot the USB once from BIOS Boot Menu (<kbd>F8</kbd>).
+   - The custom bootloader unbinds GOP, applies tensor selector registers (`SS0`/`SS1`), and immediately hands off to Windows.
+   - Once Windows loads, open **Tab 6 (Verification & Telemetry)** and run cuBLAS benchmark to confirm the ~1.9x to 2.0x tensor throughput improvement!
 
 ---
 

@@ -30,7 +30,7 @@
 [CmdletBinding()]
 param(
     [switch]$Cli,
-    [ValidateSet('Audit', 'Preflight', 'CheckUsb', 'DeployUsb', 'RestoreWindows', 'Telemetry', 'CheckCaptures', 'CompareReports', 'GenerateDumps', 'DownloadAssets')]
+    [ValidateSet('Audit', 'Preflight', 'CheckUsb', 'DeployUsb', 'StageProbe', 'BuildLocalUsb', 'RestoreWindows', 'Telemetry', 'CheckCaptures', 'CompareReports', 'GenerateDumps', 'DownloadAssets')]
     [string]$Action = 'Audit',
     [ValidateSet('Windows', 'EfiCaptures', 'ProbeUsb')]
     [string]$DumpType = 'Windows',
@@ -66,6 +66,79 @@ function Test-IsAdmin {
 function Get-Sha256Hash([string]$Path) {
     if (-not (Test-Path -LiteralPath $Path)) { return $null }
     return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+}
+
+function Get-ClangToolchain {
+    $clangPath = $null
+    $lldLinkPath = $null
+
+    $candidates = @(
+        "C:\Program Files\LLVM\bin",
+        "C:\TOOLS\LLVM20\bin",
+        "C:\TOOLS\LLVM\bin"
+    )
+    foreach ($c in $candidates) {
+        $cClang = Join-Path $c "clang.exe"
+        $cLld = Join-Path $c "lld-link.exe"
+        if ((Test-Path -LiteralPath $cClang) -and (Test-Path -LiteralPath $cLld)) {
+            $clangPath = $cClang
+            $lldLinkPath = $cLld
+            break
+        }
+    }
+
+    if (-not $clangPath) {
+        $cmdClang = Get-Command clang.exe -ErrorAction SilentlyContinue
+        $cmdLld = Get-Command lld-link.exe -ErrorAction SilentlyContinue
+        if ($cmdClang -and $cmdLld) {
+            $clangPath = $cmdClang.Source
+            $lldLinkPath = $cmdLld.Source
+        }
+    }
+
+    return @{
+        Available = (-not [string]::IsNullOrEmpty($clangPath))
+        Clang     = $clangPath
+        LldLink   = $lldLinkPath
+    }
+}
+
+function Get-SystemWindowsEspGuid {
+    try {
+        $part = Get-Partition | Where-Object { $_.IsSystem } | Select-Object -First 1
+        if ($part -and $part.Guid) {
+            $g = [regex]::Match($part.Guid, '[0-9a-fA-F-]{36}')
+            if ($g.Success) { return $g.Value }
+        }
+    } catch {}
+    return $null
+}
+
+function Get-UsbProbeCaptureStatus([string]$Letter) {
+    $cleanLetter = $Letter.TrimEnd(':')
+    $dir = "$($cleanLetter):\RTX3090-UNLOCK"
+    $captures = @()
+    if (Test-Path -LiteralPath $dir) {
+        $files = Get-ChildItem -LiteralPath $dir -Filter 'DIAG??.TXT' -File -ErrorAction SilentlyContinue
+        foreach ($f in $files) {
+            try {
+                $t = [IO.File]::ReadAllText($f.FullName)
+                if ($t.Contains('probe-pci-handles=') -and $t.Contains("capture-complete=1`r`n")) {
+                    $captures += $f
+                }
+            } catch {}
+        }
+    }
+    $hasProm = Test-Path -LiteralPath (Join-Path $dir 'PROM.BIN')
+    $hasImg = (Test-Path -LiteralPath (Join-Path $dir 'IMG00.BIN')) -or (Test-Path -LiteralPath (Join-Path $dir 'IMG01.BIN'))
+    return @{
+        Count     = $captures.Count
+        Required  = 2
+        Captures  = $captures
+        HasProm   = $hasProm
+        HasImg    = $hasImg
+        Directory = $dir
+    }
 }
 
 function Get-GpuHardwareInfo {
@@ -318,6 +391,21 @@ function Get-PreflightChecks {
         Detail = $assetDetail
     }
 
+    # 7. LLVM Compiler Toolchain & Windows ESP
+    $toolchain = Get-ClangToolchain
+    $espGuid = Get-SystemWindowsEspGuid
+    $tcStatus = if ($toolchain.Available -and $espGuid) { 'PASS' } elseif ($toolchain.Available) { 'WARN' } else { 'WARN' }
+    $tcDetail = if ($toolchain.Available) {
+        "LLVM Clang/LLD ready ($($toolchain.Clang)). $(if ($espGuid) { "Windows ESP: {$espGuid}" } else { "Windows ESP GUID not detected." })"
+    } else {
+        "LLVM Clang not found. Required for custom Headless USB builds on non-reference hardware."
+    }
+    $checks['CompilerToolchain'] = @{
+        Status = $tcStatus
+        Title  = "LLVM Clang & Windows ESP GUID"
+        Detail = $tcDetail
+    }
+
     return $checks
 }
 
@@ -388,42 +476,51 @@ function Deploy-ToUsb([string]$Letter) {
         throw "Drive $($cleanLetter): is formatted as $($vol.FileSystem). UEFI requires FAT32."
     }
 
-    $targetBootDir = Join-Path $driveRoot "EFI\BOOT"
-    $targetPayloadDir = Join-Path $driveRoot "RTX3090-UNLOCK"
-    $targetAssetsDir = Join-Path $targetPayloadDir "ASSETS"
+    $info = Get-GpuHardwareInfo
+    $nvidiaGpu = $info['GPUs'] | Where-Object { $_.IsAmpere } | Select-Object -First 1
+    $bp = $info['BoardProduct']
+    $bv = $info['BIOSVersion']
 
-    New-Item -ItemType Directory -Path $targetBootDir -Force | Out-Null
-    New-Item -ItemType Directory -Path $targetAssetsDir -Force | Out-Null
+    # Exact fixed legacy manual profile
+    $isFixedProfile = ($bp -match 'B650M-PLUS' -and $bv -eq '3057' -and $nvidiaGpu -and $nvidiaGpu.PCI.Device -eq '2204' -and $nvidiaGpu.PCI.Subsystem -eq '145410de')
 
-    # Copy Release BOOTX64.EFI
-    if (-not (Test-Path -LiteralPath $Script:ReleaseEfi)) {
-        throw "Release BOOTX64.EFI not found in release/EFI/BOOT/BOOTX64.EFI"
-    }
-    Copy-Item -LiteralPath $Script:ReleaseEfi -Destination (Join-Path $targetBootDir "BOOTX64.EFI") -Force
+    if ($isFixedProfile) {
+        $targetBootDir = Join-Path $driveRoot "EFI\BOOT"
+        $targetPayloadDir = Join-Path $driveRoot "RTX3090-UNLOCK"
+        $targetAssetsDir = Join-Path $targetPayloadDir "ASSETS"
 
-    # Ensure Assets are present; auto-download if missing
-    $localAssets = if (Test-Path -LiteralPath $Script:AssetsPath) { @(Get-ChildItem -LiteralPath $Script:AssetsPath -Filter "*.bin" -File) } else { @() }
-    if ($localAssets.Count -lt 5) {
-        Write-Host "[*] Firmware assets missing from assets/. Automatically acquiring now..." -ForegroundColor Yellow
-        $downScript = Join-Path $scriptDir "download_assets.py"
-        if (Test-Path -LiteralPath $downScript) {
-            & python -I $downScript --output $Script:AssetsPath
+        New-Item -ItemType Directory -Path $targetBootDir -Force | Out-Null
+        New-Item -ItemType Directory -Path $targetAssetsDir -Force | Out-Null
+
+        # Copy Release BOOTX64.EFI
+        if (-not (Test-Path -LiteralPath $Script:ReleaseEfi)) {
+            throw "Release BOOTX64.EFI not found in release/EFI/BOOT/BOOTX64.EFI"
         }
-    }
+        Copy-Item -LiteralPath $Script:ReleaseEfi -Destination (Join-Path $targetBootDir "BOOTX64.EFI") -Force
 
-    # Copy Assets
-    $assetsCopied = 0
-    if (Test-Path -LiteralPath $Script:AssetsPath) {
-        $assets = Get-ChildItem -LiteralPath $Script:AssetsPath -Filter "*.bin" -File
-        foreach ($a in $assets) {
-            Copy-Item -LiteralPath $a.FullName -Destination (Join-Path $targetAssetsDir $a.Name) -Force
-            $assetsCopied++
+        # Ensure Assets are present; auto-download if missing
+        $localAssets = if (Test-Path -LiteralPath $Script:AssetsPath) { @(Get-ChildItem -LiteralPath $Script:AssetsPath -Filter "*.bin" -File) } else { @() }
+        if ($localAssets.Count -lt 5) {
+            Write-Host "[*] Firmware assets missing from assets/. Automatically acquiring now..." -ForegroundColor Yellow
+            $downScript = Join-Path $scriptDir "download_assets.py"
+            if (Test-Path -LiteralPath $downScript) {
+                & python -I $downScript --output $Script:AssetsPath
+            }
         }
-    }
 
-    # Copy README & Documentation
-    $readmeContent = @"
-# Windows GPU UNLOCK - Bootable USB
+        # Copy Assets
+        $assetsCopied = 0
+        if (Test-Path -LiteralPath $Script:AssetsPath) {
+            $assets = Get-ChildItem -LiteralPath $Script:AssetsPath -Filter "*.bin" -File
+            foreach ($a in $assets) {
+                Copy-Item -LiteralPath $a.FullName -Destination (Join-Path $targetAssetsDir $a.Name) -Force
+                $assetsCopied++
+            }
+        }
+
+        # Copy README & Documentation
+        $readmeContent = @"
+# Windows GPU UNLOCK - Bootable USB (Fixed Profile)
 
 ## Instructions:
 1. Ensure Secure Boot is DISABLED in your motherboard BIOS.
@@ -434,20 +531,52 @@ function Deploy-ToUsb([string]$Letter) {
    - MSI: F11
    - ASRock: F11
 4. Select this USB drive from the Boot Menu (e.g., 'UEFI: USB Drive').
-5. The unlock EFI application will execute, unlock the GPU registers (SS0/SS1),
-   perform PCIe Function Level Reset, and immediately handoff/chain-load Windows Boot Manager.
-6. The display may flicker or turn black momentarily during GOP removal and restore.
-7. Once Windows loads, open the GPU Unlock Utility to verify active unlock and run GEMM compute benchmark!
-
-Safety Notice: If display does not return after 30 seconds, power off the PC and boot normally into Windows.
+5. Use manual F7 -> Boot Override -> Windows Boot Manager to continue to Windows without reset.
 "@
-    Set-Content -LiteralPath (Join-Path $driveRoot "USB-README.md") -Value $readmeContent -Encoding utf8
+        Set-Content -LiteralPath (Join-Path $driveRoot "USB-README.md") -Value $readmeContent -Encoding utf8
 
-    return [pscustomobject]@{
-        Drive        = $driveRoot
-        BootEfi      = (Join-Path $targetBootDir "BOOTX64.EFI")
-        AssetsCopied = $assetsCopied
-        Status       = "Successfully staged USB Unlock files."
+        return [pscustomobject]@{
+            Drive        = $driveRoot
+            BootEfi      = (Join-Path $targetBootDir "BOOTX64.EFI")
+            AssetsCopied = $assetsCopied
+            Status       = "Successfully staged stock fixed-profile USB Unlock files."
+            IsProbe      = $false
+            ProfileMode  = "FixedProfile"
+            RequiresBoot = $false
+        }
+    }
+    else {
+        # Headless Single-RTX / Local Profile Route (e.g. Intel B460 + ASUS RTX 3090)
+        $captureStatus = Get-UsbProbeCaptureStatus -Letter $cleanLetter
+        if ($captureStatus.Count -lt 2) {
+            Write-Host "[!] Machine requires Headless Single-RTX / Local Profile route." -ForegroundColor Yellow
+            Write-Host "[*] Captures on USB: $($captureStatus.Count) of 2. Compiling and staging Diagnostic Probe USB..." -ForegroundColor Cyan
+            $msg = Stage-DiagnosticProbeUsb -Letter $cleanLetter
+            return [pscustomobject]@{
+                Drive        = $driveRoot
+                BootEfi      = (Join-Path $driveRoot "EFI\BOOT\BOOTX64.EFI")
+                AssetsCopied = 0
+                Status       = "Step 1: Staged read-only Diagnostic Probe ($($captureStatus.Count)/2 captures). Boot USB twice to record hardware signatures."
+                IsProbe      = $true
+                ProfileMode  = "HeadlessProbe"
+                Captures     = $captureStatus.Count
+                RequiresBoot = $true
+            }
+        }
+        else {
+            Write-Host "[+] Found $($captureStatus.Count) hardware captures on USB. Building custom Headless Unlock package..." -ForegroundColor Green
+            $msg = Build-And-Stage-Local-Unlock -Letter $cleanLetter
+            return [pscustomobject]@{
+                Drive        = $driveRoot
+                BootEfi      = (Join-Path $driveRoot "EFI\BOOT\BOOTX64.EFI")
+                AssetsCopied = 5
+                Status       = "Step 2: Successfully built and staged custom Headless Unlock bootloader!"
+                IsProbe      = $false
+                ProfileMode  = "HeadlessUnlock"
+                Captures     = $captureStatus.Count
+                RequiresBoot = $false
+            }
+        }
     }
 }
 
@@ -613,16 +742,51 @@ function Stage-DiagnosticProbeUsb([string]$Letter) {
         throw "Drive $($cleanLetter): is formatted as $($vol.FileSystem). UEFI requires FAT32."
     }
 
+    $toolchain = Get-ClangToolchain
+    if (-not $toolchain.Available) {
+        throw "LLVM clang/lld-link compiler toolchain not found. Install LLVM or place clang.exe in C:\Program Files\LLVM\bin."
+    }
+
+    $espGuid = Get-SystemWindowsEspGuid
+    if (-not $espGuid) {
+        throw "Could not determine system Windows ESP partition GUID. Ensure Windows is running on a UEFI GPT disk."
+    }
+
+    $buildScript = Join-Path $Script:RepoRoot "research\profile\build-probe.ps1"
+    if (-not (Test-Path -LiteralPath $buildScript)) {
+        throw "Probe build script not found: $buildScript"
+    }
+
+    Write-Host "[*] Compiling read-only Diagnostic Probe targeting Windows ESP {$espGuid}..." -ForegroundColor Cyan
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $buildScript `
+        -WindowsEspGuid $espGuid `
+        -Clang $toolchain.Clang `
+        -LldLink $toolchain.LldLink `
+        -Python 'python'
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to compile read-only generic probe BOOTX64.EFI."
+    }
+
+    $compiledProbe = Join-Path $Script:RepoRoot "internal-boot\boot\build\probe-generic\BOOTX64.EFI"
+    if (-not (Test-Path -LiteralPath $compiledProbe)) {
+        throw "Compiled probe not found at $compiledProbe"
+    }
+
     $targetBootDir = Join-Path $driveRoot "EFI\BOOT"
     $targetPayloadDir = Join-Path $driveRoot "RTX3090-UNLOCK"
     New-Item -ItemType Directory -Path $targetBootDir -Force | Out-Null
     New-Item -ItemType Directory -Path $targetPayloadDir -Force | Out-Null
 
-    # Copy Release BOOTX64.EFI as Probe loader
-    if (-not (Test-Path -LiteralPath $Script:ReleaseEfi)) {
-        throw "BOOTX64.EFI not found in release/EFI/BOOT/BOOTX64.EFI"
+    $targetBootFile = Join-Path $targetBootDir "BOOTX64.EFI"
+    if (Test-Path -LiteralPath $targetBootFile) {
+        $oldSha = (Get-FileHash -LiteralPath $targetBootFile -Algorithm SHA256).Hash.Substring(0, 12).ToLowerInvariant()
+        $bakDir = Join-Path $targetPayloadDir "backup"
+        New-Item -ItemType Directory -Path $bakDir -Force | Out-Null
+        Copy-Item -LiteralPath $targetBootFile -Destination (Join-Path $bakDir "BOOTX64-$oldSha.EFI") -Force
     }
-    Copy-Item -LiteralPath $Script:ReleaseEfi -Destination (Join-Path $targetBootDir "BOOTX64.EFI") -Force
+
+    Copy-Item -LiteralPath $compiledProbe -Destination $targetBootFile -Force
 
     $readmeContent = @"
 # Windows GPU UNLOCK - Diagnostic Probe Capture USB
@@ -632,13 +796,64 @@ function Stage-DiagnosticProbeUsb([string]$Letter) {
 2. Shut down the PC completely (Power Off). Do not restart.
 3. Power on and press your Boot Menu key (ASUS F8 / Gigabyte F12 / MSI F11).
 4. Boot from this USB drive ('UEFI: USB Drive').
-5. The probe runs, logs DIAG00.TXT, IMG00.BIN, and PROM.BIN to RTX3090-UNLOCK\, then loads Windows.
-6. Once Windows starts, repeat once more (Cold Shutdown -> Boot USB) to record DIAG01.TXT.
-7. Open the GPU Unlock Utility and click 'Auto-Detect on USB' in Tab 5 to analyze!
+5. The probe runs safely (100% read-only), records physical DIAGnn.TXT, IMGnn.BIN, and PROM.BIN captures,
+   and IMMEDIATELY hands off directly to Windows Boot Manager. No return to BIOS!
+6. Once Windows starts, repeat once more (Full Cold Shutdown -> Boot USB) to record DIAG01.TXT.
+7. Open the GPU Unlock Utility and click 'Build & Stage Headless Unlock'!
 "@
     Set-Content -LiteralPath (Join-Path $driveRoot "README-PROBE.TXT") -Value $readmeContent -Encoding utf8
+    Set-Content -LiteralPath (Join-Path $targetPayloadDir "README.TXT") -Value "READ-ONLY PROBE. Logs DIAGnn.TXT, PROM.BIN and IMGnn.BIN here, then starts Windows directly." -Encoding ascii
 
-    return "Successfully configured Diagnostic Probe on $($cleanLetter):."
+    return "Successfully compiled and staged read-only Diagnostic Probe on $($cleanLetter):."
+}
+
+function Build-And-Stage-Local-Unlock([string]$Letter) {
+    $cleanLetter = $Letter.TrimEnd(':')
+    $driveRoot = "$($cleanLetter):\"
+    if (-not (Test-Path -LiteralPath $driveRoot)) {
+        throw "Drive '$driveRoot' does not exist."
+    }
+
+    $vol = Get-Volume -DriveLetter $cleanLetter
+    if ($vol.FileSystem -ne 'FAT32') {
+        throw "Drive $($cleanLetter): is formatted as $($vol.FileSystem). UEFI requires FAT32."
+    }
+
+    $status = Get-UsbProbeCaptureStatus -Letter $cleanLetter
+    if ($status.Count -lt 2) {
+        throw "Insufficient probe captures on $($cleanLetter): ($($status.Count) of 2). Please boot from the Diagnostic Probe USB at least twice (from a full cold shutdown) so hardware captures are saved."
+    }
+
+    $toolchain = Get-ClangToolchain
+    if (-not $toolchain.Available) {
+        throw "LLVM clang/lld-link compiler toolchain not found. Install LLVM or place clang.exe in C:\Program Files\LLVM\bin."
+    }
+
+    $espGuid = Get-SystemWindowsEspGuid
+    if (-not $espGuid) {
+        throw "Could not determine system Windows ESP partition GUID. Ensure Windows is running on a UEFI GPT disk."
+    }
+
+    # Ensure firmware assets exist
+    Invoke-DownloadAssets | Out-Null
+
+    $newMachineScript = Join-Path $Script:RepoRoot "research\profile\new-machine.ps1"
+    Write-Host "[*] Generating local profile, running host verification tests, and building Headless USB package..." -ForegroundColor Cyan
+
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $newMachineScript `
+        -Drive $cleanLetter `
+        -WindowsEspGuid $espGuid `
+        -Assets $Script:AssetsPath `
+        -StageUnlock `
+        -Clang $toolchain.Clang `
+        -LldLink $toolchain.LldLink `
+        -Python 'python'
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "Headless unlock packaging failed. Check the error log output."
+    }
+
+    return "Successfully generated local profile and staged custom Headless Unlock bootloader on $($cleanLetter):!"
 }
 
 # --- OFFLINE COMPATIBILITY CHECKER & ANALYSER ENGINE ---
@@ -778,9 +993,21 @@ if ($Cli) {
         }
         'DeployUsb' {
             if (-not $DriveLetter) { throw "Please specify -DriveLetter (e.g. -DriveLetter E)" }
-            Write-Host "`n[+] Deploying USB Unlock to $DriveLetter..." -ForegroundColor Yellow
+            Write-Host "`n[+] Deploying USB to $DriveLetter..." -ForegroundColor Yellow
             $res = Deploy-ToUsb $DriveLetter
             $res | Format-List
+        }
+        'StageProbe' {
+            if (-not $DriveLetter) { throw "Please specify -DriveLetter (e.g. -DriveLetter E)" }
+            Write-Host "`n[+] Compiling and Staging Diagnostic Probe on $DriveLetter..." -ForegroundColor Yellow
+            $msg = Stage-DiagnosticProbeUsb -Letter $DriveLetter
+            Write-Host $msg -ForegroundColor Green
+        }
+        'BuildLocalUsb' {
+            if (-not $DriveLetter) { throw "Please specify -DriveLetter (e.g. -DriveLetter E)" }
+            Write-Host "`n[+] Building and Staging Local Profile Unlock Bootloader on $DriveLetter..." -ForegroundColor Yellow
+            $msg = Build-And-Stage-Local-Unlock -Letter $DriveLetter
+            Write-Host $msg -ForegroundColor Green
         }
         'RestoreWindows' {
             Write-Host "`n[+] Restoring Standard Windows Boot Order..." -ForegroundColor Yellow
@@ -1179,8 +1406,19 @@ Add-Type -AssemblyName System.Windows.Forms
             <TabItem Header="USB Unlock Deployer">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16">
                     <StackPanel>
-                        <TextBlock Text="Headless USB Route (Recommended)" FontSize="16" FontWeight="Bold" Foreground="#89B4FA" Margin="0,0,0,10"/>
-                        <TextBlock Text="Stages the compiled UEFI unlock bootloader (BOOTX64.EFI) and required payloads onto a FAT32 USB drive. The USB boot performs the unlock and immediately handsoff directly to Windows Boot Manager without resetting the GPU." FontSize="12" Foreground="#A6ADC8" Margin="0,0,0,14" TextWrapping="Wrap"/>
+                        <TextBlock Text="Headless USB Route (Direct Windows Boot)" FontSize="16" FontWeight="Bold" Foreground="#89B4FA" Margin="0,0,0,10"/>
+                        <TextBlock Text="Deploys the safe Diagnostic Probe or custom compiled Headless Unlock bootloader onto a FAT32 USB drive. The bootloader unlocks GPU registers and immediately chain-loads Windows Boot Manager directly without resetting the GPU or dropping back to BIOS." FontSize="12" Foreground="#A6ADC8" Margin="0,0,0,14" TextWrapping="Wrap"/>
+
+                        <!-- Hardware Route & Toolchain Detection Banner -->
+                        <Border Background="#252538" CornerRadius="6" Padding="14" Margin="0,0,0,14" BorderBrush="#313244" BorderThickness="1">
+                            <StackPanel>
+                                <TextBlock Text="Target Deployment Profile &amp; Prerequisites:" FontWeight="Bold" FontSize="13" Foreground="#F9E2AF" Margin="0,0,0,8"/>
+                                <TextBlock Name="TxtUsbRouteInfo" Text="Route: Detecting..." Foreground="#CDD6F4" Margin="0,2"/>
+                                <TextBlock Name="TxtUsbCompilerInfo" Text="Toolchain: Detecting..." Foreground="#A6ADC8" Margin="0,2"/>
+                                <TextBlock Name="TxtUsbEspInfo" Text="Windows ESP: Detecting..." Foreground="#A6ADC8" Margin="0,2"/>
+                                <TextBlock Name="TxtUsbCaptureStatus" Text="Hardware Captures on USB: Select a drive below" FontWeight="SemiBold" Foreground="#89DCEB" Margin="0,4,0,0"/>
+                            </StackPanel>
+                        </Border>
 
                         <Border Background="#252538" CornerRadius="6" Padding="14" Margin="0,0,0,14" BorderBrush="#313244" BorderThickness="1">
                             <StackPanel>
@@ -1197,19 +1435,24 @@ Add-Type -AssemblyName System.Windows.Forms
                             </StackPanel>
                         </Border>
 
-                        <Button Name="BtnDeployUsb" Content="Stage Unlock Files to Selected USB" Background="#89B4FA" Foreground="#11111B" FontWeight="Bold" FontSize="13" Padding="16,10" HorizontalAlignment="Left" Margin="0,0,0,14"/>
+                        <WrapPanel Margin="0,0,0,14">
+                            <Button Name="BtnStageProbeDirect" Content="1. Stage Diagnostic Probe (Windows Direct Boot)" Background="#313244" Foreground="#A6E3A1" FontWeight="Bold" FontSize="12" Padding="14,10" Margin="0,0,10,6"/>
+                            <Button Name="BtnDeployUsb" Content="2. Build &amp; Stage Custom Unlock Bootloader" Background="#89B4FA" Foreground="#11111B" FontWeight="Bold" FontSize="12" Padding="14,10" Margin="0,0,10,6"/>
+                        </WrapPanel>
 
                         <Border Background="#252538" CornerRadius="6" Padding="14" BorderBrush="#313244" BorderThickness="1">
                             <StackPanel>
-                                <TextBlock Text="Motherboard One-Time Boot Menu Guide:" FontWeight="Bold" FontSize="13" Foreground="#F9E2AF" Margin="0,0,0,8"/>
-                                <TextBlock Text="1. Power off the system completely (Do not use restart)." Foreground="#CDD6F4" Margin="0,2"/>
-                                <TextBlock Text="2. Turn on the PC and immediately press your BIOS Boot Menu hotkey repeatedly:" Foreground="#CDD6F4" Margin="0,2"/>
-                                <TextBlock Text="   - ASUS: F8" FontWeight="SemiBold" Foreground="#89B4FA" Margin="10,1"/>
-                                <TextBlock Text="   - Gigabyte / AORUS: F12" FontWeight="SemiBold" Foreground="#89B4FA" Margin="10,1"/>
-                                <TextBlock Text="   - MSI: F11" FontWeight="SemiBold" Foreground="#89B4FA" Margin="10,1"/>
-                                <TextBlock Text="   - ASRock: F11" FontWeight="SemiBold" Foreground="#89B4FA" Margin="10,1"/>
-                                <TextBlock Text="3. Select 'UEFI: [Your USB Name]' from the boot device list." Foreground="#CDD6F4" Margin="0,2"/>
-                                <TextBlock Text="4. The unlock will execute, and directly launch Windows Boot Manager." Foreground="#CDD6F4" Margin="0,2"/>
+                                <TextBlock Text="Motherboard One-Time Boot Menu Guide (Headless Direct Route):" FontWeight="Bold" FontSize="13" Foreground="#F9E2AF" Margin="0,0,0,8"/>
+                                <TextBlock Text="Step 1: Record Pre-Boot Hardware Captures" FontWeight="Bold" Foreground="#89DCEB" Margin="0,4,0,2"/>
+                                <TextBlock Text="1. Click '1. Stage Diagnostic Probe' above onto your FAT32 USB drive." Foreground="#CDD6F4" Margin="10,1"/>
+                                <TextBlock Text="2. Fully shut down your PC (Power Off, do not restart)." Foreground="#CDD6F4" Margin="10,1"/>
+                                <TextBlock Text="3. Power on and press your motherboard Boot Menu hotkey (ASUS: F8 / Gigabyte: F12 / MSI: F11 / ASRock: F11)." Foreground="#CDD6F4" Margin="10,1"/>
+                                <TextBlock Text="4. Select 'UEFI: [USB Drive]'. The probe safely records your card's VBIOS &amp; BAR layout, then IMMEDIATELY starts Windows Boot Manager (no BIOS loops!)." Foreground="#CDD6F4" Margin="10,1"/>
+                                <TextBlock Text="5. Once in Windows, repeat once more (Cold Shutdown -> Boot USB) to obtain 2 agreeing cold boot captures." Foreground="#CDD6F4" Margin="10,1"/>
+                                <TextBlock Text="Step 2: Custom Headless Unlock" FontWeight="Bold" Foreground="#89DCEB" Margin="0,6,0,2"/>
+                                <TextBlock Text="6. Reopen this utility and click '2. Build &amp; Stage Custom Unlock Bootloader'." Foreground="#CDD6F4" Margin="10,1"/>
+                                <TextBlock Text="7. The utility automatically generates your card's profile, validates host tests, and compiles the unlocker targeting your Windows ESP." Foreground="#CDD6F4" Margin="10,1"/>
+                                <TextBlock Text="8. Boot the USB to unlock the GPU and seamlessly load Windows!" Foreground="#CDD6F4" Margin="10,1"/>
                             </StackPanel>
                         </Border>
                     </StackPanel>
@@ -1520,6 +1763,11 @@ $btnAssetsGuide = $window.FindName('BtnAssetsGuide')
 $comboUsbDrives = $window.FindName('ComboUsbDrives')
 $btnRefreshUsb = $window.FindName('BtnRefreshUsb')
 $btnDeployUsb = $window.FindName('BtnDeployUsb')
+$btnStageProbeDirect = $window.FindName('BtnStageProbeDirect')
+$txtUsbRouteInfo = $window.FindName('TxtUsbRouteInfo')
+$txtUsbCompilerInfo = $window.FindName('TxtUsbCompilerInfo')
+$txtUsbEspInfo = $window.FindName('TxtUsbEspInfo')
+$txtUsbCaptureStatus = $window.FindName('TxtUsbCaptureStatus')
 
 # Tab 4
 $btnRunInternalConfigure = $window.FindName('BtnRunInternalConfigure')
@@ -1675,6 +1923,50 @@ function Refresh-PreflightData {
     }
 }
 
+function Update-UsbTabInfo {
+    try {
+        $info = Get-GpuHardwareInfo
+        $nvidiaGpu = $info['GPUs'] | Where-Object { $_.IsAmpere } | Select-Object -First 1
+        $bp = $info['BoardProduct']
+        $bv = $info['BIOSVersion']
+        $isFixed = ($bp -match 'B650M-PLUS' -and $bv -eq '3057' -and $nvidiaGpu -and $nvidiaGpu.PCI.Device -eq '2204' -and $nvidiaGpu.PCI.Subsystem -eq '145410de')
+
+        if ($txtUsbRouteInfo) {
+            $txtUsbRouteInfo.Text = "System: $($info['Motherboard']) | $($nvidiaGpu.Name) ($($nvidiaGpu.PCI.SubsystemVendor):$($nvidiaGpu.PCI.SubsystemDevice))`nRoute: $(if ($isFixed) { 'Stock Fixed Profile (ASUS B650M-PLUS)' } else { 'Headless Single-RTX / Local Profile (Direct Windows Handoff)' })"
+        }
+
+        $toolchain = Get-ClangToolchain
+        if ($txtUsbCompilerInfo) {
+            $txtUsbCompilerInfo.Text = "Toolchain: $(if ($toolchain.Available) { "LLVM Clang & LLD-Link Ready ($($toolchain.Clang))" } else { "Not Found (Install LLVM for custom build)" })"
+        }
+
+        $espGuid = Get-SystemWindowsEspGuid
+        if ($txtUsbEspInfo) {
+            $txtUsbEspInfo.Text = "System Windows ESP: $(if ($espGuid) { "{$espGuid}" } else { "Not Detected" })"
+        }
+
+        if ($txtUsbCaptureStatus) {
+            $selected = [string]$comboUsbDrives.SelectedItem
+            if ($selected -and -not $selected.StartsWith("No removable")) {
+                $letter = $selected.Substring(0, 1)
+                $status = Get-UsbProbeCaptureStatus -Letter $letter
+                if ($status.Count -ge 2) {
+                    $txtUsbCaptureStatus.Text = "Hardware Captures on $($letter): $($status.Count) of 2 complete [READY FOR CUSTOM UNLOCK BUILD]"
+                    $txtUsbCaptureStatus.Foreground = [System.Windows.Media.Brushes]::LightGreen
+                }
+                else {
+                    $txtUsbCaptureStatus.Text = "Hardware Captures on $($letter): $($status.Count) of 2 complete [COLD BOOT PROBE REQUIRED]"
+                    $txtUsbCaptureStatus.Foreground = [System.Windows.Media.Brushes]::Gold
+                }
+            }
+            else {
+                $txtUsbCaptureStatus.Text = "Hardware Captures on USB: No drive selected"
+                $txtUsbCaptureStatus.Foreground = [System.Windows.Media.Brushes]::Gray
+            }
+        }
+    } catch {}
+}
+
 function Refresh-UsbList {
     $comboUsbDrives.Items.Clear()
     $drives = Get-RemovableDrives
@@ -1688,6 +1980,7 @@ function Refresh-UsbList {
         }
         $comboUsbDrives.SelectedIndex = 0
     }
+    Update-UsbTabInfo
 }
 
 function Refresh-TelemetryData {
@@ -1900,6 +2193,33 @@ $btnRefreshUsb.Add_Click({
         Write-GuiLog "Refreshed connected removable USB drive list."
     })
 
+$comboUsbDrives.Add_SelectionChanged({
+        Update-UsbTabInfo
+    })
+
+$btnStageProbeDirect.Add_Click({
+        $selected = [string]$comboUsbDrives.SelectedItem
+        if (-not $selected -or $selected.StartsWith("No removable")) {
+            [System.Windows.MessageBox]::Show("Please connect a FAT32 USB drive first.", "No USB Selected", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Warning) | Out-Null
+            return
+        }
+        $letter = $selected.Substring(0, 1)
+        $confirm = [System.Windows.MessageBox]::Show("Stage read-only Diagnostic Probe on drive $letter`:`\?`n`nWhen booted, the probe records physical DIAGnn.TXT, IMGnn.BIN, and PROM.BIN captures from this PC, and IMMEDIATELY boots into Windows without hanging or returning to BIOS.`n`nTwo agreeing cold-boot captures are required for custom unlock profile generation.", "Confirm Diagnostic Probe Staging", [System.Windows.MessageBoxButton]::YesNo, [System.Windows.MessageBoxImage]::Question)
+        if ($confirm -eq [System.Windows.MessageBoxResult]::Yes) {
+            try {
+                Write-GuiLog "Compiling and staging Diagnostic Probe on $letter`:..."
+                $msg = Stage-DiagnosticProbeUsb -Letter $letter
+                Write-GuiLog $msg
+                Update-UsbTabInfo
+                [System.Windows.MessageBox]::Show("Diagnostic Probe staged successfully on drive $letter`:`\!`n`nNext steps:`n1. Power off PC completely (Cold Shutdown, do not use Restart).`n2. Turn on and press Boot Menu key (ASUS F8).`n3. Select UEFI USB drive. The probe safely records your card's pre-boot registers and hands off directly to Windows!`n4. Once in Windows, repeat once more (Cold Shutdown -> Boot USB) to obtain 2 agreeing captures.`n5. Reopen this utility and click 'Build & Stage Custom Unlock Bootloader'!", "Diagnostic Probe Staged (Step 1)", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information) | Out-Null
+            }
+            catch {
+                Write-GuiLog "Error staging probe: $($_.Exception.Message)"
+                [System.Windows.MessageBox]::Show($_.Exception.Message, "Staging Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error) | Out-Null
+            }
+        }
+    })
+
 $btnDeployUsb.Add_Click({
         $selected = [string]$comboUsbDrives.SelectedItem
         if (-not $selected -or $selected.StartsWith("No removable")) {
@@ -1907,13 +2227,20 @@ $btnDeployUsb.Add_Click({
             return
         }
         $letter = $selected.Substring(0, 1)
-        $confirm = [System.Windows.MessageBox]::Show("Stage UEFI Unlock files onto drive $letter`:`\?`n`nThis will copy BOOTX64.EFI and firmware assets into FAT32 directories.`nExisting files will be preserved.", "Confirm USB Deployment", [System.Windows.MessageBoxButton]::YesNo, [System.Windows.MessageBoxImage]::Question)
+        $confirm = [System.Windows.MessageBox]::Show("Deploy/Build Unlock files onto drive $letter`:`\?`n`nFor non-reference systems (e.g. Intel B460 + ASUS RTX 3090), this checks for pre-boot captures and compiles a custom Headless Unlock bootloader tailored to your card.`n`nProceed?", "Confirm USB Deployment", [System.Windows.MessageBoxButton]::YesNo, [System.Windows.MessageBoxImage]::Question)
         if ($confirm -eq [System.Windows.MessageBoxResult]::Yes) {
             try {
-                Write-GuiLog "Starting USB deployment to $letter`:..."
+                Write-GuiLog "Starting USB deployment / build on $letter`:..."
                 $res = Deploy-ToUsb $letter
-                Write-GuiLog "Staging complete: $($res.Status) (Assets copied: $($res.AssetsCopied))"
-                [System.Windows.MessageBox]::Show("USB Unlock deployed successfully to $letter`:`\!`n`nReboot your PC and press your Boot Menu key (ASUS F8 / Gigabyte F12 / MSI F11) to boot.", "Deployment Success", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information) | Out-Null
+                Write-GuiLog "Operation complete: $($res.Status)"
+                Update-UsbTabInfo
+
+                if ($res.IsProbe) {
+                    [System.Windows.MessageBox]::Show("Diagnostic Probe staged on drive $letter`:`\! ($($res.Captures)/2 captures found)`n`nYour machine requires 2 pre-boot hardware captures before the custom unlock bootloader can be compiled.`n`nNext steps:`n1. Power off PC completely (Cold Shutdown).`n2. Boot USB from Boot Menu (ASUS F8). It logs registers and starts Windows directly.`n3. Repeat once more for the 2nd capture.`n4. Reopen this utility and click this button again!", "Diagnostic Probe Staged (Step 1 of 2)", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information) | Out-Null
+                }
+                else {
+                    [System.Windows.MessageBox]::Show("Custom Headless Unlock bootloader deployed successfully to $letter`:`\!`n`nWhen booted, the custom unlocker will apply the tensor selector registers and directly launch Windows Boot Manager.`n`nReboot your PC and press your Boot Menu key (ASUS F8 / Gigabyte F12 / MSI F11) to boot.", "Unlock Deployment Success (Step 2)", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information) | Out-Null
+                }
             }
             catch {
                 Write-GuiLog "USB deployment error: $($_.Exception.Message)"
