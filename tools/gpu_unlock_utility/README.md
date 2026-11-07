@@ -95,4 +95,29 @@ For automated scripts, test runners, or headless environments, use the `-Cli` fl
 
 # 10. Restore Windows Boot Manager priority in BCD
 .\tools\gpu_unlock_utility\GpuUnlockUtility.ps1 -Cli -Action RestoreWindows
+
+# 11. Generate Windows-side Diagnostic Dump (PCIe, WMI, EDID, nvidia-smi XML)
+.\tools\gpu_unlock_utility\GpuUnlockUtility.ps1 -Cli -Action GenerateDumps -DumpType Windows -DumpPath ".\diagnostics"
+
+# 12. Generate UEFI Pre-Boot Diagnostic Capture Templates (DIAG00.TXT, DIAG01.TXT, IMG00.BIN, PROM.BIN)
+.\tools\gpu_unlock_utility\GpuUnlockUtility.ps1 -Cli -Action GenerateDumps -DumpType EfiCaptures -DumpPath ".\my_captures"
 ```
+
+---
+
+## 4. Diagnostic Dumps & Captures
+
+The utility provides dedicated tools for capturing and analyzing diagnostic state:
+
+1. **Windows Diagnostic Bundle**:
+   - Collects live PCIe topology, device instance IDs, WMI inventory, and monitor EDID data.
+   - Executes a comprehensive `nvidia-smi -q -x` XML state capture containing thermal, clock, power, BAR, and VBIOS details.
+   - Saves to a timestamped folder with an explanatory `README.TXT`.
+
+2. **UEFI Capture Generator**:
+   - Runs [`generate_captures.py`](file:///tools/gpu_unlock_utility/generate_captures.py) to synthesize or package pre-boot EFI capture artifacts (`DIAG00.TXT`, `DIAG01.TXT`, `IMG00.BIN`, and `PROM.BIN`).
+   - Allows immediate offline testing with the built-in Compatibility Checker before booting into hardware EFI environments.
+
+3. **USB Probe Stager**:
+   - Copies pre-boot diagnostics collectors and logging directories directly onto a formatted FAT32 USB drive to gather live hardware captures during boot.
+

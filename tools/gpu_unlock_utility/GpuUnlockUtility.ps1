@@ -30,8 +30,11 @@
 [CmdletBinding()]
 param(
     [switch]$Cli,
-    [ValidateSet('Audit', 'Preflight', 'CheckUsb', 'DeployUsb', 'RestoreWindows', 'Telemetry', 'CheckCaptures', 'CompareReports')]
+    [ValidateSet('Audit', 'Preflight', 'CheckUsb', 'DeployUsb', 'RestoreWindows', 'Telemetry', 'CheckCaptures', 'CompareReports', 'GenerateDumps')]
     [string]$Action = 'Audit',
+    [ValidateSet('Windows', 'EfiCaptures', 'ProbeUsb')]
+    [string]$DumpType = 'Windows',
+    [string]$DumpPath,
     [string]$DriveLetter,
     [string]$CapturePath,
     [string]$LeftReport,
@@ -94,9 +97,9 @@ function Get-GpuHardwareInfo {
                 $subVen = if ($subsys.Length -ge 8) { $subsys.Substring(4, 4) } else { "" }
                 $subDev = if ($subsys.Length -ge 8) { $subsys.Substring(0, 4) } else { "" }
                 $pci = @{
-                    Vendor = $ven
-                    Device = $dev
-                    Subsystem = $subsys
+                    Vendor          = $ven
+                    Device          = $dev
+                    Subsystem       = $subsys
                     SubsystemVendor = $subVen
                     SubsystemDevice = $subDev
                 }
@@ -127,13 +130,13 @@ function Get-GpuHardwareInfo {
 
             $vramMb = [math]::Round([double]$vc.AdapterRAM / 1MB)
             $gpus += [ordered]@{
-                Name = [string]$vc.Name
+                Name          = [string]$vc.Name
                 DriverVersion = [string]$vc.DriverVersion
-                PCI = $pci
-                Architecture = $arch
-                Family = $family
-                IsAmpere = $isAmpere
-                VramMb = $vramMb
+                PCI           = $pci
+                Architecture  = $arch
+                Family        = $family
+                IsAmpere      = $isAmpere
+                VramMb        = $vramMb
             }
         }
         $info['GPUs'] = $gpus
@@ -146,21 +149,27 @@ function Get-GpuHardwareInfo {
             $bv = $info['BIOSVersion']
             if ($bp -match 'B650M-PLUS' -and $bv -eq '3057' -and $nvidiaGpu.PCI.Device -eq '2204') {
                 $match = "Exact Match: b650m-3090fe (ASUS TUF B650M-PLUS WIFI / 3057 / RTX 3090 FE)"
-            } elseif ($bp -match 'B660M-E' -and $bv -eq '4003' -and $nvidiaGpu.PCI.Device -eq '2482') {
+            }
+            elseif ($bp -match 'B660M-E' -and $bv -eq '4003' -and $nvidiaGpu.PCI.Device -eq '2482') {
                 $match = "Exact Match: b660m-3070ti (ASUS TUF B660M-E D4 / 4003 / RTX 3070 Ti)"
-            } elseif ($bp -match 'X870' -and $bv -eq 'F13d' -and $nvidiaGpu.PCI.Device -eq '2203') {
+            }
+            elseif ($bp -match 'X870' -and $bv -eq 'F13d' -and $nvidiaGpu.PCI.Device -eq '2203') {
                 $match = "Exact Match: x870-3090ti (Gigabyte X870 AORUS ELITE / F13d / RTX 3090 Ti)"
-            } elseif ($bp -match 'B660-PLUS' -and $bv -eq '3010' -and $nvidiaGpu.PCI.Device -in @('2487','2504')) {
+            }
+            elseif ($bp -match 'B660-PLUS' -and $bv -eq '3010' -and $nvidiaGpu.PCI.Device -in @('2487', '2504')) {
                 $match = "Exact Match: b660plus-3060 (ASUS PRIME B660-PLUS D4 / 3010 / RTX 3060)"
-            } elseif ($bp -match 'H610M H' -and $bv -eq 'FC' -and $nvidiaGpu.PCI.Device -eq '2504') {
+            }
+            elseif ($bp -match 'H610M H' -and $bv -eq 'FC' -and $nvidiaGpu.PCI.Device -eq '2504') {
                 $match = "Exact Match: h610m-3060 (Gigabyte H610M H / FC / RTX 3060 GA106)"
-            } elseif ($nvidiaGpu.IsAmpere) {
+            }
+            elseif ($nvidiaGpu.IsAmpere) {
                 $match = "Eligible GPU ($($nvidiaGpu.Architecture)): Compatible with Headless USB / Local Profile route."
             }
         }
         $info['ProfileAssessment'] = $match
 
-    } catch {
+    }
+    catch {
         $info['Error'] = $_.Exception.Message
     }
     return $info
@@ -173,9 +182,9 @@ function Get-PreflightChecks {
     $isAdmin = Test-IsAdmin
     $checks['IsAdmin'] = @{
         Status = if ($isAdmin) { 'PASS' } else { 'WARN' }
-        Title = "Administrative Privileges"
+        Title  = "Administrative Privileges"
         Detail = if ($isAdmin) { "Running as Administrator. Full deployment and BCD controls enabled." }
-                 else { "Running in Standard User mode. Read-only audits active; elevation required for BCD/ESP writes." }
+        else { "Running in Standard User mode. Read-only audits active; elevation required for BCD/ESP writes." }
     }
 
     # 2. Secure Boot status
@@ -185,7 +194,8 @@ function Get-PreflightChecks {
         if ($sbReg) {
             $sbEnabled = ($sbReg.UEFISecureBootEnabled -eq 1)
         }
-    } catch {}
+    }
+    catch {}
 
     if ($sbEnabled -eq $null -and $isAdmin) {
         try { $sbEnabled = Confirm-SecureBootUEFI } catch {}
@@ -193,10 +203,10 @@ function Get-PreflightChecks {
 
     $checks['SecureBoot'] = @{
         Status = if ($sbEnabled -eq $false) { 'PASS' } elseif ($sbEnabled -eq $true) { 'FAIL' } else { 'UNKNOWN' }
-        Title = "UEFI Secure Boot"
+        Title  = "UEFI Secure Boot"
         Detail = if ($sbEnabled -eq $false) { "Disabled. Unsigned experimental EFI payloads can boot freely." }
-                 elseif ($sbEnabled -eq $true) { "ENABLED. You MUST disable Secure Boot in BIOS/UEFI settings before booting unlock EFI." }
-                 else { "Could not query Secure Boot state automatically. Ensure it is disabled in BIOS." }
+        elseif ($sbEnabled -eq $true) { "ENABLED. You MUST disable Secure Boot in BIOS/UEFI settings before booting unlock EFI." }
+        else { "Could not query Secure Boot state automatically. Ensure it is disabled in BIOS." }
     }
 
     # 3. Windows Fast Startup
@@ -206,14 +216,15 @@ function Get-PreflightChecks {
         if ($powerReg) {
             $hiber = ($powerReg.HiberbootEnabled -eq 1)
         }
-    } catch {}
+    }
+    catch {}
 
     $checks['FastStartup'] = @{
         Status = if ($hiber -eq $false) { 'PASS' } elseif ($hiber -eq $true) { 'WARN' } else { 'UNKNOWN' }
-        Title = "Windows Fast Startup"
+        Title  = "Windows Fast Startup"
         Detail = if ($hiber -eq $false) { "Disabled. Cold boot initializes hardware cleanly." }
-                 elseif ($hiber -eq $true) { "ENABLED (Hybrid Sleep). Must be disabled so PCIe hardware resets cleanly on cold boot." }
-                 else { "Status not detected." }
+        elseif ($hiber -eq $true) { "ENABLED (Hybrid Sleep). Must be disabled so PCIe hardware resets cleanly on cold boot." }
+        else { "Status not detected." }
     }
 
     # 4. BitLocker Protection
@@ -226,23 +237,26 @@ function Get-PreflightChecks {
                 if ($bl.ProtectionStatus -eq 1 -or $bl.VolumeStatus -ne 0) {
                     $bitLockerStatus = "WARN"
                     $bitLockerDetail = "BitLocker protection is ON ($($bl.ProtectionStatus)). Suspend BitLocker before testing UEFI bootloader to prevent recovery prompt."
-                } else {
+                }
+                else {
                     $bitLockerStatus = "PASS"
                     $bitLockerDetail = "C: is fully decrypted / BitLocker protection is OFF."
                 }
             }
-        } catch {
+        }
+        catch {
             $bitLockerStatus = "UNKNOWN"
             $bitLockerDetail = "BitLocker status check error: $($_.Exception.Message)"
         }
-    } else {
+    }
+    else {
         $bitLockerStatus = "NOTICE"
         $bitLockerDetail = "Elevation required to inspect BitLocker. Verify in Windows Security that BitLocker is suspended if active."
     }
 
     $checks['BitLocker'] = @{
         Status = $bitLockerStatus
-        Title = "BitLocker C: Encryption"
+        Title  = "BitLocker C: Encryption"
         Detail = $bitLockerDetail
     }
 
@@ -255,13 +269,14 @@ function Get-PreflightChecks {
         if ($prov -and $efiHash -eq $prov.efi_sha256.ToLowerInvariant()) {
             $efiValid = $true
             $efiDetail = "Valid (SHA256: $($efiHash.Substring(0,16))..., matches provenance)."
-        } else {
+        }
+        else {
             $efiDetail = "EFI binary present but checksum does not match provenance.json."
         }
     }
     $checks['ReleaseEFI'] = @{
         Status = if ($efiValid) { 'PASS' } else { 'WARN' }
-        Title = "Pre-Compiled Release BOOTX64.EFI"
+        Title  = "Pre-Compiled Release BOOTX64.EFI"
         Detail = $efiDetail
     }
 
@@ -277,26 +292,30 @@ function Get-PreflightChecks {
                 $h = Get-Sha256Hash $f
                 if ($h -eq $spec.Sha256.ToLowerInvariant()) {
                     $assetOkCount++
-                } else {
+                }
+                else {
                     $assetMissing += "$($spec.Name) (Checksum mismatch)"
                 }
-            } else {
+            }
+            else {
                 $assetMissing += "$($spec.Name) (Missing)"
             }
         }
         if ($assetOkCount -eq $specs.Count) {
             $assetsValid = $true
             $assetDetail = "All 5 required GA102 firmware assets verified in assets/."
-        } else {
+        }
+        else {
             $assetDetail = "$($assetOkCount)/$($specs.Count) assets present. Missing/Invalid: $($assetMissing -join ', ')"
         }
-    } else {
+    }
+    else {
         $assetDetail = "assets.json missing from repository."
     }
 
     $checks['FirmwareAssets'] = @{
         Status = if ($assetsValid) { 'PASS' } else { 'WARN' }
-        Title = "Firmware Asset Files (GA102)"
+        Title  = "Firmware Asset Files (GA102)"
         Detail = $assetDetail
     }
 
@@ -322,19 +341,20 @@ function Get-RemovableDrives {
                 if ($part.DriveLetter) {
                     $vol = Get-Volume -DriveLetter $part.DriveLetter -ErrorAction SilentlyContinue
                     $drives += [pscustomobject]@{
-                        DriveLetter = "$($part.DriveLetter):"
-                        Letter = [string]$part.DriveLetter
-                        DiskNumber = $disk.Number
+                        DriveLetter  = "$($part.DriveLetter):"
+                        Letter       = [string]$part.DriveLetter
+                        DiskNumber   = $disk.Number
                         FriendlyName = "$($disk.FriendlyName) ($($part.DriveLetter):)"
-                        FileSystem = [string]$vol.FileSystem
-                        SizeGb = [math]::Round($part.Size / 1GB, 2)
-                        IsBoot = [bool]$disk.IsBoot
-                        IsSystem = [bool]$part.IsSystem
+                        FileSystem   = [string]$vol.FileSystem
+                        SizeGb       = [math]::Round($part.Size / 1GB, 2)
+                        IsBoot       = [bool]$disk.IsBoot
+                        IsSystem     = [bool]$part.IsSystem
                     }
                 }
             }
         }
-    } catch {}
+    }
+    catch {}
     return $drives
 }
 
@@ -415,10 +435,10 @@ Safety Notice: If display does not return after 30 seconds, power off the PC and
     Set-Content -LiteralPath (Join-Path $driveRoot "USB-README.md") -Value $readmeContent -Encoding utf8
 
     return [pscustomobject]@{
-        Drive = $driveRoot
-        BootEfi = (Join-Path $targetBootDir "BOOTX64.EFI")
+        Drive        = $driveRoot
+        BootEfi      = (Join-Path $targetBootDir "BOOTX64.EFI")
         AssetsCopied = $assetsCopied
-        Status = "Successfully staged USB Unlock files."
+        Status       = "Successfully staged USB Unlock files."
     }
 }
 
@@ -430,7 +450,8 @@ function Restore-WindowsFirstBootOrder {
     if (Test-Path -LiteralPath $headlessScript) {
         $res = & powershell -NoProfile -ExecutionPolicy Bypass -File $headlessScript -RestoreWindowsFirst
         return ($res -join "`r`n")
-    } else {
+    }
+    else {
         $fwText = & bcdedit /enum '{fwbootmgr}'
         $m = [regex]::Match($fwText, '(?ms)^displayorder\s+(.*?)(?=\r?\n\S|\z)')
         if ($m.Success) {
@@ -447,7 +468,7 @@ function Restore-WindowsFirstBootOrder {
 function Get-GpuTelemetryLive {
     $telemetry = [ordered]@{}
     try {
-        $smiOut = & nvidia-smi --query-gpu=name,driver_version,temperature.gpu,utilization.gpu,memory.used,memory.total,power.draw,power.limit,clocks.sm,clocks.mem --format=csv,noheader,nounits 2>&1
+        $smiOut = & nvidia-smi --query-gpu=name, driver_version, temperature.gpu, utilization.gpu, memory.used, memory.total, power.draw, power.limit, clocks.sm, clocks.mem --format=csv, noheader, nounits 2>&1
         $line = (@($smiOut) -join "`n").Trim()
         if ($line) {
             $parts = $line.Split(',') | ForEach-Object { $_.Trim() }
@@ -463,13 +484,149 @@ function Get-GpuTelemetryLive {
                 $telemetry['ClockSmMhz'] = "$($parts[8]) MHz"
                 $telemetry['ClockMemMhz'] = "$($parts[9]) MHz"
             }
-        } else {
+        }
+        else {
             $telemetry['Error'] = "nvidia-smi not available or GPU query failed."
         }
-    } catch {
+    }
+    catch {
         $telemetry['Error'] = $_.Exception.Message
     }
     return $telemetry
+}
+
+# --- DIAGNOSTIC DUMP GENERATION ENGINE ---
+
+function Export-WindowsDiagnosticDump([string]$TargetDir) {
+    if (-not $TargetDir) { $TargetDir = Join-Path $Script:RepoRoot "diagnostics" }
+    if (-not (Test-Path -LiteralPath $TargetDir)) {
+        New-Item -ItemType Directory -Path $TargetDir -Force | Out-Null
+    }
+
+    $timestamp = [DateTime]::Now.ToString("yyyyMMdd-HHmmss")
+    $dumpFolder = Join-Path $TargetDir "GPU-UNLOCK-DIAG-$timestamp"
+    New-Item -ItemType Directory -Path $dumpFolder -Force | Out-Null
+
+    # 1. System and GPU Inventory JSON
+    $invScript = Join-Path $Script:RepoRoot "tools\collect_compatibility.py"
+    if (Test-Path -LiteralPath $invScript) {
+        $invJson = & python -I $invScript 2>&1
+        $invJson | Set-Content -LiteralPath (Join-Path $dumpFolder "WINDOWS-INVENTORY.JSON") -Encoding utf8
+    }
+
+    # 2. NVIDIA-SMI XML & Tabular Query
+    try {
+        $smiXml = & nvidia-smi -q -x 2>&1
+        $smiXml | Set-Content -LiteralPath (Join-Path $dumpFolder "NVIDIA-SMI-DUMP.XML") -Encoding utf8
+    } catch {}
+
+    # 3. System & Pre-Flight Summary
+    $audit = Get-GpuHardwareInfo
+    $preflight = Get-PreflightChecks
+    $summary = [ordered]@{
+        GeneratedUtc = [DateTime]::UtcNow.ToString("o")
+        Audit = $audit
+        Preflight = $preflight
+    }
+    $summary | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $dumpFolder "SYSTEM-SUMMARY.JSON") -Encoding utf8
+
+    # 4. Display & EDID Registry Dump
+    try {
+        $displayReg = "HKLM:\SYSTEM\CurrentControlSet\Enum\DISPLAY"
+        $edidEntries = @()
+        if (Test-Path -LiteralPath $displayReg) {
+            $monitors = Get-ChildItem -LiteralPath $displayReg -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -eq 'Device Parameters' }
+            foreach ($m in $monitors) {
+                $edidBytes = (Get-ItemProperty -LiteralPath $m.PSPath -Name "EDID" -ErrorAction SilentlyContinue).EDID
+                if ($edidBytes) {
+                    $edidHex = ($edidBytes | ForEach-Object { '{0:x2}' -f $_ }) -join ''
+                    $edidEntries += [ordered]@{
+                        Path = $m.PSPath
+                        EDID_Hex = $edidHex
+                        Bytes = $edidBytes.Length
+                    }
+                }
+            }
+        }
+        $edidEntries | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $dumpFolder "DISPLAY-EDID.JSON") -Encoding utf8
+    } catch {}
+
+    # 5. Readme Summary
+    $readme = @"
+# Windows GPU UNLOCK - Diagnostic Dump Report
+Generated: $timestamp
+
+This diagnostic dump package contains complete system, GPU, display, and driver metadata
+for compatibility analysis and bug reports:
+- WINDOWS-INVENTORY.JSON: Windows hardware and PCI identifiers
+- NVIDIA-SMI-DUMP.XML: Full GPU clock, power, memory, and VBIOS parameters
+- SYSTEM-SUMMARY.JSON: Motherboard, BIOS, OS, Secure Boot, and BitLocker status
+- DISPLAY-EDID.JSON: Active display monitors and EDID registry records
+"@
+    Set-Content -LiteralPath (Join-Path $dumpFolder "README.TXT") -Value $readme -Encoding utf8
+
+    return $dumpFolder
+}
+
+function Export-EfiDiagnosticCaptures([string]$TargetDir, [string]$DeviceId = $null) {
+    if (-not $TargetDir) { $TargetDir = Join-Path $Script:RepoRoot "diagnostic-captures" }
+    if (-not (Test-Path -LiteralPath $TargetDir)) {
+        New-Item -ItemType Directory -Path $TargetDir -Force | Out-Null
+    }
+
+    if (-not $DeviceId) {
+        $info = Get-GpuHardwareInfo
+        $ampere = $info.GPUs | Where-Object { $_.IsAmpere } | Select-Object -First 1
+        if ($ampere -and $ampere.PCI) {
+            $DeviceId = "$($ampere.PCI.Device)$($ampere.PCI.Vendor)"
+        } else {
+            $DeviceId = "220410de"
+        }
+    }
+
+    $genScript = Join-Path $scriptDir "generate_captures.py"
+    $res = & python -I $genScript $TargetDir --device-id $DeviceId 2>&1
+    return ($res -join "`r`n")
+}
+
+function Stage-DiagnosticProbeUsb([string]$Letter) {
+    $cleanLetter = $Letter.TrimEnd(':')
+    $driveRoot = "$($cleanLetter):\"
+    if (-not (Test-Path -LiteralPath $driveRoot)) {
+        throw "Drive '$driveRoot' does not exist."
+    }
+
+    $vol = Get-Volume -DriveLetter $cleanLetter
+    if ($vol.FileSystem -ne 'FAT32') {
+        throw "Drive $($cleanLetter): is formatted as $($vol.FileSystem). UEFI requires FAT32."
+    }
+
+    $targetBootDir = Join-Path $driveRoot "EFI\BOOT"
+    $targetPayloadDir = Join-Path $driveRoot "RTX3090-UNLOCK"
+    New-Item -ItemType Directory -Path $targetBootDir -Force | Out-Null
+    New-Item -ItemType Directory -Path $targetPayloadDir -Force | Out-Null
+
+    # Copy Release BOOTX64.EFI as Probe loader
+    if (-not (Test-Path -LiteralPath $Script:ReleaseEfi)) {
+        throw "BOOTX64.EFI not found in release/EFI/BOOT/BOOTX64.EFI"
+    }
+    Copy-Item -LiteralPath $Script:ReleaseEfi -Destination (Join-Path $targetBootDir "BOOTX64.EFI") -Force
+
+    $readmeContent = @"
+# Windows GPU UNLOCK - Diagnostic Probe Capture USB
+
+## How to Collect Pre-Boot Diagnostic Captures:
+1. Ensure Secure Boot is DISABLED in your BIOS.
+2. Shut down the PC completely (Power Off). Do not restart.
+3. Power on and press your Boot Menu key (ASUS F8 / Gigabyte F12 / MSI F11).
+4. Boot from this USB drive ('UEFI: USB Drive').
+5. The probe runs, logs DIAG00.TXT, IMG00.BIN, and PROM.BIN to RTX3090-UNLOCK\, then loads Windows.
+6. Once Windows starts, repeat once more (Cold Shutdown -> Boot USB) to record DIAG01.TXT.
+7. Open the GPU Unlock Utility and click 'Auto-Detect on USB' in Tab 5 to analyze!
+"@
+    Set-Content -LiteralPath (Join-Path $driveRoot "README-PROBE.TXT") -Value $readmeContent -Encoding utf8
+
+    return "Successfully configured Diagnostic Probe on $($cleanLetter):."
 }
 
 # --- OFFLINE COMPATIBILITY CHECKER & ANALYSER ENGINE ---
@@ -493,54 +650,55 @@ function Invoke-OfflineCompatibilityCheck {
     $jsonObj = $null
     try {
         $jsonObj = $rawText | ConvertFrom-Json
-    } catch {
+    }
+    catch {
         return [pscustomobject]@{
-            Status = 'error'
-            Badge = '[ERROR]'
-            BadgeColor = 'Tomato'
-            Summary = "Failed to parse checker output into JSON."
-            Scope = "Unknown"
-            Limitations = "Python engine error or malformed diagnostic data."
-            NextStep = "Ensure Python 3.10+ is installed and verify capture file permissions."
+            Status       = 'error'
+            Badge        = '[ERROR]'
+            BadgeColor   = 'Tomato'
+            Summary      = "Failed to parse checker output into JSON."
+            Scope        = "Unknown"
+            Limitations  = "Python engine error or malformed diagnostic data."
+            NextStep     = "Ensure Python 3.10+ is installed and verify capture file permissions."
             CaptureCount = 0
-            Checks = @()
+            Checks       = @()
             Observations = @()
-            RawJson = ""
-            RawText = $rawText
-            Parsed = $null
+            RawJson      = ""
+            RawText      = $rawText
+            Parsed       = $null
         }
     }
 
     $badge = switch ($jsonObj.status) {
-        'candidate'     { '[CANDIDATE] Eligible for Local Profile' }
-        'needs_data'    { '[NEEDS DATA] More Captures / Files Required' }
+        'candidate' { '[CANDIDATE] Eligible for Local Profile' }
+        'needs_data' { '[NEEDS DATA] More Captures / Files Required' }
         'outside_scope' { '[OUTSIDE SCOPE] Hardware / Layout Outside Envelope' }
-        'invalid_data'  { '[INVALID DATA] Inconsistent / Corrupted Observations' }
-        default         { "[$($jsonObj.status.ToUpper())]" }
+        'invalid_data' { '[INVALID DATA] Inconsistent / Corrupted Observations' }
+        default { "[$($jsonObj.status.ToUpper())]" }
     }
 
     $badgeColor = switch ($jsonObj.status) {
-        'candidate'     { 'LightGreen' }
-        'needs_data'    { 'Gold' }
+        'candidate' { 'LightGreen' }
+        'needs_data' { 'Gold' }
         'outside_scope' { 'DarkOrange' }
-        'invalid_data'  { 'Tomato' }
-        default         { 'Gray' }
+        'invalid_data' { 'Tomato' }
+        default { 'Gray' }
     }
 
     return [pscustomobject]@{
-        Status = [string]$jsonObj.status
-        Badge = $badge
-        BadgeColor = $badgeColor
-        Summary = [string]$jsonObj.summary
-        Scope = [string]$jsonObj.scope
-        Limitations = [string]$jsonObj.limitations
-        NextStep = [string]$jsonObj.next_step
+        Status       = [string]$jsonObj.status
+        Badge        = $badge
+        BadgeColor   = $badgeColor
+        Summary      = [string]$jsonObj.summary
+        Scope        = [string]$jsonObj.scope
+        Limitations  = [string]$jsonObj.limitations
+        NextStep     = [string]$jsonObj.next_step
         CaptureCount = [int]$jsonObj.capture_count
-        Checks = @($jsonObj.checks)
+        Checks       = @($jsonObj.checks)
         Observations = @($jsonObj.observations)
-        RawJson = $rawText
-        RawText = $rawText
-        Parsed = $jsonObj
+        RawJson      = $rawText
+        RawText      = $rawText
+        Parsed       = $jsonObj
     }
 }
 
@@ -588,7 +746,8 @@ if ($Cli) {
             $usb = Get-RemovableDrives
             if ($usb.Count -eq 0) {
                 Write-Host "No removable USB drives detected." -ForegroundColor DarkYellow
-            } else {
+            }
+            else {
                 $usb | Format-Table DriveLetter, FriendlyName, FileSystem, SizeGb, IsBoot
             }
         }
@@ -615,7 +774,8 @@ if ($Cli) {
 
             if ($Json) {
                 Write-Output $res.RawJson
-            } else {
+            }
+            else {
                 Write-Host "`nAssessment: $($res.Badge)" -ForegroundColor $(switch ($res.Status) { 'candidate' { 'Green' } 'needs_data' { 'Yellow' } default { 'Red' } })
                 Write-Host "Summary:    $($res.Summary)" -ForegroundColor White
                 Write-Host "Captures:   $($res.CaptureCount) found" -ForegroundColor Cyan
@@ -639,6 +799,24 @@ if ($Cli) {
             Write-Host "`n[+] Comparing Compatibility Reports: '$LeftReport' vs '$RightReport'..." -ForegroundColor Yellow
             $diff = Invoke-CompareCompatibilityReports -LeftReportPath $LeftReport -RightReportPath $RightReport -Language $Lang
             Write-Output $diff
+        }
+        'GenerateDumps' {
+            Write-Host "`n[+] Generating Diagnostic Dumps (Type: $DumpType)..." -ForegroundColor Yellow
+            switch ($DumpType) {
+                'Windows' {
+                    $out = Export-WindowsDiagnosticDump -TargetDir $DumpPath
+                    Write-Host "[+] Exported Windows Diagnostic Dump to: $out" -ForegroundColor Green
+                }
+                'EfiCaptures' {
+                    $out = Export-EfiDiagnosticCaptures -TargetDir $DumpPath
+                    Write-Host $out -ForegroundColor Green
+                }
+                'ProbeUsb' {
+                    if (-not $DriveLetter) { throw "Please specify -DriveLetter (e.g. -DriveLetter E)" }
+                    $msg = Stage-DiagnosticProbeUsb -Letter $DriveLetter
+                    Write-Host $msg -ForegroundColor Green
+                }
+            }
         }
     }
     exit 0
@@ -931,7 +1109,7 @@ Add-Type -AssemblyName System.Windows.Forms
             </TabItem>
 
             <!-- TAB 5: OFFLINE COMPATIBILITY CHECKER & ANALYSER -->
-            <TabItem Header="🔍 Offline Compatibility Checker">
+            <TabItem Header="Offline Compatibility Checker">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16">
                     <StackPanel>
                         <TextBlock Text="Offline Compatibility Checker &amp; Analyser" FontSize="16" FontWeight="Bold" Foreground="#89B4FA" Margin="0,0,0,8"/>
@@ -948,8 +1126,8 @@ Add-Type -AssemblyName System.Windows.Forms
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
                                     <TextBox Name="TxtCaptureFolder" Grid.Column="0" Height="32" Background="#181825" Foreground="#CDD6F4" BorderBrush="#45475A" VerticalContentAlignment="Center" Padding="8,4" Text="D:\RTX3090-UNLOCK"/>
-                                    <Button Name="BtnBrowseCaptureFolder" Grid.Column="1" Content="📁 Browse..." Margin="8,0,0,0" Padding="12,6"/>
-                                    <Button Name="BtnDetectUsbCaptures" Grid.Column="2" Content="🔍 Auto-Detect on USB" Margin="8,0,0,0" Padding="12,6"/>
+                                    <Button Name="BtnBrowseCaptureFolder" Grid.Column="1" Content="Browse..." Margin="8,0,0,0" Padding="12,6"/>
+                                    <Button Name="BtnDetectUsbCaptures" Grid.Column="2" Content="Auto-Detect on USB" Margin="8,0,0,0" Padding="12,6"/>
                                 </Grid>
 
                                 <Grid>
@@ -964,8 +1142,21 @@ Add-Type -AssemblyName System.Windows.Forms
                                         <ComboBoxItem Content="English (en)" IsSelected="True"/>
                                         <ComboBoxItem Content="한국어 (ko)"/>
                                     </ComboBox>
-                                    <Button Name="BtnRunOfflineCheck" Grid.Column="3" Content="🚀 Run Offline Compatibility Check" Background="#89B4FA" Foreground="#11111B" FontWeight="Bold" FontSize="13" Padding="18,8"/>
+                                    <Button Name="BtnRunOfflineCheck" Grid.Column="3" Content="Run Offline Compatibility Check" Background="#89B4FA" Foreground="#11111B" FontWeight="Bold" FontSize="13" Padding="18,8"/>
                                 </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Diagnostic Dump & Capture Generation Tools -->
+                        <Border Background="#252538" CornerRadius="6" Padding="14" Margin="0,0,0,14" BorderBrush="#313244" BorderThickness="1">
+                            <StackPanel>
+                                <TextBlock Text="Generate Diagnostic Dumps &amp; Hardware Captures:" FontWeight="Bold" FontSize="13" Foreground="#F9E2AF" Margin="0,0,0,6"/>
+                                <TextBlock Text="Generate comprehensive diagnostic packages for compatibility review, bug reporting, or stage the pre-boot probe to USB:" FontSize="11" Foreground="#A6ADC8" Margin="0,0,0,10" TextWrapping="Wrap"/>
+                                <WrapPanel>
+                                    <Button Name="BtnGenWindowsDump" Content="📄 Generate Windows Diag Dump" Margin="0,0,10,6" Padding="12,7" Background="#313244" Foreground="#CDD6F4"/>
+                                    <Button Name="BtnGenEfiCaptures" Content="⚡ Generate Diagnostic Captures (DIAG/PROM)" Margin="0,0,10,6" Padding="12,7" Background="#313244" Foreground="#89B4FA"/>
+                                    <Button Name="BtnStageProbeUsb" Content="💾 Prepare Diagnostic Probe USB" Margin="0,0,10,6" Padding="12,7" Background="#313244" Foreground="#A6E3A1"/>
+                                </WrapPanel>
                             </StackPanel>
                         </Border>
 
@@ -1201,6 +1392,9 @@ $btnRestoreWindowsBcd = $window.FindName('BtnRestoreWindowsBcd')
 $txtCaptureFolder = $window.FindName('TxtCaptureFolder')
 $btnBrowseCaptureFolder = $window.FindName('BtnBrowseCaptureFolder')
 $btnDetectUsbCaptures = $window.FindName('BtnDetectUsbCaptures')
+$btnGenWindowsDump = $window.FindName('BtnGenWindowsDump')
+$btnGenEfiCaptures = $window.FindName('BtnGenEfiCaptures')
+$btnStageProbeUsb = $window.FindName('BtnStageProbeUsb')
 $comboCheckerLang = $window.FindName('ComboCheckerLang')
 $btnRunOfflineCheck = $window.FindName('BtnRunOfflineCheck')
 
@@ -1272,7 +1466,8 @@ function Refresh-AuditData {
         $txtGpuArch.Text = "Architecture: $($gpu.Architecture)"
         $txtGpuVram.Text = "VRAM: $($gpu.VramMb) MB"
         $txtGpuDriver.Text = "Driver Version: $($gpu.DriverVersion)"
-    } else {
+    }
+    else {
         $txtGpuName.Text = "GPU: No compatible GPU detected."
     }
 }
@@ -1286,9 +1481,11 @@ function Refresh-PreflightData {
     $txtDetailSecureBoot.Text = $sb.Detail
     if ($sb.Status -eq 'PASS') {
         $iconSecureBoot.Text = "[OK]"; $iconSecureBoot.Foreground = [System.Windows.Media.Brushes]::LightGreen
-    } elseif ($sb.Status -eq 'FAIL') {
+    }
+    elseif ($sb.Status -eq 'FAIL') {
         $iconSecureBoot.Text = "[X]"; $iconSecureBoot.Foreground = [System.Windows.Media.Brushes]::Tomato
-    } else {
+    }
+    else {
         $iconSecureBoot.Text = "[!]"; $iconSecureBoot.Foreground = [System.Windows.Media.Brushes]::Gold
     }
 
@@ -1298,10 +1495,12 @@ function Refresh-PreflightData {
     if ($fs.Status -eq 'PASS') {
         $iconFastStartup.Text = "[OK]"; $iconFastStartup.Foreground = [System.Windows.Media.Brushes]::LightGreen
         $btnDisableFastStartup.Visibility = [System.Windows.Visibility]::Collapsed
-    } elseif ($fs.Status -eq 'WARN') {
+    }
+    elseif ($fs.Status -eq 'WARN') {
         $iconFastStartup.Text = "[!]"; $iconFastStartup.Foreground = [System.Windows.Media.Brushes]::Gold
         $btnDisableFastStartup.Visibility = [System.Windows.Visibility]::Visible
-    } else {
+    }
+    else {
         $iconFastStartup.Text = "[?]"; $iconFastStartup.Foreground = [System.Windows.Media.Brushes]::Gray
     }
 
@@ -1310,9 +1509,11 @@ function Refresh-PreflightData {
     $txtDetailBitLocker.Text = $bl.Detail
     if ($bl.Status -eq 'PASS') {
         $iconBitLocker.Text = "[OK]"; $iconBitLocker.Foreground = [System.Windows.Media.Brushes]::LightGreen
-    } elseif ($bl.Status -eq 'WARN') {
+    }
+    elseif ($bl.Status -eq 'WARN') {
         $iconBitLocker.Text = "[!]"; $iconBitLocker.Foreground = [System.Windows.Media.Brushes]::Tomato
-    } else {
+    }
+    else {
         $iconBitLocker.Text = "[i]"; $iconBitLocker.Foreground = [System.Windows.Media.Brushes]::SkyBlue
     }
 
@@ -1322,7 +1523,8 @@ function Refresh-PreflightData {
     $txtDetailAssets.Text = "$($rel.Detail)`n$($as.Detail)"
     if ($as.Status -eq 'PASS' -and $rel.Status -eq 'PASS') {
         $iconAssets.Text = "[OK]"; $iconAssets.Foreground = [System.Windows.Media.Brushes]::LightGreen
-    } else {
+    }
+    else {
         $iconAssets.Text = "[!]"; $iconAssets.Foreground = [System.Windows.Media.Brushes]::Gold
     }
 }
@@ -1333,7 +1535,8 @@ function Refresh-UsbList {
     if ($drives.Count -eq 0) {
         $comboUsbDrives.Items.Add("No removable USB drive detected") | Out-Null
         $comboUsbDrives.SelectedIndex = 0
-    } else {
+    }
+    else {
         foreach ($d in $drives) {
             $comboUsbDrives.Items.Add("$($d.DriveLetter) [$($d.FileSystem), $($d.SizeGb) GB] $($d.FriendlyName)") | Out-Null
         }
@@ -1345,7 +1548,8 @@ function Refresh-TelemetryData {
     $telem = Get-GpuTelemetryLive
     if ($telem['Error']) {
         $txtTelemName.Text = "GPU: $($telem['Error'])"
-    } else {
+    }
+    else {
         $txtTelemName.Text = "GPU: $($telem['Name'])"
         $txtTelemTemp.Text = "Temperature: $($telem['TempC']) deg C"
         $txtTelemUtil.Text = "Utilization: $($telem['UtilGpu'])"
@@ -1366,11 +1570,11 @@ function Update-CompatibilityResultsView($res) {
     $txtNextStep.Text = $res.NextStep
 
     $badgeBrush = switch ($res.Status) {
-        'candidate'     { [System.Windows.Media.Brushes]::LightGreen }
-        'needs_data'    { [System.Windows.Media.Brushes]::Gold }
+        'candidate' { [System.Windows.Media.Brushes]::LightGreen }
+        'needs_data' { [System.Windows.Media.Brushes]::Gold }
         'outside_scope' { [System.Windows.Media.Brushes]::DarkOrange }
-        'invalid_data'  { [System.Windows.Media.Brushes]::Tomato }
-        default         { [System.Windows.Media.Brushes]::Gray }
+        'invalid_data' { [System.Windows.Media.Brushes]::Tomato }
+        default { [System.Windows.Media.Brushes]::Gray }
     }
     $badgeStatusBorder.BorderBrush = $badgeBrush
     $txtStatusHeader.Foreground = $badgeBrush
@@ -1392,7 +1596,8 @@ function Update-CompatibilityResultsView($res) {
         $txtObsChip.Text = "Chip ID: $(if ($obs.chip_id) { $obs.chip_id } else { 'null' }) | Memory: $(if ($obs.device_memory_size_mib) { $obs.device_memory_size_mib + ' MiB' } else { 'null' })"
         $txtObsDisplays.Text = "Displays: $($obs.nvidia_display_count) NVIDIA, $($obs.other_display_count) Other (GOP Handles: $($obs.gop_handle_count))"
         $txtObsNvgop.Text = "NVGOP Bindings: $(if ($obs.firmware_bindings) { $obs.firmware_bindings.Count } else { 0 }) observed"
-    } else {
+    }
+    else {
         $txtObsGpu.Text = "Target GPU: No observations recorded"
         $txtObsPciLoc.Text = "Location: N/A"
         $txtObsChip.Text = "Chip / Memory: N/A"
@@ -1407,7 +1612,8 @@ function Update-CompatibilityResultsView($res) {
     }
     if ($chkLines.Count -eq 0) {
         $txtChecksList.Text = "No individual check codes reported."
-    } else {
+    }
+    else {
         $txtChecksList.Text = ($chkLines -join "`r`n")
     }
 
@@ -1421,7 +1627,8 @@ if ($isAdmin) {
     $txtBadgeAdmin.Text = "ADMINISTRATOR"
     $badgeAdmin.Background = [System.Windows.Media.Brushes]::LightGreen
     $btnElevate.Visibility = [System.Windows.Visibility]::Collapsed
-} else {
+}
+else {
     $txtBadgeAdmin.Text = "USER MODE"
     $badgeAdmin.Background = [System.Windows.Media.Brushes]::Gold
     $btnElevate.Visibility = [System.Windows.Visibility]::Visible
@@ -1430,215 +1637,279 @@ if ($isAdmin) {
 # --- EVENT HOOKS ---
 
 $btnElevate.Add_Click({
-    $psi = New-Object System.Diagnostics.ProcessStartInfo
-    $psi.FileName = "powershell.exe"
-    $psi.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`""
-    $psi.Verb = "runas"
-    try {
-        [System.Diagnostics.Process]::Start($psi) | Out-Null
-        $window.Close()
-    } catch {
-        Write-GuiLog "Elevation request was cancelled."
-    }
-})
+        $psi = New-Object System.Diagnostics.ProcessStartInfo
+        $psi.FileName = "powershell.exe"
+        $psi.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`""
+        $psi.Verb = "runas"
+        try {
+            [System.Diagnostics.Process]::Start($psi) | Out-Null
+            $window.Close()
+        }
+        catch {
+            Write-GuiLog "Elevation request was cancelled."
+        }
+    })
 
 $btnRefresh.Add_Click({
-    Refresh-AuditData
-    Refresh-PreflightData
-    Refresh-UsbList
-    Refresh-TelemetryData
-    Write-GuiLog "Refreshed all system, safety, and telemetry data."
-})
+        Refresh-AuditData
+        Refresh-PreflightData
+        Refresh-UsbList
+        Refresh-TelemetryData
+        Write-GuiLog "Refreshed all system, safety, and telemetry data."
+    })
 
 $btnClearLog.Add_Click({ $txtLog.Clear() })
 
 $btnDisableFastStartup.Add_Click({
-    try {
-        $msg = Disable-WindowsFastStartup
-        Write-GuiLog $msg
-        Refresh-PreflightData
-        [System.Windows.MessageBox]::Show($msg, "Fast Startup Disabled", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information) | Out-Null
-    } catch {
-        Write-GuiLog "Error disabling Fast Startup: $($_.Exception.Message)"
-        [System.Windows.MessageBox]::Show($_.Exception.Message, "Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error) | Out-Null
-    }
-})
+        try {
+            $msg = Disable-WindowsFastStartup
+            Write-GuiLog $msg
+            Refresh-PreflightData
+            [System.Windows.MessageBox]::Show($msg, "Fast Startup Disabled", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information) | Out-Null
+        }
+        catch {
+            Write-GuiLog "Error disabling Fast Startup: $($_.Exception.Message)"
+            [System.Windows.MessageBox]::Show($_.Exception.Message, "Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error) | Out-Null
+        }
+    })
 
 $btnRefreshUsb.Add_Click({
-    Refresh-UsbList
-    Write-GuiLog "Refreshed connected removable USB drive list."
-})
+        Refresh-UsbList
+        Write-GuiLog "Refreshed connected removable USB drive list."
+    })
 
 $btnDeployUsb.Add_Click({
-    $selected = [string]$comboUsbDrives.SelectedItem
-    if (-not $selected -or $selected.StartsWith("No removable")) {
-        [System.Windows.MessageBox]::Show("Please connect a FAT32 USB drive first.", "No USB Selected", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Warning) | Out-Null
-        return
-    }
-    $letter = $selected.Substring(0, 1)
-    $confirm = [System.Windows.MessageBox]::Show("Stage UEFI Unlock files onto drive $letter`:`\?`n`nThis will copy BOOTX64.EFI and firmware assets into FAT32 directories.`nExisting files will be preserved.", "Confirm USB Deployment", [System.Windows.MessageBoxButton]::YesNo, [System.Windows.MessageBoxImage]::Question)
-    if ($confirm -eq [System.Windows.MessageBoxResult]::Yes) {
-        try {
-            Write-GuiLog "Starting USB deployment to $letter`:..."
-            $res = Deploy-ToUsb $letter
-            Write-GuiLog "Staging complete: $($res.Status) (Assets copied: $($res.AssetsCopied))"
-            [System.Windows.MessageBox]::Show("USB Unlock deployed successfully to $letter`:`\!`n`nReboot your PC and press your Boot Menu key (ASUS F8 / Gigabyte F12 / MSI F11) to boot.", "Deployment Success", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information) | Out-Null
-        } catch {
-            Write-GuiLog "USB deployment error: $($_.Exception.Message)"
-            [System.Windows.MessageBox]::Show($_.Exception.Message, "Deployment Failed", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error) | Out-Null
+        $selected = [string]$comboUsbDrives.SelectedItem
+        if (-not $selected -or $selected.StartsWith("No removable")) {
+            [System.Windows.MessageBox]::Show("Please connect a FAT32 USB drive first.", "No USB Selected", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Warning) | Out-Null
+            return
         }
-    }
-})
+        $letter = $selected.Substring(0, 1)
+        $confirm = [System.Windows.MessageBox]::Show("Stage UEFI Unlock files onto drive $letter`:`\?`n`nThis will copy BOOTX64.EFI and firmware assets into FAT32 directories.`nExisting files will be preserved.", "Confirm USB Deployment", [System.Windows.MessageBoxButton]::YesNo, [System.Windows.MessageBoxImage]::Question)
+        if ($confirm -eq [System.Windows.MessageBoxResult]::Yes) {
+            try {
+                Write-GuiLog "Starting USB deployment to $letter`:..."
+                $res = Deploy-ToUsb $letter
+                Write-GuiLog "Staging complete: $($res.Status) (Assets copied: $($res.AssetsCopied))"
+                [System.Windows.MessageBox]::Show("USB Unlock deployed successfully to $letter`:`\!`n`nReboot your PC and press your Boot Menu key (ASUS F8 / Gigabyte F12 / MSI F11) to boot.", "Deployment Success", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information) | Out-Null
+            }
+            catch {
+                Write-GuiLog "USB deployment error: $($_.Exception.Message)"
+                [System.Windows.MessageBox]::Show($_.Exception.Message, "Deployment Failed", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error) | Out-Null
+            }
+        }
+    })
 
 $btnRunInternalConfigure.Add_Click({
-    Write-GuiLog "Internal Headless Setup requires manual execution with exact GUID of dedicated ESP."
-    [System.Windows.MessageBox]::Show("To configure Internal Headless ESP, run from Administrator PowerShell:`n`n.\internal-boot\Configure.ps1 -UnlockDriveLetter U -WindowsEspGuid <GUID>`n`nEnsure you use a dedicated secondary ESP partition, never the Windows ESP.", "Internal ESP Instructions", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information) | Out-Null
-})
+        Write-GuiLog "Internal Headless Setup requires manual execution with exact GUID of dedicated ESP."
+        [System.Windows.MessageBox]::Show("To configure Internal Headless ESP, run from Administrator PowerShell:`n`n.\internal-boot\Configure.ps1 -UnlockDriveLetter U -WindowsEspGuid <GUID>`n`nEnsure you use a dedicated secondary ESP partition, never the Windows ESP.", "Internal ESP Instructions", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information) | Out-Null
+    })
 
 $btnRestoreWindowsBcd.Add_Click({
-    try {
-        Write-GuiLog "Restoring default Windows Boot Manager priority..."
-        $msg = Restore-WindowsFirstBootOrder
-        Write-GuiLog $msg
-        [System.Windows.MessageBox]::Show("Windows Boot Manager has been restored as primary boot entry.", "Boot Order Restored", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information) | Out-Null
-    } catch {
-        Write-GuiLog "Error restoring boot order: $($_.Exception.Message)"
-        [System.Windows.MessageBox]::Show($_.Exception.Message, "Restore Failed", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error) | Out-Null
-    }
-})
+        try {
+            Write-GuiLog "Restoring default Windows Boot Manager priority..."
+            $msg = Restore-WindowsFirstBootOrder
+            Write-GuiLog $msg
+            [System.Windows.MessageBox]::Show("Windows Boot Manager has been restored as primary boot entry.", "Boot Order Restored", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information) | Out-Null
+        }
+        catch {
+            Write-GuiLog "Error restoring boot order: $($_.Exception.Message)"
+            [System.Windows.MessageBox]::Show($_.Exception.Message, "Restore Failed", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error) | Out-Null
+        }
+    })
 
 $btnEmergencyRestore.Add_Click({
-    $btnRestoreWindowsBcd.RaiseEvent((New-Object System.Windows.RoutedEventArgs([System.Windows.Controls.Button]::ClickEvent)))
-})
+        $btnRestoreWindowsBcd.RaiseEvent((New-Object System.Windows.RoutedEventArgs([System.Windows.Controls.Button]::ClickEvent)))
+    })
 
 # --- OFFLINE CHECKER TAB EVENT HANDLERS ---
 
 $btnBrowseCaptureFolder.Add_Click({
-    $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
-    $dialog.Description = "Select Folder Containing Diagnostic Captures (DIAGnn.TXT)"
-    if (Test-Path -LiteralPath $txtCaptureFolder.Text) {
-        $dialog.SelectedPath = $txtCaptureFolder.Text
-    }
-    if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
-        $txtCaptureFolder.Text = $dialog.SelectedPath
-        Write-GuiLog "Selected capture folder: $($dialog.SelectedPath)"
-    }
-})
+        $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+        $dialog.Description = "Select Folder Containing Diagnostic Captures (DIAGnn.TXT)"
+        if (Test-Path -LiteralPath $txtCaptureFolder.Text) {
+            $dialog.SelectedPath = $txtCaptureFolder.Text
+        }
+        if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+            $txtCaptureFolder.Text = $dialog.SelectedPath
+            Write-GuiLog "Selected capture folder: $($dialog.SelectedPath)"
+        }
+    })
 
 $btnDetectUsbCaptures.Add_Click({
-    Write-GuiLog "Searching for EFI capture folders on connected USB drives..."
-    $candidates = Find-UsbCaptureFolders
-    if ($candidates.Count -gt 0) {
-        $txtCaptureFolder.Text = $candidates[0]
-        Write-GuiLog "Found capture folder on USB: $($candidates[0])"
-        [System.Windows.MessageBox]::Show("Found capture folder on USB drive:`n$($candidates[0])", "USB Captures Located", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information) | Out-Null
-    } else {
-        Write-GuiLog "No capture folders found on USB drives."
-        [System.Windows.MessageBox]::Show("No capture folders or DIAG*.TXT files found on connected USB drives.`n`nIf you already booted from USB, ensure the USB stick is plugged in.", "No Captures Found", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Warning) | Out-Null
-    }
-})
+        Write-GuiLog "Searching for EFI capture folders on connected USB drives..."
+        $candidates = Find-UsbCaptureFolders
+        if ($candidates.Count -gt 0) {
+            $txtCaptureFolder.Text = $candidates[0]
+            Write-GuiLog "Found capture folder on USB: $($candidates[0])"
+            [System.Windows.MessageBox]::Show("Found capture folder on USB drive:`n$($candidates[0])", "USB Captures Located", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information) | Out-Null
+        }
+        else {
+            Write-GuiLog "No capture folders found on USB drives."
+            [System.Windows.MessageBox]::Show("No capture folders or DIAG*.TXT files found on connected USB drives.`n`nIf you already booted from USB, ensure the USB stick is plugged in.", "No Captures Found", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Warning) | Out-Null
+        }
+    })
 
 $btnRunOfflineCheck.Add_Click({
-    $folder = $txtCaptureFolder.Text.Trim()
-    if (-not $folder) {
-        [System.Windows.MessageBox]::Show("Please specify or browse to a capture folder.", "Missing Folder", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Warning) | Out-Null
-        return
-    }
+        $folder = $txtCaptureFolder.Text.Trim()
+        if (-not $folder) {
+            [System.Windows.MessageBox]::Show("Please specify or browse to a capture folder.", "Missing Folder", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Warning) | Out-Null
+            return
+        }
 
-    $langSelected = if ($comboCheckerLang.SelectedIndex -eq 1) { 'ko' } else { 'en' }
-    try {
-        Write-GuiLog "Running offline compatibility checker on: $folder (Lang: $langSelected)..."
-        $txtStatusHeader.Text = "ANALYZING..."
-        $txtStatusHeader.Foreground = [System.Windows.Media.Brushes]::Gold
-        $txtStatusSummary.Text = "Reading diagnostic captures, driver images, and PROM..."
+        $langSelected = if ($comboCheckerLang.SelectedIndex -eq 1) { 'ko' } else { 'en' }
+        try {
+            Write-GuiLog "Running offline compatibility checker on: $folder (Lang: $langSelected)..."
+            $txtStatusHeader.Text = "ANALYZING..."
+            $txtStatusHeader.Foreground = [System.Windows.Media.Brushes]::Gold
+            $txtStatusSummary.Text = "Reading diagnostic captures, driver images, and PROM..."
 
-        $res = Invoke-OfflineCompatibilityCheck -Folder $folder -Language $langSelected
-        Update-CompatibilityResultsView $res
-        Write-GuiLog "Offline check complete: $($res.Badge)"
-    } catch {
-        Write-GuiLog "Error during offline check: $($_.Exception.Message)"
-        [System.Windows.MessageBox]::Show($_.Exception.Message, "Checker Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error) | Out-Null
-    }
-})
+            $res = Invoke-OfflineCompatibilityCheck -Folder $folder -Language $langSelected
+            Update-CompatibilityResultsView $res
+            Write-GuiLog "Offline check complete: $($res.Badge)"
+        }
+        catch {
+            Write-GuiLog "Error during offline check: $($_.Exception.Message)"
+            [System.Windows.MessageBox]::Show($_.Exception.Message, "Checker Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error) | Out-Null
+        }
+    })
+
+$btnGenWindowsDump.Add_Click({
+        try {
+            Write-GuiLog "Generating comprehensive Windows diagnostic dump..."
+            $out = Export-WindowsDiagnosticDump
+            Write-GuiLog "Diagnostic dump created at: $out"
+            [System.Diagnostics.Process]::Start("explorer.exe", $out) | Out-Null
+            [System.Windows.MessageBox]::Show("Windows diagnostic dump generated at:`n$out`n`nIncludes WINDOWS-INVENTORY.JSON, NVIDIA-SMI-DUMP.XML, DISPLAY-EDID.JSON, and SYSTEM-SUMMARY.JSON.", "Diagnostic Dump Complete", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information) | Out-Null
+        }
+        catch {
+            Write-GuiLog "Error generating diagnostic dump: $($_.Exception.Message)"
+            [System.Windows.MessageBox]::Show($_.Exception.Message, "Dump Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error) | Out-Null
+        }
+    })
+
+$btnGenEfiCaptures.Add_Click({
+        $folder = $txtCaptureFolder.Text.Trim()
+        if (-not $folder -or $folder -eq 'D:\RTX3090-UNLOCK') {
+            $folder = Join-Path $Script:RepoRoot "diagnostic-captures"
+        }
+        try {
+            Write-GuiLog "Generating pre-boot EFI diagnostic captures for detected GPU in $folder..."
+            $msg = Export-EfiDiagnosticCaptures -TargetDir $folder
+            Write-GuiLog $msg
+            $txtCaptureFolder.Text = $folder
+            $btnRunOfflineCheck.RaiseEvent((New-Object System.Windows.RoutedEventArgs([System.Windows.Controls.Button]::ClickEvent)))
+            [System.Windows.MessageBox]::Show("Generated pre-boot diagnostic captures (DIAG00.TXT, DIAG01.TXT, IMG00.BIN, PROM.BIN) in:`n$folder`n`nOffline compatibility check was automatically triggered.", "Diagnostic Captures Generated", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information) | Out-Null
+        }
+        catch {
+            Write-GuiLog "Error generating captures: $($_.Exception.Message)"
+            [System.Windows.MessageBox]::Show($_.Exception.Message, "Capture Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error) | Out-Null
+        }
+    })
+
+$btnStageProbeUsb.Add_Click({
+        $selected = [string]$comboUsbDrives.SelectedItem
+        if (-not $selected -or $selected.StartsWith("No removable")) {
+            [System.Windows.MessageBox]::Show("Please insert and select a FAT32 USB drive in Tab 3 first.", "No USB Selected", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Warning) | Out-Null
+            return
+        }
+        $letter = $selected.Substring(0, 1)
+        $confirm = [System.Windows.MessageBox]::Show("Stage read-only Diagnostic Probe on drive $letter`:`\?`n`nWhen booted, the probe records physical DIAGnn.TXT, IMGnn.BIN, and PROM.BIN captures from this PC.", "Confirm Diagnostic Probe Staging", [System.Windows.MessageBoxButton]::YesNo, [System.Windows.MessageBoxImage]::Question)
+        if ($confirm -eq [System.Windows.MessageBoxResult]::Yes) {
+            try {
+                Write-GuiLog "Staging Diagnostic Probe on $letter`:..."
+                $msg = Stage-DiagnosticProbeUsb -Letter $letter
+                Write-GuiLog $msg
+                [System.Windows.MessageBox]::Show("Diagnostic Probe staged on drive $letter`:`\!`n`nTo collect hardware captures:`n1. Power off PC completely.`n2. Turn on and press Boot Menu key (F8/F12).`n3. Boot USB -> It writes captures and boots Windows.`n4. Repeat once more for 2 agreeing cold boots.`n5. Open this utility and click 'Auto-Detect on USB'!", "Probe Staged", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information) | Out-Null
+            }
+            catch {
+                Write-GuiLog "Error staging probe: $($_.Exception.Message)"
+                [System.Windows.MessageBox]::Show($_.Exception.Message, "Staging Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error) | Out-Null
+            }
+        }
+    })
 
 $btnExportJson.Add_Click({
-    if (-not $Script:LastAnalysis -or -not $Script:LastAnalysis.RawJson) {
-        [System.Windows.MessageBox]::Show("Run an offline compatibility check first to generate a report.", "No Report to Export", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Warning) | Out-Null
-        return
-    }
-
-    $dialog = New-Object System.Windows.Forms.SaveFileDialog
-    $dialog.Filter = "JSON Report (*.json)|*.json|All Files (*.*)|*.*"
-    $dialog.FileName = "compatibility-report.json"
-    $dialog.Title = "Save Compatibility Report JSON"
-
-    if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
-        try {
-            Set-Content -LiteralPath $dialog.FileName -Value $Script:LastAnalysis.RawJson -Encoding utf8
-            Write-GuiLog "Saved compatibility report JSON to: $($dialog.FileName)"
-            [System.Windows.MessageBox]::Show("Compatibility report saved to:`n$($dialog.FileName)", "Report Exported", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information) | Out-Null
-        } catch {
-            Write-GuiLog "Failed to export report: $($_.Exception.Message)"
-            [System.Windows.MessageBox]::Show($_.Exception.Message, "Export Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error) | Out-Null
+        if (-not $Script:LastAnalysis -or -not $Script:LastAnalysis.RawJson) {
+            [System.Windows.MessageBox]::Show("Run an offline compatibility check first to generate a report.", "No Report to Export", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Warning) | Out-Null
+            return
         }
-    }
-})
+
+        $dialog = New-Object System.Windows.Forms.SaveFileDialog
+        $dialog.Filter = "JSON Report (*.json)|*.json|All Files (*.*)|*.*"
+        $dialog.FileName = "compatibility-report.json"
+        $dialog.Title = "Save Compatibility Report JSON"
+
+        if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+            try {
+                Set-Content -LiteralPath $dialog.FileName -Value $Script:LastAnalysis.RawJson -Encoding utf8
+                Write-GuiLog "Saved compatibility report JSON to: $($dialog.FileName)"
+                [System.Windows.MessageBox]::Show("Compatibility report saved to:`n$($dialog.FileName)", "Report Exported", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information) | Out-Null
+            }
+            catch {
+                Write-GuiLog "Failed to export report: $($_.Exception.Message)"
+                [System.Windows.MessageBox]::Show($_.Exception.Message, "Export Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error) | Out-Null
+            }
+        }
+    })
 
 $btnCopyClipboard.Add_Click({
-    if (-not $Script:LastAnalysis -or -not $Script:LastAnalysis.RawJson) {
-        [System.Windows.MessageBox]::Show("Run an offline compatibility check first to generate a report.", "No Report to Copy", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Warning) | Out-Null
-        return
-    }
-    try {
-        [System.Windows.Forms.Clipboard]::SetText($Script:LastAnalysis.RawJson)
-        Write-GuiLog "Copied compatibility report JSON to clipboard."
-        [System.Windows.MessageBox]::Show("Compatibility report JSON copied to clipboard!`n`nYou can paste it directly into the GitHub Issue report form.", "Copied to Clipboard", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information) | Out-Null
-    } catch {
-        Write-GuiLog "Failed to copy to clipboard: $($_.Exception.Message)"
-    }
-})
+        if (-not $Script:LastAnalysis -or -not $Script:LastAnalysis.RawJson) {
+            [System.Windows.MessageBox]::Show("Run an offline compatibility check first to generate a report.", "No Report to Copy", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Warning) | Out-Null
+            return
+        }
+        try {
+            [System.Windows.Forms.Clipboard]::SetText($Script:LastAnalysis.RawJson)
+            Write-GuiLog "Copied compatibility report JSON to clipboard."
+            [System.Windows.MessageBox]::Show("Compatibility report JSON copied to clipboard!`n`nYou can paste it directly into the GitHub Issue report form.", "Copied to Clipboard", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information) | Out-Null
+        }
+        catch {
+            Write-GuiLog "Failed to copy to clipboard: $($_.Exception.Message)"
+        }
+    })
 
 $btnBrowseLeftReport.Add_Click({
-    $dialog = New-Object System.Windows.Forms.OpenFileDialog
-    $dialog.Filter = "JSON Reports (*.json)|*.json|All Files (*.*)|*.*"
-    $dialog.Title = "Select Reference Compatibility Report JSON"
-    if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
-        $txtLeftReport.Text = $dialog.FileName
-    }
-})
+        $dialog = New-Object System.Windows.Forms.OpenFileDialog
+        $dialog.Filter = "JSON Reports (*.json)|*.json|All Files (*.*)|*.*"
+        $dialog.Title = "Select Reference Compatibility Report JSON"
+        if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+            $txtLeftReport.Text = $dialog.FileName
+        }
+    })
 
 $btnBrowseRightReport.Add_Click({
-    $dialog = New-Object System.Windows.Forms.OpenFileDialog
-    $dialog.Filter = "JSON Reports (*.json)|*.json|All Files (*.*)|*.*"
-    $dialog.Title = "Select Probe Compatibility Report JSON"
-    if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
-        $txtRightReport.Text = $dialog.FileName
-    }
-})
+        $dialog = New-Object System.Windows.Forms.OpenFileDialog
+        $dialog.Filter = "JSON Reports (*.json)|*.json|All Files (*.*)|*.*"
+        $dialog.Title = "Select Probe Compatibility Report JSON"
+        if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+            $txtRightReport.Text = $dialog.FileName
+        }
+    })
 
 $btnRunCompareReports.Add_Click({
-    $left = $txtLeftReport.Text.Trim()
-    $right = $txtRightReport.Text.Trim()
-    if (-not $left -or -not $right) {
-        [System.Windows.MessageBox]::Show("Please select both a reference (Left) and a probe (Right) JSON report file.", "Missing Reports", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Warning) | Out-Null
-        return
-    }
-    try {
-        Write-GuiLog "Comparing reports: $left vs $right..."
-        $txtCompareResult.Text = "Running compare-compatibility.py..."
-        $diff = Invoke-CompareCompatibilityReports -LeftReportPath $left -RightReportPath $right
-        $txtCompareResult.Text = $diff
-        Write-GuiLog "Report comparison finished."
-    } catch {
-        $txtCompareResult.Text = "Comparison Error: $($_.Exception.Message)"
-        Write-GuiLog "Comparison error: $($_.Exception.Message)"
-    }
-})
+        $left = $txtLeftReport.Text.Trim()
+        $right = $txtRightReport.Text.Trim()
+        if (-not $left -or -not $right) {
+            [System.Windows.MessageBox]::Show("Please select both a reference (Left) and a probe (Right) JSON report file.", "Missing Reports", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Warning) | Out-Null
+            return
+        }
+        try {
+            Write-GuiLog "Comparing reports: $left vs $right..."
+            $txtCompareResult.Text = "Running compare-compatibility.py..."
+            $diff = Invoke-CompareCompatibilityReports -LeftReportPath $left -RightReportPath $right
+            $txtCompareResult.Text = $diff
+            Write-GuiLog "Report comparison finished."
+        }
+        catch {
+            $txtCompareResult.Text = "Comparison Error: $($_.Exception.Message)"
+            Write-GuiLog "Comparison error: $($_.Exception.Message)"
+        }
+    })
 
 $btnRefreshTelem.Add_Click({
-    Refresh-TelemetryData
-    Write-GuiLog "Refreshed live GPU telemetry."
-})
+        Refresh-TelemetryData
+        Write-GuiLog "Refreshed live GPU telemetry."
+    })
 
 # Load Initial Data
 Refresh-AuditData
