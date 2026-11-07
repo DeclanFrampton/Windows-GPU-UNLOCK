@@ -374,3 +374,38 @@ In particular, the documented pre-NVIDIA-Stop integration gap remains unresolved
 Normal profile/family/firmware/proven admission remains unchanged. The added
 mutation must compile and then be rejected when the MSI-specific restrictions
 are bypassed; compilation errors do not count as guard detection.
+
+## Post-Stop observation transition
+
+`stop-transition.{h,c}` supplies a separate pure research predicate for the
+post-Stop state described in the MSI report. A baseline must pass the existing
+snapshot policy and have corrected attributes exactly MEMORY, with raw command
+2. A complete observation may retain that state or lose only the raw memory
+decode bit and its corresponding cached MEMORY attribute. All other GPU config
+bits (including PCI status), handles/interfaces, locations and supported bits,
+and every parent field must remain exactly equal. A memory-off result also
+requires MEMORY in the unchanged supported mask. IO, BME, unknown cache bits,
+uncorrected baselines, partial observations and unrelated drift are refused.
+
+The enum result is REFUSED, UNCHANGED or MEMORY_OFF. There is no output pointer,
+allocation, callback or write; supplied input storage must remain immutable during
+the call. MEMORY_OFF describes the observed delta, **not permission to restore**.
+The function does not prove that NVIDIA Stop ran, establish exclusive ownership,
+authenticate captures or establish freshness/atomicity. BAR/PROM/cold-state,
+driver release and final handoff checks remain independent requirements.
+
+```powershell
+python -I research/pci-decode/test-stop-transition.py --clang C:\TOOLS\LLVM20\bin\clang.exe --mutations --output research/pci-decode/build/your-new-stop-transition
+```
+
+Run from a host shell with the existing MSVC headers/libraries available. The
+runner builds a RAM executable and a freestanding COFF object, records source
+hashes and requires six broken guards to compile before their runtime rejection.
+Fixtures sweep every config bit and metadata/attribute/support bit of the GPU
+and all 1..16 synthetic parents, over three PCI segments. They are synthetic
+models, not private captured snapshots or another hardware success. No EFI image
+is linked/executed/staged by this runner. The predicate is not connected to
+production, the generic read-only collector, or the owned correction caller.
+Current capture still requires memory-on command2 and therefore cannot itself
+collect the proposed memory-off observation. A phase-aware trusted collector and
+the pre-Stop mismatch/ownership ordering remain necessary integration work.
