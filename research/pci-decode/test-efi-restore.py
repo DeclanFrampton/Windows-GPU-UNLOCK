@@ -57,6 +57,17 @@ def main():
             'free-private-restore-report': (' || Overlap(p,n,&RestoreReport,sizeof(RestoreReport))', ''),
             'free-private-stop-snapshot': ('Overlap(p,n,&RestoreInitial,sizeof(RestoreInitial)) || ', ''),
             'ignore-restore-cleanup-failure': ('if(cleanup!=EFI_SUCCESS)return RestoreFinish(c,t,GU_DR_OWNERSHIP_FAILED);', '(void)cleanup;'),
+            'skip-released-plan-validation': ('if(!GuDsReleasePlanMatches(plan,before,after))', 'if(FALSE)'),
+            'use-mutable-released-observation': ('GuDecodeSnapshotMatches(&RestoreInitial,&a->ReleasedAfter,FALSE)',
+                'GuDecodeSnapshotMatches(&RestoreInitial,a->InputReleasedAfter,FALSE)'),
+            'omit-initial-released-pin': ('if(a->ReleasedOrigin && !GuDecodeSnapshotMatches(&RestoreInitial,&a->ReleasedAfter,FALSE))', 'if(FALSE)'),
+            'omit-origin-report': ('RestoreReport.ReleasedOrigin=a->ReleasedOrigin;', 'RestoreReport.ReleasedOrigin=FALSE;'),
+            'accept-noncanonical-origin': ('if(c->ReleasedOrigin!=FALSE && c->ReleasedOrigin!=TRUE)', 'if(FALSE)'),
+            'downgrade-origin-with-history': ('if(!c->ReleasedOrigin && (c->InputReleasedAfter',
+                'if(FALSE && !c->ReleasedOrigin && (c->InputReleasedAfter'),
+            'free-original-released-observation': (
+                '(c->ReleasedOrigin && (Overlap(p,n,c->InputReleasedAfter,sizeof(*c->InputReleasedAfter)) ||\n       Overlap(p,n,c->InputReleasePlan,sizeof(*c->InputReleasePlan)))) ||',
+                '(c->ReleasedOrigin && Overlap(p,n,c->InputReleasePlan,sizeof(*c->InputReleasePlan))) ||'),
         }
         for name, (old, new) in changes.items():
             if original.count(old) != 1:

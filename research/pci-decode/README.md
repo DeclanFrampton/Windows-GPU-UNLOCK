@@ -485,7 +485,9 @@ another complete matching observation after that log. This does not exclude
 changes after the last sampled read or trusted callback.
 
 The single-use `GU_DR_TRANSACTION` separately records Started, EnableInvoked,
-PostObserved, raw EnableStatus and ObservationStatus. EnableStatus starts at
+PostObserved, ReleasedOrigin, raw EnableStatus and ObservationStatus. ReleasedOrigin
+names the policy path, not proof that Stop occurred or evidence was authenticated.
+EnableStatus starts at
 EFI_NOT_STARTED; EnableInvoked distinguishes no call from that actual firmware
 error. PostObserved means a successful complete owned observation after Enable,
 not proof of a successful write. Existing adapter ownership/cleanup statuses and
@@ -501,8 +503,8 @@ python -I research/pci-decode/test-owned-image.py --restore --clang C:\TOOLS\LLV
 The RAM model composes the real opt-in collector, held-claim restoration and final
 collector verification. It also runs the ordinary adapter suite, callback
 fault/warning/partial-output sweeps, no-effect and partial-effect Enable errors,
-cross-mode/reentry, policy/report edits, claim loss, log/cleanup failures and 21
-private/caller-report pool aliases. Eight broken variants must compile and fail
+cross-mode/reentry, policy/report edits, claim loss, log/cleanup failures and 39
+private/caller-report/original-input pool aliases. Fifteen broken variants must compile and fail
 explicit assertions; process crashes do not count. The stop-snapshot alias mutant
 removes both overlapping defenses, because either alone still protects that
 storage. The link fixture retains both experiments and the existing correction
@@ -549,12 +551,50 @@ snapshot. The corrected-before `GuDsEfiCaptureAfterStop` and ordinary capture
 contracts remain unchanged. The plan and collector are tested by the existing
 transition/post-Stop host runners and retained by the opt-in synthetic link tests.
 
-This alternate route adds no driver Stop, ownership acquisition or restoration.
-It is not passed into `GuDsEfiInitializeRestore`, whose corrected-observed-before
-contract still applies. A separate initializer that explicitly retains the actual
-observations and derived target would be required before reusing restoration.
+The alternate collector adds no driver Stop, ownership acquisition or restoration.
+Its derived target is not passed into `GuDsEfiInitializeRestore`, whose
+corrected-observed-before contract still applies. The separate initializer below
+retains the actual observations and explicitly derived target before reusing the
+research-only held-claim restoration algorithm.
 Production CapturePermit, Full.Attributes, RestoreDecode, final verification,
 profile/proven admission and handoff are unchanged. Relaxing only CapturePermit
 would be incorrect: the existing restoration/final verification would still
 expect the original300 attributes. Exact driver/console-release qualification
 and hardware evidence for the uncorrected Stop transition remain outstanding.
+
+### Explicit released-origin restoration binding
+
+Under `GU_DS_POST_STOP_RESTORE=1`, `GuDsEfiInitializeReleasedRestore` accepts actual
+Before300, actual After0, their separately derived Plan and the caller's pinned
+bindings. It revalidates the full pair and plan without firmware callbacks, then
+copies both complete originals and the plan into private context fields.
+Expected is constructed from that private Before with only the verified
+Plan.PlannedGpu substituted; `ReleasedOrigin=TRUE` explicitly labels Expected as a
+planned target. The input observations remain unchanged. All translation units
+must use the same feature definitions because the context layout changes.
+
+Initialized context fields are private and immutable by contract. At Run, the
+adapter revalidates the frozen pair/plan and requires Expected to equal the private
+Before with only cached IO cleared. It rejects noncanonical origin values and a
+false origin flag with remaining released-history metadata. The complete context
+and report are copied into private per-image storage before callbacks. Original
+input pointers are retained only for lifetime/alias protection; later caller input
+edits cannot change the run's policy. This protects the chosen input pair during
+the operation, not against a caller fabricating data or deliberately rewriting an
+entire private context before Run.
+
+The first current owned observation must exactly equal private ActualAfter before
+the existing intent-log/recheck/Enable sequence can begin. Already-MEMORY-on or a
+different otherwise valid observation is refused at this boundary. All original
+parent contents are retained, so a matching GPU-only plan cannot silently replace
+the parent baseline. Original Before/After/Plan, the extended private/caller context,
+scratch and the output report are covered by pool/output alias checks.
+
+The host model composes the actual released-mismatch collector, this explicit
+initializer, one held-claim MEMORY restoration and an ordinary final collector.
+Tests cover bounded routes, callback faults, raw failed-Enable and cleanup status,
+partial Init refusal through both Run APIs, changed parent history, already-on
+current state, mutated plans/origin, caller input/context/report edits and additional
+original-buffer aliases. These remain RAM models and invalid-target link fixtures.
+The binding neither performs nor qualifies NVIDIA Stop, obtains a claim, changes a
+production gate, or establishes physical compatibility for the hypothesis.

@@ -12,6 +12,10 @@ static unsigned EnableBehavior,RestoreSwitchAt;
 static unsigned SwitchOnLog;
 static BOOLEAN FreezeRestoreReport;
 static VOID *RestoreBorrowed;
+static GU_DS_SNAPSHOT ActualBefore,ActualAfter;
+static GU_DS_RELEASE_PLAN ActualPlan;
+static BOOLEAN FreezeReleasedInputs;
+static unsigned ReleasedEnableBoundary;
 static void RestoreTick(void) {
   if(RestoreReentry && !InsideRestoreHook) {
     InsideRestoreHook=TRUE;
@@ -22,6 +26,9 @@ static void RestoreTick(void) {
     Check(GuDsEfiRun(&M->Adapter,&old)==GU_DS_REUSED && !old.Started,"ordinary run cannot enter active restore");
     Check(GuDsEfiInitializeRestore(&context,&M->Boot,(EFI_HANDLE)&M->OwnerTag,M->Bindings,M->Count,&M->Expected,Log,M)==EFI_ALREADY_STARTED && !context.InitUsed,
       "fresh restore initializer cannot enter workspace");
+    Check(GuDsEfiInitializeReleasedRestore(&context,&M->Boot,(EFI_HANDLE)&M->OwnerTag,M->Bindings,M->Count,
+      &ActualBefore,&ActualAfter,&ActualPlan,Log,M)==EFI_ALREADY_STARTED && !context.InitUsed,
+      "fresh released-origin initializer cannot enter workspace");
     context=M->Adapter;context.RunUsed=FALSE;context.Busy=FALSE;
     Check(GuDsEfiRestoreRun(&context,&fresh)==GU_DR_REUSED && !context.RunUsed && !fresh.Started,
       "fresh restore context cannot overwrite active workspace");
@@ -62,12 +69,20 @@ static BOOLEAN RestoreLog(VOID *context,const char *event) {
     M->Devices[0].State.Config[1]^=2;M->Devices[0].State.Attributes^=GU_DS_MEMORY;
   }
   if(FreezeRestoreReport){RestoreTransaction=(GU_DR_TRANSACTION){0};M->Adapter.RestoreMode=FALSE;}
+  if(FreezeReleasedInputs) {
+    ActualBefore.Parents[0].Config[20]^=1;ActualAfter.Parents[0].Config[20]^=1;
+    ActualPlan.RestoreMask|=GU_DS_MASTER;
+    M->Adapter.ReleasedBefore.Parents[0].Config[20]^=1;
+    M->Adapter.ReleasedAfter.Parents[0].Config[20]^=1;
+    M->Adapter.ReleasePlan.RestoreMask|=GU_DS_MASTER;M->Adapter.ReleasedOrigin=FALSE;
+  }
   return result;
 }
 static void RestoreSetup(MODEL *m,unsigned parents,UINTN segment,BOOLEAN off) {
   Setup(m,parents,segment);memset(&RestoreTransaction,0,sizeof(RestoreTransaction));
   RestoreReentry=InsideRestoreHook=FALSE;EnableBehavior=RestoreSwitchAt=0;
   SwitchOnLog=0;FreezeRestoreReport=FALSE;RestoreBorrowed=NULL;m->Boot.OpenProtocolInformation=RestoreOwners;
+  FreezeReleasedInputs=FALSE;
   m->Expected.Gpu.Attributes=GU_DS_MEMORY;
   for(unsigned i=0;i<m->Count;i++)m->Devices[i].Io.Attributes=RestoreAttributes;
   m->Devices[0].State.Attributes=off?0:GU_DS_MEMORY;
@@ -78,6 +93,27 @@ static EFI_STATUS RestoreInit(MODEL *m) {
     m->Bindings,m->Count,&m->Expected,RestoreLog,m);
 }
 static GU_DR_RESULT RestoreRun(MODEL *m) {return GuDsEfiRestoreRun(&m->Adapter,&RestoreTransaction);}
+static void ReleasedSetup(MODEL *m,unsigned parents,UINTN segment) {
+  RestoreSetup(m,parents,segment,TRUE);ActualBefore=m->Expected;ActualBefore.Gpu.Attributes|=GU_DS_IO;
+  ActualAfter=m->Expected;ActualAfter.Gpu.Config[1]&=~2U;ActualAfter.Gpu.Attributes=0;
+  Check(GuDsPlanReleasedMismatch(&ActualBefore,&ActualAfter,&ActualPlan),"released-origin fixture derives a separate plan");
+}
+static EFI_STATUS ReleasedInit(MODEL *m) {
+  return GuDsEfiInitializeReleasedRestore(&m->Adapter,&m->Boot,(EFI_HANDLE)&m->OwnerTag,m->Bindings,m->Count,
+    &ActualBefore,&ActualAfter,&ActualPlan,RestoreLog,m);
+}
+static void ReleasedRefuse(MODEL *m) {
+  GU_DR_RESULT r=RestoreRun(m);unsigned calls=m->Calls;
+  Check(r!=GU_DR_RESTORED && r!=GU_DR_UNCHANGED,"unsafe released-origin restoration refuses");
+  if(RestoreTransaction.Started)Check(RestoreTransaction.ReleasedOrigin==TRUE,"failed released-origin report retains policy path");
+  if((m->FaultAt && m->FaultAt<ReleasedEnableBoundary) || (m->DropAt && m->DropAt<ReleasedEnableBoundary))
+    Check(!m->Writes,"pre-Enable released-origin callback failure cannot write");
+  Check(m->Writes<=1 && !m->PoolLive,"released-origin failure has no retry or retained query buffer");
+  Check(RestoreRun(m)==(RestoreTransaction.Started?GU_DR_REUSED:r) && m->Calls==calls,
+    "released-origin refusal has no new callback on repeat");
+  ReleasedSetup(m,2,0);Check(ReleasedInit(m)==EFI_SUCCESS,"fresh released-origin Init after failure");
+  Check(RestoreRun(m)==GU_DR_RESTORED && RestoreTransaction.ReleasedOrigin,"fresh released-origin session after failure");
+}
 static void RestoreRefuse(MODEL *m) {
   GU_DR_RESULT r=RestoreRun(m);
   if(r==GU_DR_RESTORED || r==GU_DR_UNCHANGED)fprintf(stderr,
@@ -191,5 +227,110 @@ int main(void) {
   UINTN savedOwner=m.OwnerTag;
   Check(GuDsEfiRestoreRun(&m.Adapter,(VOID *)&m.OwnerTag)==GU_DR_INVALID && m.OwnerTag==savedOwner && !m.Calls,
     "report cannot alias owner handle storage");
+  ReleasedSetup(&m,3,0);
+  static GU_DS_CAPTURE releasedCapture,finalReleasedCapture;
+  target.Handle=m.Bindings[0].Handle;target.Bus=m.Expected.Gpu.Bus;target.PathBytes=m.Bindings[0].PathBytes;
+  memcpy(target.Path,m.Bindings[0].Path,target.PathBytes);
+  Check(GuDsEfiCaptureReleasedMismatch(&releasedCapture,&m.Boot,&target,&ActualBefore)==EFI_SUCCESS,
+    "actual collector obtains the hypothetical released-mismatch observation");
+  unsigned capturedCalls=m.Calls;
+  Check(GuDsEfiInitializeReleasedRestore(&m.Adapter,&m.Boot,(EFI_HANDLE)&m.OwnerTag,
+    releasedCapture.Bindings,releasedCapture.Count,&ActualBefore,&releasedCapture.Snapshot,&ActualPlan,
+    RestoreLog,&m)==EFI_SUCCESS && m.Calls==capturedCalls,"separate released-origin initializer accepts actual observations without callbacks");
+  Check(m.Adapter.ReleasedBefore.Gpu.Attributes==0x300 && !m.Adapter.ReleasedAfter.Gpu.Attributes &&
+    m.Adapter.Expected.Gpu.Attributes==0x200 && m.Adapter.ReleasedOrigin,
+    "actual snapshots and planned target stay explicitly distinct");
+  Check(RestoreRun(&m)==GU_DR_RESTORED && RestoreTransaction.ReleasedOrigin && m.Writes==1,
+    "captured release and typed plan compose with held-claim restore");
+  Check(GuDsEfiCapture(&finalReleasedCapture,&m.Boot,&target)==EFI_SUCCESS &&
+    GuDecodeSnapshotMatches(&finalReleasedCapture.Snapshot,&m.Adapter.Expected,FALSE),
+    "ordinary collector verifies the actual restored state without a manufactured before capture");
+  for(unsigned parents=1;parents<=15;parents++)for(unsigned s=0;s<3;s++) {
+    ReleasedSetup(&m,parents,s==2?0xffff:s);RestoreReentry=TRUE;
+    Check(ReleasedInit(&m)==EFI_SUCCESS && !m.Calls,"released-origin Init is pure across bounded routes");
+    Check(RestoreRun(&m)==GU_DR_RESTORED && RestoreTransaction.ReleasedOrigin && m.Writes==1 &&
+      m.Adapter.ReleasedBefore.Gpu.Attributes==0x300 && !m.Adapter.ReleasedAfter.Gpu.Attributes,
+      "bounded released-origin restore retains actual history");
+  }
+  ReleasedSetup(&m,2,0);Check(ReleasedInit(&m)==EFI_SUCCESS,"released-origin fault baseline Init");
+  Check(RestoreRun(&m)==GU_DR_RESTORED,"released-origin fault baseline run");calls=m.Calls;enable=m.DisableAt;
+  ReleasedEnableBoundary=enable;
+  memcpy(outputless,m.NoOutput,sizeof(outputless));
+  for(unsigned at=1;at<=calls;at++) {
+    for(unsigned warning=0;warning<3;warning++) {
+      ReleasedSetup(&m,2,0);Check(ReleasedInit(&m)==EFI_SUCCESS,"released-origin fault Init");
+      m.FaultAt=at;m.FaultStatus=warning==0?EFI_DEVICE_ERROR:warning==1?EFI_WARN_UNKNOWN_GLYPH:EFI_NOT_STARTED;
+      ReleasedRefuse(&m);
+    }
+    if(at!=enable && !outputless[at]) {
+      ReleasedSetup(&m,2,0);Check(ReleasedInit(&m)==EFI_SUCCESS,"released-origin missing output Init");m.DropAt=at;ReleasedRefuse(&m);
+    }
+  }
+  for(unsigned bad=0;bad<7;bad++) {
+    ReleasedSetup(&m,2,0);
+    switch(bad) {
+      case 0:ActualBefore.Gpu.Attributes=GU_DS_MEMORY;break;
+      case 1:ActualAfter.Gpu.Attributes=GU_DS_IO;break;
+      case 2:ActualPlan.PlannedGpu.Config[63]^=1;break;
+      case 3:ActualPlan.RestoreMask|=GU_DS_MASTER;break;
+      case 4:ActualAfter.Parents[1].Config[63]^=1;break;
+      case 5:ActualPlan.Ready=2;break;
+      case 6:m.Bindings[1].Path[8]^=1;break;
+    }
+    Check(ReleasedInit(&m)!=EFI_SUCCESS && !m.Adapter.Ready && !m.Calls,"invalid released-origin Init stays unusable and pure");
+    Check(RestoreRun(&m)==GU_DR_INVALID && !m.Calls,"failed released-origin Init cannot be run");
+    GU_DS_TRANSACTION ordinary={0};
+    Check(GuDsEfiRun(&m.Adapter,&ordinary)==GU_DS_INVALID && !m.Calls,"partial released Init cannot enter ordinary Run");
+  }
+  for(unsigned status=0;status<3;status++) {
+    ReleasedSetup(&m,2,0);Check(ReleasedInit(&m)==EFI_SUCCESS,"released partial-effect fixture");
+    m.WriteStatus=status==0?EFI_DEVICE_ERROR:status==1?EFI_WARN_UNKNOWN_GLYPH:EFI_NOT_STARTED;
+    Check(RestoreRun(&m)==GU_DR_ENABLE_FAILED && RestoreTransaction.ReleasedOrigin &&
+      RestoreTransaction.EnableInvoked && RestoreTransaction.EnableStatus==m.WriteStatus && RestoreTransaction.PostObserved,
+      "released origin preserves failed Enable even with matching post-observation");
+  }
+  ReleasedSetup(&m,2,0);Check(ReleasedInit(&m)==EFI_SUCCESS,"released cleanup uncertainty fixture");
+  m.FaultAt=enable+1;m.FaultStatus=EFI_NOT_STARTED;
+  Check(RestoreRun(&m)==GU_DR_OWNERSHIP_FAILED && RestoreTransaction.ReleasedOrigin &&
+    RestoreTransaction.EnableStatus==EFI_SUCCESS && m.Adapter.CleanupStatus==EFI_NOT_STARTED && m.Calls==enable+1,
+    "released cleanup failure stops without further callbacks");
+  for(unsigned changed=0;changed<6;changed++) {
+    ReleasedSetup(&m,2,0);Check(ReleasedInit(&m)==EFI_SUCCESS,"released-origin history pin Init");
+    switch(changed) {
+      case 0:m.Adapter.ReleasedBefore.Parents[0].Config[20]^=1;m.Adapter.ReleasedAfter.Parents[0].Config[20]^=1;break;
+      case 1:m.Devices[0].State.Config[1]|=2;m.Devices[0].State.Attributes=GU_DS_MEMORY;break;
+      case 2:m.Devices[2].State.Config[20]^=1;break;
+      case 3:m.Adapter.ReleasedOrigin=2;break;
+      case 4:m.Adapter.ReleasePlan.PlannedGpu.Config[63]^=1;break;
+      case 5:m.Adapter.ReleasedOrigin=FALSE;break;
+    }
+    ReleasedRefuse(&m);
+  }
+  ReleasedSetup(&m,2,0);Check(ReleasedInit(&m)==EFI_SUCCESS,"released-origin frozen original fixture");
+  ActualBefore.Parents[0].Config[20]^=1;ActualAfter.Parents[0].Config[20]^=1;ActualPlan.RestoreMask|=GU_DS_MASTER;
+  FreezeReleasedInputs=FreezeRestoreReport=TRUE;m.Freeze=1;
+  Check(RestoreRun(&m)==GU_DR_RESTORED && RestoreTransaction.ReleasedOrigin && RestoreTransaction.EnableInvoked,
+    "frozen originals and origin/report survive caller input and callback context edits");
+#ifdef GU_DS_HOST_WORKSPACE_TEST
+  for(unsigned index=0;index<6;index++)for(unsigned placement=0;placement<3;placement++) {
+    ReleasedSetup(&m,2,0);Check(ReleasedInit(&m)==EFI_SUCCESS,"released-origin pool alias fixture");
+    const UINT8 *address=index<3?GuDsTestAdapterWorkspace(7+index):
+      index==3?(const VOID *)&ActualBefore:index==4?(const VOID *)&ActualAfter:(const VOID *)&ActualPlan;
+    RestoreBorrowed=(VOID *)(placement==2?(UINTN)address-sizeof(UINTN):(UINTN)address+(placement?sizeof(UINTN):0));
+    Check(RestoreRun(&m)!=GU_DR_RESTORED && !m.Writes && !m.Frees,"actual history and plan buffers are not freed or written");
+  }
+#endif
+  ReleasedSetup(&m,2,0);GU_DS_SNAPSHOT savedAfter=ActualAfter;GU_DS_RELEASE_PLAN savedPlan=ActualPlan;
+  Check(GuDsEfiInitializeReleasedRestore((VOID *)&ActualAfter,&m.Boot,(EFI_HANDLE)&m.OwnerTag,
+    m.Bindings,m.Count,&ActualBefore,&ActualAfter,&ActualPlan,RestoreLog,&m)==EFI_INVALID_PARAMETER &&
+    !memcmp(&ActualAfter,&savedAfter,sizeof(savedAfter)) && !m.Calls,"context cannot overwrite actual After input");
+  Check(GuDsEfiInitializeReleasedRestore(&m.Adapter,&m.Boot,(EFI_HANDLE)&m.OwnerTag,
+    m.Bindings,m.Count,&ActualBefore,&ActualAfter,(VOID *)&m.Adapter,RestoreLog,&m)==EFI_INVALID_PARAMETER &&
+    !m.Adapter.InitUsed && !m.Calls,"plan/context overlap preserves untouched context");
+  Check(ReleasedInit(&m)==EFI_SUCCESS,"released report overlap fixture");
+  Check(GuDsEfiRestoreRun(&m.Adapter,(VOID *)&ActualAfter)==GU_DR_INVALID &&
+    !memcmp(&ActualAfter,&savedAfter,sizeof(savedAfter)) && !m.Calls,"report cannot overwrite actual After input");
+  Check(GuDsEfiRestoreRun(&m.Adapter,(VOID *)&ActualPlan)==GU_DR_INVALID &&
+    !memcmp(&ActualPlan,&savedPlan,sizeof(savedPlan)) && !m.Calls,"report cannot overwrite original Plan");
   printf("PASS %u restore/ordinary assertions; RAM only\n",Checks);return 0;
 }

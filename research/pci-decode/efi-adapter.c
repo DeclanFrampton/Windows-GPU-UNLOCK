@@ -20,6 +20,9 @@ const VOID *GuDsTestAdapterWorkspace(UINTN index) {
 #ifdef GU_DS_POST_STOP_RESTORE
   if(index==5)return &RestoreReport;
   if(index==6)return &RestoreInitial;
+  if(index==7)return &ActiveAdapter.ReleasedBefore;
+  if(index==8)return &ActiveAdapter.ReleasedAfter;
+  if(index==9)return &ActiveAdapter.ReleasePlan;
 #endif
   return index==0?(const VOID *)&ActiveAdapter:index==1?(const VOID *)&ReadSnapshots[0]:
     index==2?(const VOID *)&ReadSnapshots[1]:index==3?(const VOID *)&DisableSnapshot:ActiveAdapter.ActiveOutput;
@@ -67,6 +70,9 @@ EFI_STATUS GuDsEfiInitialize(GU_DS_EFI_CONTEXT *c,EFI_BOOT_SERVICES *boot,EFI_HA
   c->Expected=*expected;c->DurableLog=log;c->LogContext=logContext;
 #ifdef GU_DS_POST_STOP_RESTORE
   c->RestoreMode=FALSE;
+  c->ReleasedOrigin=FALSE;c->InputReleasedAfter=NULL;c->InputReleasePlan=NULL;
+  c->ReleasedBefore=(GU_DS_SNAPSHOT){0};c->ReleasedAfter=(GU_DS_SNAPSHOT){0};
+  c->ReleasePlan=(GU_DS_RELEASE_PLAN){0};
 #endif
   for(UINTN i=0;i<count;i++) {
     GU_DS_EFI_DEVICE *d=&c->Devices[i];const GU_DS_DEVICE *e=ExpectedDevice(c,i);
@@ -100,6 +106,8 @@ static BOOLEAN PoolRange(GU_DS_EFI_CONTEXT *c,const VOID *p,UINTN count) {
        sizeof(GU_DS_TRANSACTION)) ||
 #ifdef GU_DS_POST_STOP_RESTORE
      Overlap(p,n,&RestoreInitial,sizeof(RestoreInitial)) || Overlap(p,n,&RestoreReport,sizeof(RestoreReport)) ||
+     (c->ReleasedOrigin && (Overlap(p,n,c->InputReleasedAfter,sizeof(*c->InputReleasedAfter)) ||
+       Overlap(p,n,c->InputReleasePlan,sizeof(*c->InputReleasePlan)))) ||
 #endif
      Overlap(p,n,c->ActiveOutput,sizeof(GU_DS_SNAPSHOT)) ||
      Overlap(p,n,ReadSnapshots,sizeof(ReadSnapshots)) || Overlap(p,n,&DisableSnapshot,sizeof(DisableSnapshot)) ||
@@ -267,23 +275,48 @@ GU_DS_RESULT GuDsEfiRun(GU_DS_EFI_CONTEXT *c,GU_DS_TRANSACTION *t) {
 }
 
 #ifdef GU_DS_POST_STOP_RESTORE
-EFI_STATUS GuDsEfiInitializeRestore(GU_DS_EFI_CONTEXT *c,EFI_BOOT_SERVICES *boot,EFI_HANDLE owner,
+static BOOLEAN RestoreInitStorage(GU_DS_EFI_CONTEXT *c,EFI_BOOT_SERVICES *boot,EFI_HANDLE owner,
   const GU_DS_EFI_BINDING *bindings,UINTN count,const GU_DS_SNAPSHOT *expected,
-  BOOLEAN (*log)(VOID *,const char *),VOID *logContext) {
+  const GU_DS_SNAPSHOT *after,const GU_DS_RELEASE_PLAN *plan) {
   if(!c || (boot && Overlap(c,sizeof(*c),boot,sizeof(*boot))) ||
      (owner && Overlap(c,sizeof(*c),owner,1)) ||
      (expected && Overlap(c,sizeof(*c),expected,sizeof(*expected))) ||
+     (after && Overlap(c,sizeof(*c),after,sizeof(*after))) ||
+     (plan && Overlap(c,sizeof(*c),plan,sizeof(*plan))) ||
      (bindings && count && count<=1+GU_DS_EFI_MAX_PARENTS &&
-       Overlap(c,sizeof(*c),bindings,count*sizeof(*bindings))))return EFI_INVALID_PARAMETER;
+       Overlap(c,sizeof(*c),bindings,count*sizeof(*bindings))))return FALSE;
   if(bindings && count && count<=1+GU_DS_EFI_MAX_PARENTS)for(UINTN i=0;i<count;i++)if(
     (bindings[i].Io && Overlap(c,sizeof(*c),bindings[i].Io,sizeof(EFI_PCI_IO_PROTOCOL))) ||
-    (bindings[i].Handle && Overlap(c,sizeof(*c),bindings[i].Handle,1)))return EFI_INVALID_PARAMETER;
+    (bindings[i].Handle && Overlap(c,sizeof(*c),bindings[i].Handle,1)))return FALSE;
+  return TRUE;
+}
+EFI_STATUS GuDsEfiInitializeRestore(GU_DS_EFI_CONTEXT *c,EFI_BOOT_SERVICES *boot,EFI_HANDLE owner,
+  const GU_DS_EFI_BINDING *bindings,UINTN count,const GU_DS_SNAPSHOT *expected,
+  BOOLEAN (*log)(VOID *,const char *),VOID *logContext) {
+  if(!RestoreInitStorage(c,boot,owner,bindings,count,expected,NULL,NULL))return EFI_INVALID_PARAMETER;
   EFI_STATUS s=GuDsEfiInitialize(c,boot,owner,bindings,count,expected,log,logContext);
   if(s!=EFI_SUCCESS)return s;
   if(c->Expected.Gpu.Attributes!=GU_DS_MEMORY || !(c->Expected.Gpu.Supported&GU_DS_MEMORY)) {
     c->Ready=FALSE;return EFI_INVALID_PARAMETER;
   }
   c->RestoreMode=TRUE;return EFI_SUCCESS;
+}
+EFI_STATUS GuDsEfiInitializeReleasedRestore(GU_DS_EFI_CONTEXT *c,EFI_BOOT_SERVICES *boot,EFI_HANDLE owner,
+  const GU_DS_EFI_BINDING *bindings,UINTN count,const GU_DS_SNAPSHOT *before,
+  const GU_DS_SNAPSHOT *after,const GU_DS_RELEASE_PLAN *plan,
+  BOOLEAN (*log)(VOID *,const char *),VOID *logContext) {
+  if(WorkspaceBusy)return EFI_ALREADY_STARTED;
+  if(!RestoreInitStorage(c,boot,owner,bindings,count,before,after,plan))return EFI_INVALID_PARAMETER;
+  if(c->InitUsed!=FALSE)return EFI_ALREADY_STARTED;
+  if(!GuDsReleasePlanMatches(plan,before,after)) {
+    c->InitUsed=TRUE;c->Ready=FALSE;return EFI_INVALID_PARAMETER;
+  }
+  EFI_STATUS s=GuDsEfiInitialize(c,boot,owner,bindings,count,before,log,logContext);
+  if(s!=EFI_SUCCESS)return s;
+  c->ReleasedBefore=*before;c->ReleasedAfter=*after;c->ReleasePlan=*plan;
+  c->InputReleasedAfter=after;c->InputReleasePlan=plan;
+  c->Expected=c->ReleasedBefore;c->Expected.Gpu=c->ReleasePlan.PlannedGpu;
+  c->RestoreMode=TRUE;c->ReleasedOrigin=TRUE;return EFI_SUCCESS;
 }
 static GU_DR_RESULT RestoreFinish(GU_DS_EFI_CONTEXT *c,GU_DR_TRANSACTION *t,GU_DR_RESULT result) {
   GU_DS_EFI_CONTEXT *a=&ActiveAdapter;
@@ -309,6 +342,14 @@ GU_DR_RESULT GuDsEfiRestoreRun(GU_DS_EFI_CONTEXT *c,GU_DR_TRANSACTION *t) {
      Overlap(t,sizeof(*t),c->OwnerImage,1) ||
      Overlap(t,sizeof(*t),c->InputExpected,sizeof(*c->InputExpected)) ||
      Overlap(t,sizeof(*t),c->InputBindings,(1+c->Expected.ParentCount)*sizeof(*c->InputBindings)))return GU_DR_INVALID;
+  if(c->ReleasedOrigin!=FALSE && c->ReleasedOrigin!=TRUE)return GU_DR_INVALID;
+  if(!c->ReleasedOrigin && (c->InputReleasedAfter || c->InputReleasePlan || c->ReleasePlan.Ready!=FALSE ||
+     c->ReleasedBefore.Complete!=FALSE || c->ReleasedAfter.Complete!=FALSE))return GU_DR_INVALID;
+  if(c->ReleasedOrigin && (!c->InputReleasedAfter || !c->InputReleasePlan ||
+     !GuDsReleasePlanMatches(&c->ReleasePlan,&c->ReleasedBefore,&c->ReleasedAfter) ||
+     !GuDecodeSnapshotMatches(&c->Expected,&c->ReleasedBefore,TRUE) ||
+     Overlap(t,sizeof(*t),c->InputReleasedAfter,sizeof(*c->InputReleasedAfter)) ||
+     Overlap(t,sizeof(*t),c->InputReleasePlan,sizeof(*c->InputReleasePlan))))return GU_DR_INVALID;
   for(UINTN i=0;i<1+c->Expected.ParentCount;i++)if(
     Overlap(t,sizeof(*t),c->Devices[i].Pin.Io,sizeof(EFI_PCI_IO_PROTOCOL)) ||
     Overlap(t,sizeof(*t),c->Devices[i].Pin.Handle,1))return GU_DR_INVALID;
@@ -317,9 +358,12 @@ GU_DR_RESULT GuDsEfiRestoreRun(GU_DS_EFI_CONTEXT *c,GU_DR_TRANSACTION *t) {
   GU_DS_EFI_CONTEXT *a=&ActiveAdapter;*a=*c;a->Busy=FALSE;
   a->CallerContext=c;a->ActiveTransaction=t;a->ActiveOutput=&RestoreInitial;
   RestoreReport=(GU_DR_TRANSACTION){0};RestoreReport.Started=TRUE;
+  RestoreReport.ReleasedOrigin=a->ReleasedOrigin;
   RestoreReport.EnableStatus=RestoreReport.ObservationStatus=EFI_NOT_STARTED;
   t->Started=TRUE;
   if(RestoreRead(a,&RestoreInitial)!=EFI_SUCCESS)return RestoreFinish(c,t,GU_DR_READ_FAILED);
+  if(a->ReleasedOrigin && !GuDecodeSnapshotMatches(&RestoreInitial,&a->ReleasedAfter,FALSE))
+    return RestoreFinish(c,t,GU_DR_DRIFT);
   GU_DS_STOP_RESULT phase=GuDsStopTransition(&a->Expected,&RestoreInitial);
   if(phase==GU_DS_STOP_REFUSED)return RestoreFinish(c,t,GU_DR_DRIFT);
   if(AdapterLog(a,phase==GU_DS_STOP_MEMORY_OFF?"decode-memory-restore-intent":"decode-memory-already-enabled")!=TRUE)
