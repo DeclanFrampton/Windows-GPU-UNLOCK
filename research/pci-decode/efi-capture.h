@@ -23,3 +23,18 @@ typedef struct {
 } GU_DS_CAPTURE;
 
 EFI_STATUS GuDsEfiCapture(GU_DS_CAPTURE *Context,EFI_BOOT_SERVICES *Boot,const GU_DS_CAPTURE_TARGET *Target);
+
+#ifdef GU_DS_POST_STOP_CAPTURE
+#if GU_DS_POST_STOP_CAPTURE != 1
+#error GU_DS_POST_STOP_CAPTURE must be exactly 1 when enabled
+#endif
+/* Research opt-in only. Freezes a corrected pre-Stop snapshot before callbacks.
+ * Caller must obtain Before using the same pinned target (snapshots contain no
+ * historical device path). Before must be disjoint from Context/Boot/Target.
+ * Both scans must satisfy the
+ * restricted post-Stop transition and agree exactly. No Stop/claim/restore occurs.
+ * A NULL Before is rejected without touching Context. All other context lifetime,
+ * single-use and current-return-status requirements above still apply. */
+EFI_STATUS GuDsEfiCaptureAfterStop(GU_DS_CAPTURE *Context,EFI_BOOT_SERVICES *Boot,
+  const GU_DS_CAPTURE_TARGET *Target,const GU_DS_SNAPSHOT *Before);
+#endif

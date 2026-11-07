@@ -406,6 +406,45 @@ and all 1..16 synthetic parents, over three PCI segments. They are synthetic
 models, not private captured snapshots or another hardware success. No EFI image
 is linked/executed/staged by this runner. The predicate is not connected to
 production, the generic read-only collector, or the owned correction caller.
-Current capture still requires memory-on command2 and therefore cannot itself
-collect the proposed memory-off observation. A phase-aware trusted collector and
-the pre-Stop mismatch/ownership ordering remain necessary integration work.
+The ordinary capture still requires memory-on command2. The opt-in research
+collector below can obtain a memory-off observation; the pre-Stop
+mismatch/ownership ordering remains necessary integration work.
+
+## Opt-in post-Stop read-only collector
+
+When compiled with `GU_DS_POST_STOP_CAPTURE=1`, `efi-capture.c` additionally offers
+`GuDsEfiCaptureAfterStop(Context, Boot, Target, Before)`. Other defined values are
+compile errors. Normal builds neither expose this entry nor reference the new
+transition library. No shipped builder selects this option.
+
+The caller must supply a corrected pre-Stop baseline obtained with the same pinned
+target. The snapshot contains no historical device path, so this past-path
+association is a caller contract, not something the function can authenticate.
+The function freezes that baseline before firmware callbacks, checks disjoint
+input/output/service storage, and uses the existing bounded parent-path collector
+and shared reentry guard. Both complete scans must pass `GuDsStopTransition` and
+agree exactly: switching between two individually allowed states is refused.
+The ordinary entry retains its original policy even in an opt-in build.
+
+This entry makes only the original read-only calls. It neither stops drivers,
+claims a protocol, restores MEMORY, nor invokes the correction adapter. Serialized
+controller access, trusted firmware/read-only callbacks and retained lifetimes
+remain caller requirements. Two matching scans do not prove an atomic snapshot
+or exclude changes after the last read. The code is not wired into the production
+release lifecycle and has no physical qualification.
+
+```powershell
+python -I research/pci-decode/test-post-stop-capture.py --clang C:\TOOLS\LLVM20\bin\clang.exe --mutations --output research/pci-decode/build/your-new-post-stop-capture
+python -I research/pci-decode/test-readonly-image.py --post-stop --clang C:\TOOLS\LLVM20\bin\clang.exe --lld-link C:\TOOLS\LLVM20\bin\lld-link.exe --stack-mutation --output research/pci-decode/build/your-new-post-stop-image
+```
+
+The host model runs the ordinary collector suite as well as the post-Stop cases,
+including cross-entry fresh-context reentry, callback faults, partial output,
+capability/target/parent drift, caller baseline edits, storage overlap and changes
+between scans. Each ordinary service-failure case is followed by a separate valid
+session to check guard release. Six broken guards must compile and fail at runtime;
+define values 0 and 2 must fail compilation. The link test retains both read-only
+entries and the pure transition, checks PE/imports/no-actuator symbols and bounded
+function stack frames. Without `--post-stop`, it also checks that the ordinary
+collector object contains no post-Stop entry or transition reference. The synthetic
+images are never executed or staged and are not deployment packages.
