@@ -603,10 +603,77 @@ function Restore-WindowsFirstBootOrder {
     }
 }
 
+function Get-GpuUnlockStatus {
+    $status = [ordered]@{
+        'Active'      = $false
+        'Badge'       = 'LOCKED / STOCK'
+        'State'       = 'Stock Consumer State (Locked)'
+        'Straps'      = 'SS0=0x25204022 | SS1=0x7 (Stock)'
+        'Profile'     = 'None'
+        'Transaction' = 'No bootloader unlock detected'
+        'Report'      = 'None'
+        'Handoff'     = 'Direct Windows Boot'
+        'Timestamp'   = 'N/A'
+    }
+
+    try {
+        $drives = Get-Volume | Where-Object { $_.DriveLetter } | ForEach-Object { "$($_.DriveLetter):\" }
+        $candidateReports = @()
+        foreach ($d in $drives) {
+            $unlockDir = Join-Path $d "RTX3090-UNLOCK"
+            if (Test-Path -LiteralPath $unlockDir) {
+                $reports = Get-ChildItem -Path (Join-Path $unlockDir "AUTO*\REPORT.TXT") -ErrorAction SilentlyContinue
+                if ($reports) { $candidateReports += $reports }
+            }
+        }
+
+        if ($candidateReports) {
+            $latestReport = $candidateReports | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+            $status['Report'] = "$($latestReport.Directory.Name)/$($latestReport.Name)"
+            $status['Timestamp'] = $latestReport.LastWriteTime.ToString('yyyy-MM-dd HH:mm:ss')
+
+            $content = Get-Content -LiteralPath $latestReport.FullName -ErrorAction SilentlyContinue
+            if ($content) {
+                $profLine = $content | Where-Object { $_ -match 'BUILD MODE:.*profile=(\w+)' } | Select-Object -First 1
+                if ($profLine -match 'profile=(\w+)') { $status['Profile'] = $Matches[1] }
+
+                $postFlrLine = $content | Where-Object { $_ -match 'post-FLR SEC2 reset released.*SS0=([0-9a-fA-F]+)\s+SS1=([0-9a-fA-F]+)' } | Select-Object -First 1
+                if ($postFlrLine -match 'SS0=([0-9a-fA-F]+)\s+SS1=([0-9a-fA-F]+)') {
+                    $ss0 = $Matches[1]; $ss1 = $Matches[2]
+                    $status['Straps'] = "SS0=0x$ss0 | SS1=0x$ss1"
+                    if ($ss0 -eq '88888888' -and ($ss1 -eq '00000008' -or $ss1 -eq '8')) {
+                        $status['Active'] = $true
+                        $status['Badge'] = 'ACTIVE / UNLOCKED'
+                        $status['State'] = 'Active & Unlocked (Workstation/vGPU Straps Latched)'
+                    }
+                }
+
+                $txLine = $content | Where-Object { $_ -match 'FINAL status=(\d+).*clean=(\d+)' } | Select-Object -First 1
+                if ($txLine -match 'FINAL status=(\d+).*clean=(\d+)') {
+                    $status['Transaction'] = "Status=$($Matches[1]), Clean=$($Matches[2]) (FLR Reset OK)"
+                }
+
+                $hlsFile = Join-Path $latestReport.Directory.Parent.FullName "$($latestReport.Directory.Name.Replace('AUTO', 'HLS')).TXT"
+                if (Test-Path -LiteralPath $hlsFile) {
+                    $hlsContent = Get-Content -LiteralPath $hlsFile -Tail 25 -ErrorAction SilentlyContinue
+                    if ($hlsContent -match 'windows-close-files-next-then-final-verify-and-StartImage status=0x0') {
+                        $status['Handoff'] = 'bootmgfw.efi Chainloaded Successfully'
+                    }
+                }
+            }
+        }
+    }
+    catch {
+        $status['Transaction'] = "Error reading report: $($_.Exception.Message)"
+    }
+
+    return $status
+}
+
 function Get-GpuTelemetryLive {
     $telemetry = [ordered]@{}
     try {
-        $smiOut = & nvidia-smi --query-gpu=name, driver_version, temperature.gpu, utilization.gpu, memory.used, memory.total, power.draw, power.limit, clocks.sm, clocks.mem --format=csv, noheader, nounits 2>&1
+        $smiOut = & nvidia-smi --query-gpu=name,driver_version,temperature.gpu,utilization.gpu,memory.used,memory.total,power.draw,power.limit,clocks.sm,clocks.mem --format=csv,noheader,nounits 2>&1
         $line = (@($smiOut) -join "`n").Trim()
         if ($line) {
             $parts = $line.Split(',') | ForEach-Object { $_.Trim() }
@@ -1015,7 +1082,11 @@ if ($Cli) {
             Write-Host $res -ForegroundColor Green
         }
         'Telemetry' {
-            Write-Host "`n[+] Live GPU Telemetry:" -ForegroundColor Yellow
+            Write-Host "`n[+] GPU Unlock Verification Status:" -ForegroundColor Yellow
+            $u = Get-GpuUnlockStatus
+            [pscustomobject]$u | Format-List
+
+            Write-Host "[+] Live GPU Telemetry:" -ForegroundColor Yellow
             $telem = Get-GpuTelemetryLive
             [pscustomobject]$telem | Format-List
         }
@@ -1637,6 +1708,37 @@ Add-Type -AssemblyName System.Windows.Forms
 
                         <Border Background="#252538" CornerRadius="6" Padding="14" Margin="0,0,0,14" BorderBrush="#313244" BorderThickness="1">
                             <StackPanel>
+                                <Grid Margin="0,0,0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="GPU Unlock Verification Status:" FontWeight="Bold" FontSize="13" Foreground="#A6E3A1" VerticalAlignment="Center"/>
+                                    <Border Name="BadgeUnlockBorder" Grid.Column="1" Background="#1E3A2F" CornerRadius="4" Padding="10,3">
+                                        <TextBlock Name="TxtUnlockBadge" Text="ACTIVE / UNLOCKED" FontWeight="Bold" FontSize="11" Foreground="#A6E3A1"/>
+                                    </Border>
+                                </Grid>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Name="TxtUnlockState" Text="State: Checking..." Margin="0,2" Foreground="#CDD6F4"/>
+                                        <TextBlock Name="TxtUnlockStraps" Text="Active Straps: Checking..." Margin="0,2" Foreground="#CDD6F4"/>
+                                        <TextBlock Name="TxtUnlockProfile" Text="Hardware Profile: Checking..." Margin="0,2" Foreground="#CDD6F4"/>
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1">
+                                        <TextBlock Name="TxtUnlockTx" Text="Transaction: Checking..." Margin="0,2" Foreground="#CDD6F4"/>
+                                        <TextBlock Name="TxtUnlockReport" Text="Boot Session: Checking..." Margin="0,2" Foreground="#CDD6F4"/>
+                                        <TextBlock Name="TxtUnlockHandoff" Text="Windows Handoff: Checking..." Margin="0,2" Foreground="#CDD6F4"/>
+                                    </StackPanel>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Background="#252538" CornerRadius="6" Padding="14" Margin="0,0,0,14" BorderBrush="#313244" BorderThickness="1">
+                            <StackPanel>
                                 <TextBlock Text="Live NVIDIA Telemetry:" FontWeight="Bold" FontSize="13" Foreground="#F9E2AF" Margin="0,0,0,8"/>
                                 <Grid>
                                     <Grid.ColumnDefinitions>
@@ -1817,6 +1919,14 @@ $txtTelemMem = $window.FindName('TxtTelemMem')
 $txtTelemSmClock = $window.FindName('TxtTelemSmClock')
 $txtTelemMemClock = $window.FindName('TxtTelemMemClock')
 $btnRefreshTelem = $window.FindName('BtnRefreshTelem')
+$badgeUnlockBorder = $window.FindName('BadgeUnlockBorder')
+$txtUnlockBadge = $window.FindName('TxtUnlockBadge')
+$txtUnlockState = $window.FindName('TxtUnlockState')
+$txtUnlockStraps = $window.FindName('TxtUnlockStraps')
+$txtUnlockProfile = $window.FindName('TxtUnlockProfile')
+$txtUnlockTx = $window.FindName('TxtUnlockTx')
+$txtUnlockReport = $window.FindName('TxtUnlockReport')
+$txtUnlockHandoff = $window.FindName('TxtUnlockHandoff')
 
 # Tab 7
 $btnEmergencyRestore = $window.FindName('BtnEmergencyRestore')
@@ -1984,9 +2094,38 @@ function Refresh-UsbList {
 }
 
 function Refresh-TelemetryData {
+    # 1. GPU Unlock Verification Status
+    $unlock = Get-GpuUnlockStatus
+    if ($txtUnlockBadge) {
+        $txtUnlockBadge.Text = $unlock['Badge']
+        if ($unlock['Active']) {
+            $badgeUnlockBorder.Background = [System.Windows.Media.BrushConverter]::new().ConvertFromString("#1E3A2F")
+            $badgeUnlockBorder.BorderBrush = [System.Windows.Media.BrushConverter]::new().ConvertFromString("#A6E3A1")
+            $txtUnlockBadge.Foreground = [System.Windows.Media.BrushConverter]::new().ConvertFromString("#A6E3A1")
+        } else {
+            $badgeUnlockBorder.Background = [System.Windows.Media.BrushConverter]::new().ConvertFromString("#3E2025")
+            $badgeUnlockBorder.BorderBrush = [System.Windows.Media.BrushConverter]::new().ConvertFromString("#F38BA8")
+            $txtUnlockBadge.Foreground = [System.Windows.Media.BrushConverter]::new().ConvertFromString("#F38BA8")
+        }
+        $txtUnlockState.Text = "State: $($unlock['State'])"
+        $txtUnlockStraps.Text = "Active Straps: $($unlock['Straps'])"
+        $txtUnlockProfile.Text = "Hardware Profile: $($unlock['Profile'])"
+        $txtUnlockTx.Text = "Transaction: $($unlock['Transaction'])"
+        $txtUnlockReport.Text = "Boot Session: $($unlock['Report'])"
+        $txtUnlockHandoff.Text = "Windows Handoff: $($unlock['Handoff'])"
+    }
+
+    # 2. Live Telemetry
     $telem = Get-GpuTelemetryLive
     if ($telem['Error']) {
         $txtTelemName.Text = "GPU: $($telem['Error'])"
+        $txtTelemTemp.Text = "Temperature: N/A"
+        $txtTelemUtil.Text = "Utilization: N/A"
+        $txtTelemPower.Text = "Power Draw: N/A"
+        $txtTelemDriver.Text = "Driver: N/A"
+        $txtTelemMem.Text = "VRAM: N/A"
+        $txtTelemSmClock.Text = "SM Clock: N/A"
+        $txtTelemMemClock.Text = "Memory Clock: N/A"
     }
     else {
         $txtTelemName.Text = "GPU: $($telem['Name'])"
