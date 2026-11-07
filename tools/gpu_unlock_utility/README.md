@@ -94,10 +94,10 @@ The utility orchestrates all components of the GPU unlock deployment lifecycle s
 The repository provides multiple convenient entry points to start the utility depending on your workflow:
 
 ### Option A: One-Click Batch Launcher (Recommended)
-Double-click `Launch-Utility.cmd` located in the root of the repository:
+Double-click `Launch-Utility.cmd` located in the `tools` folder (or invoke from terminal):
 
 ```bat
-Launch-Utility.cmd
+.\tools\Launch-Utility.cmd
 ```
 
 1. If run as a standard user, it presents a menu:
@@ -108,15 +108,15 @@ Launch-Utility.cmd
 2. Choosing `1` prompts Windows UAC for elevation and opens the full GUI with administrative privileges enabled.
 
 ### Option B: PowerShell Launcher
-Run the PowerShell wrapper script from the project root:
+Run the PowerShell wrapper script from the `tools` folder:
 
 ```powershell
-.\Launch-Utility.ps1
+.\tools\Launch-Utility.ps1
 ```
 
 To run in CLI mode using the launcher:
 ```powershell
-.\Launch-Utility.ps1 -Cli -Action Audit
+.\tools\Launch-Utility.ps1 -Cli -Action Audit
 ```
 
 ### Option C: Direct Script Invocation
@@ -456,13 +456,13 @@ Follow this standard procedure to unlock and verify your GPU:
 
 ```
 [Step 1: Audit & Safety] ──> [Step 2: USB Staging] ──> [Step 3: Cold Boot] ──> [Step 4: Verify]
-  - Run Launch-Utility.cmd     - Format USB to FAT32      - Shut down PC           - Check Telemetry
+  - Run tools\Launch-Utility   - Format USB to FAT32      - Shut down PC           - Check Telemetry
   - Disable Fast Startup       - Stage files via Tab 3    - F8/F12 Boot Menu       - Run cuBLAS GEMM
   - Verify BitLocker status                               - Hand off to Windows    - Enjoy ~2x speedup
 ```
 
 1. **Safety Pre-Flight**:
-   - Launch `Launch-Utility.cmd` as Administrator.
+   - Launch `tools\Launch-Utility.cmd` as Administrator (or right-click `Launch-Utility.cmd` in `tools\` and select Run as Administrator).
    - In **Tab 2 (Pre-Flight Safety)**, verify that Secure Boot is disabled.
    - If Windows Fast Startup is enabled, click **Disable Fast Startup**.
 2. **Stage USB Drive**:
@@ -484,7 +484,7 @@ Follow this standard procedure to unlock and verify your GPU:
 ## 9. Troubleshooting & FAQ
 
 ### Q: Why does the utility say "Administrator privileges are recommended"?
-Certain operations—such as reading BitLocker volume status, disabling Fast Startup in the registry, and updating UEFI NVRAM boot priorities via `bcdedit`—require elevated Windows permissions. Launch via `Launch-Utility.cmd` and select Option 1.
+Certain operations—such as reading BitLocker volume status, disabling Fast Startup in the registry, and updating UEFI NVRAM boot priorities via `bcdedit`—require elevated Windows permissions. Launch via `tools\Launch-Utility.cmd` and select Option 1.
 
 ### Q: My USB drive does not appear in the dropdown.
 The drive must be formatted with the **FAT32** filesystem to be recognized by UEFI firmware. Reformat the drive as FAT32 using Windows File Explorer or `diskpart`, then click **Refresh Disks**.
@@ -503,4 +503,4 @@ Run the following command in PowerShell to allow script execution for the curren
 ```powershell
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 ```
-Alternatively, launch through `Launch-Utility.cmd`, which handles execution policy bypass automatically.
+Alternatively, launch through `tools\Launch-Utility.cmd`, which handles execution policy bypass automatically.

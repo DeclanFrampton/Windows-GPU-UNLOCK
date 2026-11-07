@@ -26,12 +26,12 @@ if "%choice%"=="" set choice=1
 
 if "%choice%"=="1" (
     echo Requesting Administrator privileges...
-    powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process powershell -ArgumentList '-NoProfile -ExecutionPolicy Bypass -File \"\"%~dp0tools\gpu_unlock_utility\GpuUnlockUtility.ps1\"\"' -Verb RunAs"
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process powershell -ArgumentList '-NoProfile -ExecutionPolicy Bypass -File \"\"%~dp0gpu_unlock_utility\GpuUnlockUtility.ps1\"\"' -Verb RunAs"
     exit /b
 )
 
 :RunAdmin
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0tools\gpu_unlock_utility\GpuUnlockUtility.ps1"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0gpu_unlock_utility\GpuUnlockUtility.ps1" %*
 if %errorlevel% neq 0 (
     echo.
     echo Utility exited with code %errorlevel%.
