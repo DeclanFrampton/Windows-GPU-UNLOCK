@@ -1,27 +1,45 @@
 <#
 .SYNOPSIS
-    Windows GPU UNLOCK - Executive Control & Deployment Utility
+    Windows GPU UNLOCK - Executive Control, Compatibility Checker & Deployment Utility
 .DESCRIPTION
     A comprehensive Windows utility for the Windows-GPU-UNLOCK project.
     Provides hardware compatibility auditing, safety pre-flight checks,
-    USB and internal EFI boot deployment, offline diagnostic capture analysis,
-    live GPU telemetry, and 1-click emergency recovery.
+    offline compatibility checking and analysis of pre-boot EFI captures,
+    report comparisons, USB and internal EFI boot deployment, live GPU telemetry,
+    and 1-click emergency recovery.
 .PARAMETER Cli
     Runs in command-line mode instead of launching the WPF GUI.
 .PARAMETER Action
-    CLI action: 'Audit', 'Preflight', 'CheckUsb', 'DeployUsb', 'RestoreWindows', 'Telemetry', 'CheckCaptures'.
+    CLI action: 'Audit', 'Preflight', 'CheckUsb', 'DeployUsb', 'RestoreWindows',
+    'Telemetry', 'CheckCaptures', 'CompareReports'.
 .PARAMETER DriveLetter
     Drive letter for USB or ESP operations (e.g., 'E').
 .PARAMETER CapturePath
-    Path to existing capture files (DIAGnn.TXT, etc.) for analysis.
+    Path to existing capture folder containing DIAGnn.TXT, IMGnn.BIN, PROM.BIN for analysis.
+.PARAMETER LeftReport
+    Path to first JSON report for comparison.
+.PARAMETER RightReport
+    Path to second JSON report for comparison.
+.PARAMETER ExportPath
+    Optional destination path to save JSON compatibility report.
+.PARAMETER Lang
+    Language for reports and explanations ('en' or 'ko'). Defaults to 'en'.
+.PARAMETER Json
+    Switch to output raw JSON in CLI mode.
 #>
 [CmdletBinding()]
 param(
     [switch]$Cli,
-    [ValidateSet('Audit', 'Preflight', 'CheckUsb', 'DeployUsb', 'RestoreWindows', 'Telemetry', 'CheckCaptures')]
+    [ValidateSet('Audit', 'Preflight', 'CheckUsb', 'DeployUsb', 'RestoreWindows', 'Telemetry', 'CheckCaptures', 'CompareReports')]
     [string]$Action = 'Audit',
     [string]$DriveLetter,
-    [string]$CapturePath
+    [string]$CapturePath,
+    [string]$LeftReport,
+    [string]$RightReport,
+    [string]$ExportPath,
+    [ValidateSet('en', 'ko')]
+    [string]$Lang = 'en',
+    [switch]$Json
 )
 
 $ErrorActionPreference = 'Stop'
@@ -31,8 +49,10 @@ $Script:ReleaseEfi = Join-Path $Script:RepoRoot 'release\EFI\BOOT\BOOTX64.EFI'
 $Script:ProvenanceFile = Join-Path $Script:RepoRoot 'release\provenance.json'
 $Script:AssetsJson = Join-Path $Script:RepoRoot 'unlock\assets.json'
 $Script:ProvenJson = Join-Path $Script:RepoRoot 'research\profile\proven.json'
+$Script:CheckerPy = Join-Path $Script:RepoRoot 'research\profile\check-compatibility.py'
+$Script:ComparatorPy = Join-Path $Script:RepoRoot 'research\profile\compare-compatibility.py'
 
-# --- HELPER FUNCTIONS ---
+# --- CORE ENGINE FUNCTIONS ---
 
 function Test-IsAdmin {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -317,6 +337,25 @@ function Get-RemovableDrives {
     return $drives
 }
 
+function Find-UsbCaptureFolders {
+    $found = @()
+    $drives = Get-RemovableDrives
+    foreach ($d in $drives) {
+        $root = "$($d.Letter):\"
+        # Check root
+        $diagRoot = @(Get-ChildItem -LiteralPath $root -Filter "DIAG*.TXT" -File -ErrorAction SilentlyContinue)
+        if ($diagRoot.Count -gt 0) {
+            $found += $root.TrimEnd('\')
+        }
+        # Check RTX3090-UNLOCK
+        $rtxDir = Join-Path $root "RTX3090-UNLOCK"
+        if (Test-Path -LiteralPath $rtxDir) {
+            $found += $rtxDir
+        }
+    }
+    return @($found | Select-Object -Unique)
+}
+
 function Deploy-ToUsb([string]$Letter) {
     $cleanLetter = $Letter.TrimEnd(':')
     $driveRoot = "$($cleanLetter):\"
@@ -432,17 +471,90 @@ function Get-GpuTelemetryLive {
     return $telemetry
 }
 
-function Invoke-CaptureAnalysis([string]$Folder) {
+# --- OFFLINE COMPATIBILITY CHECKER & ANALYSER ENGINE ---
+
+function Invoke-OfflineCompatibilityCheck {
+    param(
+        [Parameter(Mandatory)][string]$Folder,
+        [string]$Language = 'en'
+    )
+
     if (-not (Test-Path -LiteralPath $Folder)) {
-        throw "Directory '$Folder' not found."
+        throw "Capture directory '$Folder' not found."
     }
-    $checker = Join-Path $Script:RepoRoot "research\profile\check-compatibility.py"
-    if (-not (Test-Path -LiteralPath $checker)) {
-        throw "check-compatibility.py not found at $checker"
+    if (-not (Test-Path -LiteralPath $Script:CheckerPy)) {
+        throw "Offline compatibility checker script not found at $Script:CheckerPy"
     }
 
-    $py = "python"
-    $res = & $py -I $checker $Folder --json 2>&1
+    $raw = & python -I $Script:CheckerPy $Folder --lang $Language --json 2>&1
+    $rawText = ($raw -join "`n").Trim()
+
+    $jsonObj = $null
+    try {
+        $jsonObj = $rawText | ConvertFrom-Json
+    } catch {
+        return [pscustomobject]@{
+            Status = 'error'
+            Badge = '[ERROR]'
+            BadgeColor = 'Tomato'
+            Summary = "Failed to parse checker output into JSON."
+            Scope = "Unknown"
+            Limitations = "Python engine error or malformed diagnostic data."
+            NextStep = "Ensure Python 3.10+ is installed and verify capture file permissions."
+            CaptureCount = 0
+            Checks = @()
+            Observations = @()
+            RawJson = ""
+            RawText = $rawText
+            Parsed = $null
+        }
+    }
+
+    $badge = switch ($jsonObj.status) {
+        'candidate'     { '[CANDIDATE] Eligible for Local Profile' }
+        'needs_data'    { '[NEEDS DATA] More Captures / Files Required' }
+        'outside_scope' { '[OUTSIDE SCOPE] Hardware / Layout Outside Envelope' }
+        'invalid_data'  { '[INVALID DATA] Inconsistent / Corrupted Observations' }
+        default         { "[$($jsonObj.status.ToUpper())]" }
+    }
+
+    $badgeColor = switch ($jsonObj.status) {
+        'candidate'     { 'LightGreen' }
+        'needs_data'    { 'Gold' }
+        'outside_scope' { 'DarkOrange' }
+        'invalid_data'  { 'Tomato' }
+        default         { 'Gray' }
+    }
+
+    return [pscustomobject]@{
+        Status = [string]$jsonObj.status
+        Badge = $badge
+        BadgeColor = $badgeColor
+        Summary = [string]$jsonObj.summary
+        Scope = [string]$jsonObj.scope
+        Limitations = [string]$jsonObj.limitations
+        NextStep = [string]$jsonObj.next_step
+        CaptureCount = [int]$jsonObj.capture_count
+        Checks = @($jsonObj.checks)
+        Observations = @($jsonObj.observations)
+        RawJson = $rawText
+        RawText = $rawText
+        Parsed = $jsonObj
+    }
+}
+
+function Invoke-CompareCompatibilityReports {
+    param(
+        [Parameter(Mandatory)][string]$LeftReportPath,
+        [Parameter(Mandatory)][string]$RightReportPath,
+        [string]$Language = 'en'
+    )
+
+    if (-not (Test-Path -LiteralPath $LeftReportPath)) { throw "Reference report '$LeftReportPath' does not exist." }
+    if (-not (Test-Path -LiteralPath $RightReportPath)) { throw "Target report '$RightReportPath' does not exist." }
+    if (-not (Test-Path -LiteralPath $Script:ComparatorPy)) { throw "compare-compatibility.py not found at $Script:ComparatorPy" }
+
+    $res = & python -I $Script:ComparatorPy $LeftReportPath $RightReportPath --lang $Language 2>&1
     return ($res -join "`r`n")
 }
 
@@ -497,9 +609,35 @@ if ($Cli) {
         }
         'CheckCaptures' {
             if (-not $CapturePath) { throw "Please specify -CapturePath" }
-            Write-Host "`n[+] Analyzing Offline Capture in $CapturePath..." -ForegroundColor Yellow
-            $res = Invoke-CaptureAnalysis $CapturePath
-            Write-Output $res
+            Write-Host "`n[+] Running Offline Compatibility Checker on: $CapturePath (Lang: $Lang)..." -ForegroundColor Yellow
+            $res = Invoke-OfflineCompatibilityCheck -Folder $CapturePath -Language $Lang
+
+            if ($Json) {
+                Write-Output $res.RawJson
+            } else {
+                Write-Host "`nAssessment: $($res.Badge)" -ForegroundColor $(switch ($res.Status) { 'candidate' { 'Green' } 'needs_data' { 'Yellow' } default { 'Red' } })
+                Write-Host "Summary:    $($res.Summary)" -ForegroundColor White
+                Write-Host "Captures:   $($res.CaptureCount) found" -ForegroundColor Cyan
+                Write-Host "Scope:      $($res.Scope)" -ForegroundColor DarkGray
+                Write-Host "`nChecks Evaluated:" -ForegroundColor Yellow
+                foreach ($chk in $res.Checks) {
+                    $stateColor = switch ($chk.state) { 'candidate' { 'Green' } 'needs_data' { 'Yellow' } default { 'Red' } }
+                    Write-Host "  [$($chk.state.ToUpper())] $($chk.code): $($chk.message)" -ForegroundColor $stateColor
+                }
+                Write-Host "`nNext Step Guidance:" -ForegroundColor Yellow
+                Write-Host "$($res.NextStep)`n" -ForegroundColor Cyan
+            }
+
+            if ($ExportPath) {
+                Set-Content -LiteralPath $ExportPath -Value $res.RawJson -Encoding utf8
+                Write-Host "[+] Report exported to $ExportPath" -ForegroundColor Green
+            }
+        }
+        'CompareReports' {
+            if (-not $LeftReport -or -not $RightReport) { throw "Please specify -LeftReport and -RightReport" }
+            Write-Host "`n[+] Comparing Compatibility Reports: '$LeftReport' vs '$RightReport'..." -ForegroundColor Yellow
+            $diff = Invoke-CompareCompatibilityReports -LeftReportPath $LeftReport -RightReportPath $RightReport -Language $Lang
+            Write-Output $diff
         }
     }
     exit 0
@@ -508,12 +646,13 @@ if ($Cli) {
 # --- WPF GUI IMPLEMENTATION ---
 
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
+Add-Type -AssemblyName System.Windows.Forms
 
 [xml]$xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Windows GPU UNLOCK - Control &amp; Deployment Utility"
-        Height="780" Width="1040"
+        Title="Windows GPU UNLOCK - Control, Compatibility &amp; Deployment Utility"
+        Height="820" Width="1080"
         WindowStartupLocation="CenterScreen"
         Background="#181825"
         Foreground="#CDD6F4"
@@ -592,7 +731,7 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
                 </Grid.ColumnDefinitions>
                 <StackPanel Grid.Column="0">
                     <TextBlock Text="Windows GPU UNLOCK" FontSize="20" FontWeight="Bold" Foreground="#89B4FA"/>
-                    <TextBlock Text="Hardware compatibility auditor, safety pre-flight validator, and EFI deployment manager" FontSize="12" Foreground="#A6ADC8" Margin="0,3,0,0"/>
+                    <TextBlock Text="Offline compatibility checker, safety pre-flight validator, and EFI deployment manager" FontSize="12" Foreground="#A6ADC8" Margin="0,3,0,0"/>
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                     <Border Name="BadgeAdmin" Background="#A6E3A1" CornerRadius="4" Padding="10,5" Margin="0,0,10,0">
@@ -605,7 +744,7 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
         </Border>
 
         <!-- MAIN TABS -->
-        <TabControl Grid.Row="1" Background="#1E1E2E" BorderBrush="#313244" BorderThickness="1">
+        <TabControl Name="MainTabControl" Grid.Row="1" Background="#1E1E2E" BorderBrush="#313244" BorderThickness="1">
             <!-- TAB 1: SYSTEM & GPU AUDIT -->
             <TabItem Header="System &amp; GPU Audit">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16">
@@ -790,25 +929,134 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
                 </ScrollViewer>
             </TabItem>
 
-            <!-- TAB 5: CAPTURE ANALYZER -->
-            <TabItem Header="Capture Analyzer">
+            <!-- TAB 5: OFFLINE COMPATIBILITY CHECKER & ANALYSER -->
+            <TabItem Header="🔍 Offline Compatibility Checker">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16">
                     <StackPanel>
-                        <TextBlock Text="Offline Diagnostic Capture Inspector" FontSize="16" FontWeight="Bold" Foreground="#89B4FA" Margin="0,0,0,10"/>
-                        <TextBlock Text="Inspects DIAGnn.TXT, IMGnn.BIN, and PROM.BIN dumps from EFI diagnostic runs without touching the running hardware." FontSize="12" Foreground="#A6ADC8" Margin="0,0,0,14" TextWrapping="Wrap"/>
+                        <TextBlock Text="Offline Compatibility Checker &amp; Analyser" FontSize="16" FontWeight="Bold" Foreground="#89B4FA" Margin="0,0,0,8"/>
+                        <TextBlock Text="Analyzes pre-boot EFI hardware captures (DIAGnn.TXT, IMGnn.BIN, PROM.BIN) against the project's proven hardware envelope. Operates 100% read-only: does not execute firmware, touch hardware, or modify boot settings." FontSize="12" Foreground="#A6ADC8" Margin="0,0,0,14" TextWrapping="Wrap"/>
 
-                        <Grid Margin="0,0,0,14">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBox Name="TxtCaptureFolder" Grid.Column="0" Height="32" Background="#252538" Foreground="#CDD6F4" BorderBrush="#45475A" VerticalContentAlignment="Center" Padding="8,4" Text="D:\RTX3090-UNLOCK"/>
-                            <Button Name="BtnAnalyzeCapture" Grid.Column="1" Content="Analyze Folder" Margin="10,0,0,0"/>
-                        </Grid>
+                        <!-- Capture Folder Picker Box -->
+                        <Border Background="#252538" CornerRadius="6" Padding="14" Margin="0,0,0,14" BorderBrush="#313244" BorderThickness="1">
+                            <StackPanel>
+                                <TextBlock Text="Select Capture Folder (with DIAGnn.TXT, IMGnn.BIN, PROM.BIN):" FontWeight="Bold" FontSize="13" Foreground="#CDD6F4" Margin="0,0,0,8"/>
+                                <Grid Margin="0,0,0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox Name="TxtCaptureFolder" Grid.Column="0" Height="32" Background="#181825" Foreground="#CDD6F4" BorderBrush="#45475A" VerticalContentAlignment="Center" Padding="8,4" Text="D:\RTX3090-UNLOCK"/>
+                                    <Button Name="BtnBrowseCaptureFolder" Grid.Column="1" Content="📁 Browse..." Margin="8,0,0,0" Padding="12,6"/>
+                                    <Button Name="BtnDetectUsbCaptures" Grid.Column="2" Content="🔍 Auto-Detect on USB" Margin="8,0,0,0" Padding="12,6"/>
+                                </Grid>
 
-                        <Border Background="#252538" CornerRadius="6" Padding="14" BorderBrush="#313244" BorderThickness="1">
-                            <TextBox Name="TxtCaptureResult" Height="240" Background="#181825" Foreground="#A6E3A1" FontFamily="Consolas" FontSize="12" IsReadOnly="True" VerticalScrollBarVisibility="Auto" TextWrapping="Wrap" BorderThickness="0" Text="Select a capture folder and click 'Analyze Folder' to view offline assessment."/>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="Language:" VerticalAlignment="Center" Margin="0,0,8,0" Foreground="#A6ADC8" FontSize="12"/>
+                                    <ComboBox Name="ComboCheckerLang" Grid.Column="1" Width="120" Height="30" Background="#181825" Foreground="#CDD6F4" VerticalContentAlignment="Center">
+                                        <ComboBoxItem Content="English (en)" IsSelected="True"/>
+                                        <ComboBoxItem Content="한국어 (ko)"/>
+                                    </ComboBox>
+                                    <Button Name="BtnRunOfflineCheck" Grid.Column="3" Content="🚀 Run Offline Compatibility Check" Background="#89B4FA" Foreground="#11111B" FontWeight="Bold" FontSize="13" Padding="18,8"/>
+                                </Grid>
+                            </StackPanel>
                         </Border>
+
+                        <!-- Assessment Banner -->
+                        <Border Name="BadgeStatusBorder" Background="#252538" CornerRadius="6" Padding="14" Margin="0,0,0,14" BorderBrush="#313244" BorderThickness="2">
+                            <StackPanel>
+                                <TextBlock Name="TxtStatusHeader" Text="STATUS: AWAITING ANALYSIS" FontSize="15" FontWeight="Bold" Foreground="#89B4FA" Margin="0,0,0,4"/>
+                                <TextBlock Name="TxtStatusSummary" Text="Select your capture directory above and click 'Run Offline Compatibility Check'." FontSize="13" Foreground="#CDD6F4" TextWrapping="Wrap" Margin="0,0,0,6"/>
+                                <Border Name="BorderNextStep" Background="#181825" CornerRadius="4" Padding="10" Margin="0,4,0,0" BorderBrush="#45475A" BorderThickness="1">
+                                    <StackPanel>
+                                        <TextBlock Text="Next Step Guidance:" FontWeight="Bold" FontSize="11" Foreground="#89DCEB" Margin="0,0,0,2"/>
+                                        <TextBlock Name="TxtNextStep" Text="Run the check to see tailored recommendations." FontSize="12" Foreground="#A6ADC8" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Findings Views Switcher -->
+                        <TabControl Name="FindingsTabControl" Height="260" Background="#181825" BorderBrush="#313244" BorderThickness="1" Margin="0,0,0,14">
+                            <!-- Sub-Tab 1: Structured Findings -->
+                            <TabItem Header="Structured Observations &amp; Checks">
+                                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="12">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <!-- Column 1: Captured Hardware & Firmware -->
+                                        <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                                            <TextBlock Text="Hardware &amp; Firmware Observations" FontWeight="Bold" FontSize="13" Foreground="#F9E2AF" Margin="0,0,0,6"/>
+                                            <TextBlock Name="TxtObsCaptures" Text="Captures Found: None" Margin="0,2" Foreground="#CDD6F4" FontSize="12"/>
+                                            <TextBlock Name="TxtObsGpu" Text="Target GPU: Not detected" Margin="0,2" Foreground="#CDD6F4" FontSize="12"/>
+                                            <TextBlock Name="TxtObsPciLoc" Text="PCI Bus / Location: Unknown" Margin="0,2" Foreground="#CDD6F4" FontSize="12"/>
+                                            <TextBlock Name="TxtObsChip" Text="Chip / Memory: Unknown" Margin="0,2" Foreground="#CDD6F4" FontSize="12"/>
+                                            <TextBlock Name="TxtObsNvgop" Text="Firmware NVGOP: Unknown" Margin="0,2" Foreground="#CDD6F4" FontSize="12"/>
+                                            <TextBlock Name="TxtObsDisplays" Text="Display Controllers: Unknown" Margin="0,2" Foreground="#CDD6F4" FontSize="12"/>
+                                        </StackPanel>
+
+                                        <!-- Column 2: Evaluated Verification Checks -->
+                                        <StackPanel Grid.Column="1" Margin="8,0,0,0">
+                                            <TextBlock Text="Evaluated Engine Checks" FontWeight="Bold" FontSize="13" Foreground="#89B4FA" Margin="0,0,0,6"/>
+                                            <TextBox Name="TxtChecksList" Height="150" Background="#11111B" Foreground="#CDD6F4" FontFamily="Consolas" FontSize="11" IsReadOnly="True" VerticalScrollBarVisibility="Auto" TextWrapping="Wrap" BorderThickness="0" Text="Checks will appear here after analysis."/>
+                                        </StackPanel>
+                                    </Grid>
+                                </ScrollViewer>
+                            </TabItem>
+
+                            <!-- Sub-Tab 2: Raw JSON Report -->
+                            <TabItem Header="Raw JSON Report">
+                                <Grid Padding="6">
+                                    <TextBox Name="TxtCaptureJson" Background="#11111B" Foreground="#A6E3A1" FontFamily="Consolas" FontSize="11" IsReadOnly="True" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" TextWrapping="Wrap" BorderThickness="0" Text="Raw JSON report will be displayed here."/>
+                                </Grid>
+                            </TabItem>
+                        </TabControl>
+
+                        <!-- Report Actions -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+                            <Button Name="BtnExportJson" Content="💾 Export Report JSON..." Margin="0,0,10,0"/>
+                            <Button Name="BtnCopyClipboard" Content="📋 Copy JSON to Clipboard" Margin="0,0,10,0"/>
+                        </StackPanel>
+
+                        <!-- Expandable Report Comparison Suite -->
+                        <Expander Header="⚖️ Compare Two Compatibility Reports (compare-compatibility.py)" Background="#252538" Foreground="#CDD6F4" Padding="10" BorderBrush="#313244" BorderThickness="1">
+                            <StackPanel Margin="0,8,0,0">
+                                <TextBlock Text="Compare a reference report against your probe report to identify differences in GOP handles, EDID counts, or register states:" FontSize="11" Foreground="#A6ADC8" Margin="0,0,0,8" TextWrapping="Wrap"/>
+                                <Grid Margin="0,0,0,6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="Left (Reference):" VerticalAlignment="Center" Margin="0,0,8,0" Foreground="#CDD6F4" FontSize="11"/>
+                                    <TextBox Name="TxtLeftReport" Grid.Column="1" Height="26" Background="#181825" Foreground="#CDD6F4" BorderBrush="#45475A" VerticalContentAlignment="Center" Padding="6,2"/>
+                                    <Button Name="BtnBrowseLeftReport" Grid.Column="2" Content="Browse..." Margin="6,0,0,0" Padding="8,3"/>
+                                </Grid>
+
+                                <Grid Margin="0,0,0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="Right (Probe):   " VerticalAlignment="Center" Margin="0,0,8,0" Foreground="#CDD6F4" FontSize="11"/>
+                                    <TextBox Name="TxtRightReport" Grid.Column="1" Height="26" Background="#181825" Foreground="#CDD6F4" BorderBrush="#45475A" VerticalContentAlignment="Center" Padding="6,2"/>
+                                    <Button Name="BtnBrowseRightReport" Grid.Column="2" Content="Browse..." Margin="6,0,0,0" Padding="8,3"/>
+                                </Grid>
+
+                                <Button Name="BtnRunCompareReports" Content="⚖️ Compare Selected Reports" Background="#89B4FA" Foreground="#11111B" FontWeight="Bold" Padding="12,6" HorizontalAlignment="Left" Margin="0,0,0,8"/>
+                                <TextBox Name="TxtCompareResult" Height="130" Background="#11111B" Foreground="#CDD6F4" FontFamily="Consolas" FontSize="11" IsReadOnly="True" VerticalScrollBarVisibility="Auto" TextWrapping="Wrap" BorderThickness="0" Text="Comparison differences will be displayed here."/>
+                            </StackPanel>
+                        </Expander>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
@@ -948,10 +1196,36 @@ $btnDeployUsb = $window.FindName('BtnDeployUsb')
 $btnRunInternalConfigure = $window.FindName('BtnRunInternalConfigure')
 $btnRestoreWindowsBcd = $window.FindName('BtnRestoreWindowsBcd')
 
-# Tab 5
+# Tab 5 (Offline Compatibility Checker & Analyser)
 $txtCaptureFolder = $window.FindName('TxtCaptureFolder')
-$btnAnalyzeCapture = $window.FindName('BtnAnalyzeCapture')
-$txtCaptureResult = $window.FindName('TxtCaptureResult')
+$btnBrowseCaptureFolder = $window.FindName('BtnBrowseCaptureFolder')
+$btnDetectUsbCaptures = $window.FindName('BtnDetectUsbCaptures')
+$comboCheckerLang = $window.FindName('ComboCheckerLang')
+$btnRunOfflineCheck = $window.FindName('BtnRunOfflineCheck')
+
+$badgeStatusBorder = $window.FindName('BadgeStatusBorder')
+$txtStatusHeader = $window.FindName('TxtStatusHeader')
+$txtStatusSummary = $window.FindName('TxtStatusSummary')
+$txtNextStep = $window.FindName('TxtNextStep')
+
+$txtObsCaptures = $window.FindName('TxtObsCaptures')
+$txtObsGpu = $window.FindName('TxtObsGpu')
+$txtObsPciLoc = $window.FindName('TxtObsPciLoc')
+$txtObsChip = $window.FindName('TxtObsChip')
+$txtObsNvgop = $window.FindName('TxtObsNvgop')
+$txtObsDisplays = $window.FindName('TxtObsDisplays')
+$txtChecksList = $window.FindName('TxtChecksList')
+$txtCaptureJson = $window.FindName('TxtCaptureJson')
+
+$btnExportJson = $window.FindName('BtnExportJson')
+$btnCopyClipboard = $window.FindName('BtnCopyClipboard')
+
+$txtLeftReport = $window.FindName('TxtLeftReport')
+$btnBrowseLeftReport = $window.FindName('BtnBrowseLeftReport')
+$txtRightReport = $window.FindName('TxtRightReport')
+$btnBrowseRightReport = $window.FindName('BtnBrowseRightReport')
+$btnRunCompareReports = $window.FindName('BtnRunCompareReports')
+$txtCompareResult = $window.FindName('TxtCompareResult')
 
 # Tab 6
 $txtTelemName = $window.FindName('TxtTelemName')
@@ -966,6 +1240,9 @@ $btnRefreshTelem = $window.FindName('BtnRefreshTelem')
 
 # Tab 7
 $btnEmergencyRestore = $window.FindName('BtnEmergencyRestore')
+
+# Stored Last Report
+$Script:LastAnalysis = $null
 
 # --- LOGGING HELPER ---
 function Write-GuiLog([string]$Msg) {
@@ -1079,6 +1356,64 @@ function Refresh-TelemetryData {
     }
 }
 
+function Update-CompatibilityResultsView($res) {
+    $Script:LastAnalysis = $res
+
+    # Status & Badge
+    $txtStatusHeader.Text = $res.Badge
+    $txtStatusSummary.Text = $res.Summary
+    $txtNextStep.Text = $res.NextStep
+
+    $badgeBrush = switch ($res.Status) {
+        'candidate'     { [System.Windows.Media.Brushes]::LightGreen }
+        'needs_data'    { [System.Windows.Media.Brushes]::Gold }
+        'outside_scope' { [System.Windows.Media.Brushes]::DarkOrange }
+        'invalid_data'  { [System.Windows.Media.Brushes]::Tomato }
+        default         { [System.Windows.Media.Brushes]::Gray }
+    }
+    $badgeStatusBorder.BorderBrush = $badgeBrush
+    $txtStatusHeader.Foreground = $badgeBrush
+
+    # Observations breakdown
+    $txtObsCaptures.Text = "Captures Found: $($res.CaptureCount) valid DIAG capture(s)"
+
+    if ($res.Observations -and $res.Observations.Count -gt 0) {
+        $obs = $res.Observations[0]
+        $gpuText = "Unknown"
+        if ($obs.adapters -and $obs.adapters.Count -gt 0) {
+            $ad = $obs.adapters[0]
+            $gpuText = "PCI: $($ad.pci_id) (Subsys: $($ad.subsystem_id), Class: $($ad.class_revision))"
+            if ($ad.location) {
+                $txtObsPciLoc.Text = "Location: Seg $($ad.location.segment), Bus $($ad.location.bus), Dev $($ad.location.device), Func $($ad.location.function)"
+            }
+        }
+        $txtObsGpu.Text = "Target GPU: $gpuText"
+        $txtObsChip.Text = "Chip ID: $(if ($obs.chip_id) { $obs.chip_id } else { 'null' }) | Memory: $(if ($obs.device_memory_size_mib) { $obs.device_memory_size_mib + ' MiB' } else { 'null' })"
+        $txtObsDisplays.Text = "Displays: $($obs.nvidia_display_count) NVIDIA, $($obs.other_display_count) Other (GOP Handles: $($obs.gop_handle_count))"
+        $txtObsNvgop.Text = "NVGOP Bindings: $(if ($obs.firmware_bindings) { $obs.firmware_bindings.Count } else { 0 }) observed"
+    } else {
+        $txtObsGpu.Text = "Target GPU: No observations recorded"
+        $txtObsPciLoc.Text = "Location: N/A"
+        $txtObsChip.Text = "Chip / Memory: N/A"
+        $txtObsDisplays.Text = "Displays: N/A"
+        $txtObsNvgop.Text = "NVGOP Bindings: N/A"
+    }
+
+    # Itemized Checks
+    $chkLines = @()
+    foreach ($chk in $res.Checks) {
+        $chkLines += "[$($chk.state.ToUpper())] $($chk.code): $($chk.message)"
+    }
+    if ($chkLines.Count -eq 0) {
+        $txtChecksList.Text = "No individual check codes reported."
+    } else {
+        $txtChecksList.Text = ($chkLines -join "`r`n")
+    }
+
+    # Raw JSON
+    $txtCaptureJson.Text = $res.RawJson
+}
+
 # --- INITIALIZE UI STATE ---
 $isAdmin = Test-IsAdmin
 if ($isAdmin) {
@@ -1175,18 +1510,127 @@ $btnEmergencyRestore.Add_Click({
     $btnRestoreWindowsBcd.RaiseEvent((New-Object System.Windows.RoutedEventArgs([System.Windows.Controls.Button]::ClickEvent)))
 })
 
-$btnAnalyzeCapture.Add_Click({
+# --- OFFLINE CHECKER TAB EVENT HANDLERS ---
+
+$btnBrowseCaptureFolder.Add_Click({
+    $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+    $dialog.Description = "Select Folder Containing Diagnostic Captures (DIAGnn.TXT)"
+    if (Test-Path -LiteralPath $txtCaptureFolder.Text) {
+        $dialog.SelectedPath = $txtCaptureFolder.Text
+    }
+    if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+        $txtCaptureFolder.Text = $dialog.SelectedPath
+        Write-GuiLog "Selected capture folder: $($dialog.SelectedPath)"
+    }
+})
+
+$btnDetectUsbCaptures.Add_Click({
+    Write-GuiLog "Searching for EFI capture folders on connected USB drives..."
+    $candidates = Find-UsbCaptureFolders
+    if ($candidates.Count -gt 0) {
+        $txtCaptureFolder.Text = $candidates[0]
+        Write-GuiLog "Found capture folder on USB: $($candidates[0])"
+        [System.Windows.MessageBox]::Show("Found capture folder on USB drive:`n$($candidates[0])", "USB Captures Located", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information) | Out-Null
+    } else {
+        Write-GuiLog "No capture folders found on USB drives."
+        [System.Windows.MessageBox]::Show("No capture folders or DIAG*.TXT files found on connected USB drives.`n`nIf you already booted from USB, ensure the USB stick is plugged in.", "No Captures Found", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Warning) | Out-Null
+    }
+})
+
+$btnRunOfflineCheck.Add_Click({
     $folder = $txtCaptureFolder.Text.Trim()
-    if (-not $folder) { return }
+    if (-not $folder) {
+        [System.Windows.MessageBox]::Show("Please specify or browse to a capture folder.", "Missing Folder", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Warning) | Out-Null
+        return
+    }
+
+    $langSelected = if ($comboCheckerLang.SelectedIndex -eq 1) { 'ko' } else { 'en' }
     try {
-        Write-GuiLog "Running offline compatibility analysis on: $folder"
-        $txtCaptureResult.Text = "Running analysis..."
-        $out = Invoke-CaptureAnalysis $folder
-        $txtCaptureResult.Text = $out
-        Write-GuiLog "Analysis completed."
+        Write-GuiLog "Running offline compatibility checker on: $folder (Lang: $langSelected)..."
+        $txtStatusHeader.Text = "ANALYZING..."
+        $txtStatusHeader.Foreground = [System.Windows.Media.Brushes]::Gold
+        $txtStatusSummary.Text = "Reading diagnostic captures, driver images, and PROM..."
+
+        $res = Invoke-OfflineCompatibilityCheck -Folder $folder -Language $langSelected
+        Update-CompatibilityResultsView $res
+        Write-GuiLog "Offline check complete: $($res.Badge)"
     } catch {
-        $txtCaptureResult.Text = "Error: $($_.Exception.Message)"
-        Write-GuiLog "Analysis error: $($_.Exception.Message)"
+        Write-GuiLog "Error during offline check: $($_.Exception.Message)"
+        [System.Windows.MessageBox]::Show($_.Exception.Message, "Checker Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error) | Out-Null
+    }
+})
+
+$btnExportJson.Add_Click({
+    if (-not $Script:LastAnalysis -or -not $Script:LastAnalysis.RawJson) {
+        [System.Windows.MessageBox]::Show("Run an offline compatibility check first to generate a report.", "No Report to Export", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Warning) | Out-Null
+        return
+    }
+
+    $dialog = New-Object System.Windows.Forms.SaveFileDialog
+    $dialog.Filter = "JSON Report (*.json)|*.json|All Files (*.*)|*.*"
+    $dialog.FileName = "compatibility-report.json"
+    $dialog.Title = "Save Compatibility Report JSON"
+
+    if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+        try {
+            Set-Content -LiteralPath $dialog.FileName -Value $Script:LastAnalysis.RawJson -Encoding utf8
+            Write-GuiLog "Saved compatibility report JSON to: $($dialog.FileName)"
+            [System.Windows.MessageBox]::Show("Compatibility report saved to:`n$($dialog.FileName)", "Report Exported", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information) | Out-Null
+        } catch {
+            Write-GuiLog "Failed to export report: $($_.Exception.Message)"
+            [System.Windows.MessageBox]::Show($_.Exception.Message, "Export Error", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error) | Out-Null
+        }
+    }
+})
+
+$btnCopyClipboard.Add_Click({
+    if (-not $Script:LastAnalysis -or -not $Script:LastAnalysis.RawJson) {
+        [System.Windows.MessageBox]::Show("Run an offline compatibility check first to generate a report.", "No Report to Copy", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Warning) | Out-Null
+        return
+    }
+    try {
+        [System.Windows.Forms.Clipboard]::SetText($Script:LastAnalysis.RawJson)
+        Write-GuiLog "Copied compatibility report JSON to clipboard."
+        [System.Windows.MessageBox]::Show("Compatibility report JSON copied to clipboard!`n`nYou can paste it directly into the GitHub Issue report form.", "Copied to Clipboard", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information) | Out-Null
+    } catch {
+        Write-GuiLog "Failed to copy to clipboard: $($_.Exception.Message)"
+    }
+})
+
+$btnBrowseLeftReport.Add_Click({
+    $dialog = New-Object System.Windows.Forms.OpenFileDialog
+    $dialog.Filter = "JSON Reports (*.json)|*.json|All Files (*.*)|*.*"
+    $dialog.Title = "Select Reference Compatibility Report JSON"
+    if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+        $txtLeftReport.Text = $dialog.FileName
+    }
+})
+
+$btnBrowseRightReport.Add_Click({
+    $dialog = New-Object System.Windows.Forms.OpenFileDialog
+    $dialog.Filter = "JSON Reports (*.json)|*.json|All Files (*.*)|*.*"
+    $dialog.Title = "Select Probe Compatibility Report JSON"
+    if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+        $txtRightReport.Text = $dialog.FileName
+    }
+})
+
+$btnRunCompareReports.Add_Click({
+    $left = $txtLeftReport.Text.Trim()
+    $right = $txtRightReport.Text.Trim()
+    if (-not $left -or -not $right) {
+        [System.Windows.MessageBox]::Show("Please select both a reference (Left) and a probe (Right) JSON report file.", "Missing Reports", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Warning) | Out-Null
+        return
+    }
+    try {
+        Write-GuiLog "Comparing reports: $left vs $right..."
+        $txtCompareResult.Text = "Running compare-compatibility.py..."
+        $diff = Invoke-CompareCompatibilityReports -LeftReportPath $left -RightReportPath $right
+        $txtCompareResult.Text = $diff
+        Write-GuiLog "Report comparison finished."
+    } catch {
+        $txtCompareResult.Text = "Comparison Error: $($_.Exception.Message)"
+        Write-GuiLog "Comparison error: $($_.Exception.Message)"
     }
 })
 
