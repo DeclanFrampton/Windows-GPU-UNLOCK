@@ -86,6 +86,11 @@ The utility orchestrates all components of the GPU unlock deployment lifecycle s
 - **PowerShell 5.1** (built into Windows) or **PowerShell 7+**
 - **Python 3.8+** (required for offline capture validation and report comparison; must be on your system `PATH`)
 - **NVIDIA Display Driver** with `nvidia-smi` available (standard with official NVIDIA drivers)
+- **LLVM / Clang Toolchain (Optional for Probe, Required for Custom Unlock Build)**:
+  - Required if building a machine-specific unlock bootloader via **Build & Stage Custom Unlock Bootloader** (`clang.exe` and `lld-link.exe`).
+  - Automatically discovered in `C:\Program Files\LLVM\bin\` or `C:\TOOLS\LLVM20\bin\`.
+  - Install via Windows Package Manager: `winget install LLVM.LLVM`.
+  - *Note: Pre-compiled read-only diagnostic probes do NOT require LLVM.*
 
 ---
 
@@ -212,20 +217,30 @@ Before attempting any UEFI boot unlock, five critical safety checks are evaluate
 ---
 
 ### Tab 3: USB Unlock Deployer (Recommended Route)
-Stages the pre-compiled unlock bootloader onto a removable FAT32 USB drive:
+Stages either a standard pre-compiled unlock bootloader or guides you through the intelligent **Two-Step Headless Deployment Workflow** tailored specifically to your PC:
 
-1. Insert a USB thumb drive formatted as **FAT32**.
-2. Click **Refresh Disks**.
-3. Select your target USB drive letter from the dropdown menu.
-4. Click **Stage Unlock Files to Selected USB**.
-5. The utility creates:
-   - `\EFI\BOOT\BOOTX64.EFI`
-   - `\RTX3090-UNLOCK\ASSETS\` (with verified firmware blobs)
-6. Use the on-screen **One-Time Boot Menu Guide** to trigger the bootloader:
-   - **ASUS**: Press <kbd>F8</kbd> during POST
-   - **Gigabyte / AORUS**: Press <kbd>F12</kbd> during POST
-   - **MSI**: Press <kbd>F11</kbd> during POST
-   - **ASRock**: Press <kbd>F11</kbd> during POST
+#### Intelligent Route Selection:
+- **Standard Proven Profiles**: For reference systems matching proven hardware profiles, clicking **Stage Unlock Files to Selected USB** writes the pre-compiled `BOOTX64.EFI` and firmware assets directly.
+- **Headless Single-RTX / Local Profile Route**: If you have a custom or non-reference motherboard (such as ASUS TUF B460, Intel F-series CPUs with no iGPU, or monitors connected directly to the discrete RTX), the utility dynamically displays the **Two-Step Headless Workflow**:
+  1. **Step 1: Stage Diagnostic Probe (Embedded ESP GUID)**:
+     - Automatically identifies your Windows EFI System Partition (ESP) GUID.
+     - Compiles and stages a tailored read-only diagnostic probe (`BOOTX64.EFI`) onto the USB drive.
+     - **No BIOS Loops**: Because your Windows ESP GUID is embedded, the probe records pre-boot diagnostic registers and immediately chain-loads `\EFI\Microsoft\Boot\bootmgfw.efi` directly into Windows without dropping into the BIOS setup screen.
+     - *Action*: Power off PC completely, boot USB once (F8/F12). Repeat once more to capture two agreeing cold boots.
+  2. **Capture Agreement Tracker**:
+     - Real-time indicator tracks capture status: `0 of 2`, `1 of 2`, or `2 of 2 complete [READY FOR CUSTOM UNLOCK BUILD]`.
+  3. **Step 2: Build & Stage Custom Unlock Bootloader**:
+     - Unlocks once 2 agreeing captures are detected on the USB drive.
+     - Compiles your machine's hardware profile ([`profile-local.h`](../../internal-boot/unlock/profile-local.h)) locked to your exact PCIe BDF address, VBIOS PROM hash, and strap registers.
+     - Executes the mandatory 22-suite offline verification harness (`test-profile.ps1`) using LLVM/Clang.
+     - Builds the parent loader (`BOOTX64.EFI`) and child unlock binary (`UNLOCK-HEADLESS.EFI`) featuring buffered I/O logging (eliminating USB flush stalls).
+     - Copies the verified binaries and firmware assets to `E:\EFI\BOOT\` and `E:\EFI\WindowsGPUUnlock\`.
+
+#### One-Time Boot Menu Guide:
+- **ASUS**: Press <kbd>F8</kbd> during POST
+- **Gigabyte / AORUS**: Press <kbd>F12</kbd> during POST
+- **MSI**: Press <kbd>F11</kbd> during POST
+- **ASRock**: Press <kbd>F11</kbd> during POST
 
 ---
 
@@ -273,16 +288,25 @@ Located in the expandable panel at the bottom of Tab 5:
 ---
 
 ### Tab 6: Verification & Telemetry
-After booting through the unlock bootloader into Windows, use this tab to verify operation:
+After booting through the unlock bootloader into Windows, use this tab to verify that the unlock successfully latched and inspect real-time GPU health:
 
+- **GPU Unlock Verification Status**:
+  - Automatically parses pre-boot hardware logs from the latest bootloader execution (`AUTO*\REPORT.TXT` and `HLS*.TXT`).
+  - **Status Badge**: Highlights `[ACTIVE / UNLOCKED]` (Green) or `[LOCKED / STOCK]` (Red/Warning).
+  - **State**: Confirms whether Workstation/vGPU tensor selectors are latched or operating in consumer locked mode.
+  - **Active Straps**: Displays the post-reset strap registers (`SS0 = 0x88888888 | SS1 = 0x00000008` in unlocked state vs. `SS0 = 0x25204022 | SS1 = 0x7` in stock state).
+  - **Hardware Profile**: Displays the active machine profile (e.g. `entryLatchedSs1Full`).
+  - **Transaction Result**: Validates that PCIe Function-Level Reset (FLR) completed cleanly (`Status = 0, Clean = 1`).
+  - **Boot Session & Timestamp**: Identifies the exact boot session report folder (`AUTO000003/REPORT.TXT`).
+  - **Windows Handoff**: Confirms that execution transferred smoothly to `\EFI\Microsoft\Boot\bootmgfw.efi`.
 - **Live NVIDIA Telemetry**:
-  - Click **Refresh Telemetry** to query `nvidia-smi`.
-  - Displays GPU name, driver version, core temperature, VRAM utilization, power draw (Watts), SM clock speed, and memory clock speed.
+  - Direct integration with `nvidia-smi` to display live GPU name, driver version, core temperature, VRAM utilization, power draw (Watts), SM clock speed, and memory clock speed.
+  - Click **Refresh Telemetry** to refresh both the boot unlock verification status and live GPU statistics simultaneously.
 - **Expected Uplift Protocol**:
-  - Run a standard cuBLAS GEMM matrix multiplication benchmark (`4096 x 4096`).
+  - Reference expectations for standard cuBLAS GEMM matrix multiplication benchmarks (`4096 x 4096`).
   - **Locked Baseline**: GA104 achieves ~40-44 TFLOPS; GA102 achieves ~65-70 TFLOPS in FP16/BF16.
   - **Unlocked State**: GA104 achieves ~88 TFLOPS; GA102 achieves ~125-130 TFLOPS (~1.9x to 2.0x throughput uplift).
-  - Selector registers in unlocked state verify as `SS0 = 0x88888888` and `SS1 = 0x8`.
+  - In unlocked state, selector registers verify as `SS0 = 0x88888888` and `SS1 = 0x8`.
 
 ---
 
@@ -374,10 +398,11 @@ The utility supports full automation through the `-Cli` parameter. This is ideal
 .\tools\gpu_unlock_utility\GpuUnlockUtility.ps1 -Cli -Action GenerateDumps -DumpType ProbeUsb -DriveLetter E
 ```
 
-#### 10. Query Real-Time GPU Telemetry
+#### 10. Query Real-Time GPU Telemetry & Unlock Verification Status
 ```powershell
 .\tools\gpu_unlock_utility\GpuUnlockUtility.ps1 -Cli -Action Telemetry
 ```
+*Outputs both the parsed GPU Unlock Verification Status (Active state, straps, profile, transaction result, boot session, Windows handoff) and live `nvidia-smi` hardware metrics.*
 
 #### 11. 1-Click Restore Windows Boot Manager
 ```powershell
@@ -409,6 +434,13 @@ Uses `generate_captures.py` to synthesize pre-boot EFI capture artifacts (`DIAG0
 
 ### 3. USB Diagnostic Probe (`-DumpType ProbeUsb`)
 Sets up a removable FAT32 USB drive to capture live pre-boot hardware state on cold boot without applying unlock modifications.
+
+### Understanding Probe Artifacts in `RTX3090-UNLOCK\`:
+When booting the diagnostic probe USB, several files are created in the `RTX3090-UNLOCK\` folder:
+- **`PROM.BIN` (1,048,576 bytes / 1 MB)**: A raw dump of the physical GPU VBIOS ROM read directly from the PCI expansion ROM BAR.
+- **`IMG00.BIN` through `IMG35.BIN` (~36 files)**: Raw dumps of each UEFI driver loaded into motherboard memory during pre-boot (PCI bus driver, console handles, and the NVIDIA GOP display driver `nvgop.efi`).
+- **`DIAG00.TXT` / `DIAG01.TXT`**: Text logs detailing PCI configuration registers, strap states, and handle ownership graphs across consecutive cold boots.
+> *Note: Having ~35 `.BIN` files created during probe runs is completely normal and required for machine profile generation.*
 
 ---
 
@@ -499,6 +531,19 @@ The drive must be formatted with the **FAT32** filesystem to be recognized by UE
 - The unlock bootloader unbinds the pre-boot UEFI GOP driver to prepare hardware registers. The display will remain dark until the Windows graphics driver takes over.
 - **Wait 30 to 45 seconds** after boot for Windows to reach the lock screen.
 - Ensure your primary monitor is connected to a native **DisplayPort** connector on the GPU (DisplayPort 1.4 has the highest recovery and handoff success rate).
+
+### Q: Is LLVM / Clang required to build the bootloader?
+- **For staging and running the Diagnostic Probe**: **No**, the probe is pre-compiled in `release\EFI\BOOT\BOOTX64.EFI`.
+- **For building a Custom Machine Unlock Bootloader (`new-machine.ps1` / Tab 3 Option 2)**: **Yes**. LLVM (`clang.exe` and `lld-link.exe`) is required because it compiles freestanding UEFI PE/COFF binaries (`/subsystem:efi_application`) and runs the offline 22-suite mock verification harness. Install via `winget install LLVM.LLVM`.
+
+### Q: The screen stopped updating at `pre-release-cold-ss0 status=0x...` when booting the unlock USB. Is it stuck?
+**No, this is completely normal for single-GPU systems.** Because the system has no integrated GPU and a single discrete RTX card, the bootloader explicitly prints:
+> *"SINGLE RTX HEADLESS UNLOCK RESEARCH: one guarded attempt, then Windows. Screen may stop updating."*
+
+At `pre-release-cold-ss0`, the bootloader safely detaches the UEFI GOP display console so the GPU's display controller can be reset and unlocked without crashing the motherboard firmware. The display output is designed to freeze on that last frame while the unlock transaction completes in memory and immediately chain-loads `bootmgfw.efi` (Windows).
+
+### Q: Why are there ~36 `.BIN` files (`IMG00.BIN`–`IMG35.BIN`) created in `RTX3090-UNLOCK`?
+When the diagnostic probe runs, it queries every loaded EFI image in UEFI RAM and saves exact binary dumps of the motherboard's pre-boot environment (including `nvgop.efi`, the PCI bus driver, and `PROM.BIN`). The profile generator requires these files to verify driver compatibility and calculate exact VBIOS checksums. Having ~35 `.BIN` files is normal and expected.
 
 ### Q: How do I completely undo the unlock?
 - If using the **USB route**: Simply unplug the USB drive or boot normally from your internal drive. No permanent changes were written to your GPU.
