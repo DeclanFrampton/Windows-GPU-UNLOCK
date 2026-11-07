@@ -43,7 +43,8 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$Script:RepoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
+$scriptDir = if ($PSScriptRoot) { $PSScriptRoot } elseif ($MyInvocation.MyCommand.Path) { Split-Path -Parent $MyInvocation.MyCommand.Path } else { (Get-Location).Path }
+$Script:RepoRoot = [System.IO.Path]::GetFullPath((Join-Path $scriptDir '..\..'))
 $Script:AssetsPath = Join-Path $Script:RepoRoot 'assets'
 $Script:ReleaseEfi = Join-Path $Script:RepoRoot 'release\EFI\BOOT\BOOTX64.EFI'
 $Script:ProvenanceFile = Join-Path $Script:RepoRoot 'release\provenance.json'
@@ -1015,9 +1016,9 @@ Add-Type -AssemblyName System.Windows.Forms
 
                             <!-- Sub-Tab 2: Raw JSON Report -->
                             <TabItem Header="Raw JSON Report">
-                                <Grid Padding="6">
+                                <Border Padding="6">
                                     <TextBox Name="TxtCaptureJson" Background="#11111B" Foreground="#A6E3A1" FontFamily="Consolas" FontSize="11" IsReadOnly="True" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" TextWrapping="Wrap" BorderThickness="0" Text="Raw JSON report will be displayed here."/>
-                                </Grid>
+                                </Border>
                             </TabItem>
                         </TabControl>
 
