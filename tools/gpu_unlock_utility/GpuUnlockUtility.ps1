@@ -1299,8 +1299,8 @@ Add-Type -AssemblyName System.Windows.Forms
 
                         <!-- Report Actions -->
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
-                            <Button Name="BtnExportJson" Content="💾 Export Report JSON..." Margin="0,0,10,0"/>
-                            <Button Name="BtnCopyClipboard" Content="📋 Copy JSON to Clipboard" Margin="0,0,10,0"/>
+                            <Button Name="BtnExportJson" Content="Export Report JSON..." Margin="0,0,10,0"/>
+                            <Button Name="BtnCopyClipboard" Content="Copy JSON to Clipboard" Margin="0,0,10,0"/>
                         </StackPanel>
 
                         <!-- Expandable Report Comparison Suite -->
