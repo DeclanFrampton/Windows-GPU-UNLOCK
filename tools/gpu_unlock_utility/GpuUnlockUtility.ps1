@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Windows GPU UNLOCK - Executive Control, Compatibility Checker & Deployment Utility
 .DESCRIPTION
