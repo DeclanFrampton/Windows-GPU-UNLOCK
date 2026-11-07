@@ -30,6 +30,7 @@ if "%choice%"=="1" (
     exit /b
 )
 
+
 :RunAdmin
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0gpu_unlock_utility\GpuUnlockUtility.ps1" %*
 if %errorlevel% neq 0 (

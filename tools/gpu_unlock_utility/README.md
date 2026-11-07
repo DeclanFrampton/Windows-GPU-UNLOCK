@@ -1,6 +1,6 @@
 # Windows GPU UNLOCK - Management & Deployment Utility
 
-The **Windows GPU UNLOCK Management & Deployment Utility** (`GpuUnlockUtility.ps1`) is a unified, executive GUI and command-line application for the [Windows-GPU-UNLOCK](https://github.com/ahsanumair/Windows-GPU-UNLOCK) project. 
+The **Windows GPU UNLOCK Management & Deployment Utility** (`gpuunlockutility.ps1`) is a unified, executive GUI and command-line application for the [Windows-GPU-UNLOCK](https://github.com/ahsanumair/Windows-GPU-UNLOCK) project. 
 
 It provides an end-to-end management toolkit for hardware auditing, safety pre-flight verification, offline EFI compatibility analysis, headless USB staging, BCD boot configuration, live GPU telemetry, and instant 1-click emergency recovery.
 

@@ -16,13 +16,16 @@ if (-not (Test-Path -LiteralPath $script)) {
     exit 1
 }
 
+
 if ($Cli) {
     if ($RemainingArgs) {
         & powershell -NoProfile -ExecutionPolicy Bypass -File $script -Cli -Action $Action @RemainingArgs
-    } else {
+    }
+    else {
         & powershell -NoProfile -ExecutionPolicy Bypass -File $script -Cli -Action $Action
     }
-} else {
+}
+else {
     & powershell -NoProfile -ExecutionPolicy Bypass -File $script
 }
 

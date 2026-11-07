@@ -11,6 +11,7 @@ HERE = Path(__file__).resolve().parent
 REPO_ROOT = HERE.parents[1]
 sys.path.insert(0, str(REPO_ROOT / 'research/profile'))
 
+
 import test_local_topology as topology
 
 

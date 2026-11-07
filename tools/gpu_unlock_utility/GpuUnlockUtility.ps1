@@ -57,7 +57,6 @@ $Script:CheckerPy = Join-Path $Script:RepoRoot 'research\profile\check-compatibi
 $Script:ComparatorPy = Join-Path $Script:RepoRoot 'research\profile\compare-compatibility.py'
 
 # --- CORE ENGINE FUNCTIONS ---
-
 function Test-IsAdmin {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
     $principal = New-Object Security.Principal.WindowsPrincipal($identity)

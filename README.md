@@ -42,17 +42,17 @@ For an integrated, end-to-end management experience within Windows, use the **Wi
 
 - **One-Click Batch Launcher**:
   ```bat
-  .\tools\Launch-Utility.cmd
+  .\tools\launch-utility.cmd
   ```
   *(Double-click in Explorer or invoke from cmd.exe/PowerShell. Automatically prompts for Administrator elevation when needed, or launches in read-only user mode for diagnostics.)*
 
 - **PowerShell Launcher**:
   ```powershell
   # Launch the dark-themed WPF desktop GUI
-  .\tools\Launch-Utility.ps1
+  .\tools\launch-utility.ps1
 
   # Or run in headless command-line mode (e.g. audit hardware)
-  .\tools\Launch-Utility.ps1 -Cli -Action Audit
+  .\tools\launch-utility.ps1 -Cli -Action Audit
   ```
 
 **Included Capabilities:**
