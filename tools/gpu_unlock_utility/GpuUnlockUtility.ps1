@@ -1304,7 +1304,7 @@ Add-Type -AssemblyName System.Windows.Forms
                         </StackPanel>
 
                         <!-- Expandable Report Comparison Suite -->
-                        <Expander Header="⚖️ Compare Two Compatibility Reports (compare-compatibility.py)" Background="#252538" Foreground="#CDD6F4" Padding="10" BorderBrush="#313244" BorderThickness="1">
+                        <Expander Header="Compare Two Compatibility Reports (compare-compatibility.py)" Background="#252538" Foreground="#CDD6F4" Padding="10" BorderBrush="#313244" BorderThickness="1">
                             <StackPanel Margin="0,8,0,0">
                                 <TextBlock Text="Compare a reference report against your probe report to identify differences in GOP handles, EDID counts, or register states:" FontSize="11" Foreground="#A6ADC8" Margin="0,0,0,8" TextWrapping="Wrap"/>
                                 <Grid Margin="0,0,0,6">
@@ -1329,7 +1329,7 @@ Add-Type -AssemblyName System.Windows.Forms
                                     <Button Name="BtnBrowseRightReport" Grid.Column="2" Content="Browse..." Margin="6,0,0,0" Padding="8,3"/>
                                 </Grid>
 
-                                <Button Name="BtnRunCompareReports" Content="⚖️ Compare Selected Reports" Background="#89B4FA" Foreground="#11111B" FontWeight="Bold" Padding="12,6" HorizontalAlignment="Left" Margin="0,0,0,8"/>
+                                <Button Name="BtnRunCompareReports" Content="Compare Selected Reports" Background="#89B4FA" Foreground="#11111B" FontWeight="Bold" Padding="12,6" HorizontalAlignment="Left" Margin="0,0,0,8"/>
                                 <TextBox Name="TxtCompareResult" Height="130" Background="#11111B" Foreground="#CDD6F4" FontFamily="Consolas" FontSize="11" IsReadOnly="True" VerticalScrollBarVisibility="Auto" TextWrapping="Wrap" BorderThickness="0" Text="Comparison differences will be displayed here."/>
                             </StackPanel>
                         </Expander>

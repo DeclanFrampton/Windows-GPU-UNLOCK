@@ -44,3 +44,4 @@ benchmark/rtx3080/results/
 benchmark/rtx3080/build-manifest.json*
 benchmark/rtx3080/packages-manifest.json*
 diagnostics/
+diagnostic-captures/
