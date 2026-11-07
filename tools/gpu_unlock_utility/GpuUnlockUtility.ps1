@@ -960,7 +960,6 @@ Add-Type -AssemblyName System.Windows.Forms
                             </ToggleButton>
                             <ContentPresenter Name="ContentSite" IsHitTestVisible="False" Content="{TemplateBinding SelectionBoxItem}"
                                               ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
-                                              ContentTemplateSelector="{TemplateBinding SelectionBoxItemTemplateSelector}"
                                               Margin="10,3,28,3" VerticalAlignment="Center" HorizontalAlignment="Left" />
                             <Popup Name="Popup" Placement="Bottom" IsOpen="{TemplateBinding IsDropDownOpen}" AllowsTransparency="True" 
                                    Focusable="False" PopupAnimation="Slide">
