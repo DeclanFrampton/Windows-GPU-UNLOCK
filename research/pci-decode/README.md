@@ -662,9 +662,9 @@ claim loss, foreign graph edges, changed driver bindings and nested entry.
 Observed data must remain unchanged by target derivation, and raw0 paired with
 cache100/200/300 is refused. Deliberately broken guards must fail assertions.
 
-This remains synthetic non-aggregate research: the model accepts EDID-driver
+This remains synthetic research: the non-aggregate model accepts EDID-driver
 configurations with 1–2 display children and no-EDID-driver configurations with 1–4.
-Aggregate and retained-AMD display variants, broader parent/segment coverage and
+Retained-AMD display variants, consistent IO+MEM command3 histories, broader parent/segment coverage and
 a permitted invalid-target EFI link fixture remain outstanding. No uncorrected
 physical Stop transition, new hardware support, ready
 package or authorization to install/execute follows from these RAM results.
@@ -732,3 +732,22 @@ binding/code drift. No NVIDIA Stop, claim or MEMORY restore may follow those
 failures. Duplicate/foreign/malformed child topology is refused before EDID or
 NVIDIA release. None of these synthetic inputs constitute hardware evidence or
 LOCAL qualification.
+
+For the aggregate GOP frontend, add `--aggregate --edid-driver --children 1`
+or `--children 2`. It uses a separate adapter around the existing aggregate
+production-path fixture. Preparation must make zero Disconnect calls; release
+must stop exactly the selected EDID children and then NVIDIA, restore MEMORY
+only, and preserve actual Before300 separately from planned target200. The
+synthetic baseline explicitly uses command2 and does not qualify command3.
+
+The aggregate adapter adds a real RAM parent PCI interface/path and consistent
+handle/protocol inventory. Display-path lookups delegate to the legacy fixture
+so its shortened/longer path and wrong-parent faults remain effective. Its Close
+mock removes only the precise image/target/controller/GUID tuple, preserving
+other references. All original24 aggregate modes remain checked, including
+reviewed virtual GOP survival and rejection of unrecognized GOPs, stale NV edges,
+lost protected edges and wrong code fingerprints. Additional tests inject
+parent/effect-dispatch drift, per-child EDID partial effects, remaining-child
+path/binding/code changes, late protected-graph changes before Enable, partial
+Open/Close, borrowed buffers, recursion and post-child parent/status failures.
+These are RAM models, not physical aggregate firmware evidence.

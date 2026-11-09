@@ -26,7 +26,10 @@ def main():
     parser.add_argument('--mutations', action='store_true')
     parser.add_argument('--edid-driver', action='store_true', help='Replay the actual sequential EDID release stage')
     parser.add_argument('--children', type=int, choices=(1, 2, 3, 4), default=1)
+    parser.add_argument('--aggregate', action='store_true', help='Use the separate aggregate GOP frontend')
     args = parser.parse_args()
+    if args.aggregate and not args.edid_driver:
+        parser.error('The aggregate research frontend requires --edid-driver')
     if args.edid_driver and args.children > 2:
         parser.error('The existing EDID-driver policy allows at most two display children')
     if args.mutations and not args.mismatch:
@@ -38,11 +41,11 @@ def main():
     paths = subprocess.check_output(['git', 'ls-files', '--', 'internal-boot', 'deps', 'research/profile', 'research/pci-decode'],
                                    cwd=ROOT, text=True).splitlines()
     paths += ['internal-boot/boot/release-parent-audit.h', 'internal-boot/boot/release-ownership-audit.h', 'internal-boot/boot/test_release_parent_audit.c',
-              'research/pci-decode/test-release-parent-audit.py']
+              'research/pci-decode/test-release-parent-audit.py', 'internal-boot/boot/test_release_aggregate_audit.c']
     before = {p: hashlib.sha256((ROOT / p).read_bytes()).hexdigest() for p in sorted(set(paths))}
     data = load('release_audit_data', ROOT / 'research/profile/test_local_topology.py')
     images = load('release_audit_images', ROOT / 'research/profile/test_compatibility.py')
-    text = data.synthetic_capture(bus=0x2b, children=args.children, command=2, no_edid=not args.edid_driver)
+    text = data.synthetic_capture(bus=0x2b, children=args.children, command=2, no_edid=not args.edid_driver, aggregate=args.aggregate)
     admitted = data.analyze(text)
     header = out / 'profile-local.h'
     header.write_text('/* Synthetic RAM model, not LOCAL qualification. */\n'
@@ -76,19 +79,22 @@ def main():
 
     run('fixture', [sys.executable, '-I', str(ROOT / 'internal-boot/boot/make-console-fixture.py'),
         str(capture), '--single-rtx', '--no-igpu', *([] if args.edid_driver else ['--no-edid-driver']),
-        '--no-edid-child', '--output=' + str(fixture)])
+        *(['--aggregate'] if args.aggregate else []), '--no-edid-child', '--output=' + str(fixture)])
     boot = ROOT / 'internal-boot/boot'
     overlay = out / 'overlay.json'
     overlay.write_text(json.dumps({'version': 0, 'roots': [
         {'type': 'file', 'name': str(path), 'external-contents': str(source), 'use-external-name': False}
         for path, source in [(boot / 'platform-config.h', platform),
-            (ROOT / 'internal-boot/unlock/profile-local.h', header), (boot / 'build/r2/replay-fixture.h', fixture)]]}), encoding='utf-8')
+            (ROOT / 'internal-boot/unlock/profile-local.h', header), (boot / 'build/r2/replay-fixture.h', fixture),
+            (boot / 'build/aggregate/replay-fixture.h', fixture)]]}), encoding='utf-8')
     flags = ['-std=c11', '-O1', '-Wall', '-Wextra', '-Werror', '-Wno-unused-function',
         '-D_CRT_SECURE_NO_WARNINGS', '-DGU_PROFILE_LOCAL', '-DGU_HEADLESS_RESEARCH',
         '-DGU_SINGLE_RTX_CONSOLE', '-DGU_FULL_UNLOCK', '-DGU_AUTOMATIC_BOOT',
         '-DGU_RELEASE_PARENT_AUDIT=1', '-DGU_DS_POST_STOP_CAPTURE=1', '-ivfsoverlay', str(overlay),
         '-I' + str(ROOT / 'deps/edk2/MdePkg/Include'), '-I' + str(ROOT / 'deps/edk2/MdePkg/Include/X64')]
-    sources = [boot / 'test_release_parent_audit.c', boot / 'console-flow.c',
+    if args.aggregate:
+        flags.append('-DGU_AGGREGATE_CAPTURE_FIXTURE')
+    sources = [boot / ('test_release_aggregate_audit.c' if args.aggregate else 'test_release_parent_audit.c'), boot / 'console-flow.c',
         *(ROOT / 'internal-boot/unlock' / p for p in ['checks.c', 'sha256.c']),
         *(ROOT / 'research/pci-decode' / p for p in ['efi-capture.c', 'snapshot.c', 'stop-transition.c'])]
     if args.mismatch:
@@ -110,11 +116,13 @@ def main():
             bad = subprocess.run([str(exe), *bad_arguments], cwd=ROOT, text=True, capture_output=True, timeout=30)
             (out / (label + '-' + fault + '.log')).write_text(bad.stdout + bad.stderr, encoding='utf-8')
             if fault in ('truncated', 'extended'):
-                expected = 'FAIL exact synthetic EDID image' if label == 'edid' else 'FAIL exact loaded synthetic NVIDIA driver'
+                expected = ('FAIL aggregate full: input image size mismatch' if args.aggregate else
+                    'FAIL exact synthetic EDID image' if label == 'edid' else 'FAIL exact loaded synthetic NVIDIA driver')
             elif label == 'edid':
-                expected = "FAIL EDID image matches this model's code pin"
+                expected = ('aggregate event=ami-runtime-code-profile status=800000000000001b' if args.aggregate else
+                    "FAIL EDID image matches this model's code pin")
             else:
-                expected = 'full event=nvidia-code-profile status=800000000000001b'
+                expected = ('aggregate' if args.aggregate else 'full') + ' event=nvidia-code-profile status=800000000000001b'
             if bad.returncode != 1 or 'FAIL ' not in bad.stderr or expected not in bad.stderr:
                 raise RuntimeError('Invalid image must fail at its length/code-pin check: ' + label + '-' + fault)
             rejected_images.append({'image': label, 'fault': fault, 'exit': bad.returncode, 'expected_diagnostic': expected})
@@ -196,7 +204,7 @@ def main():
         raise RuntimeError('Source changed during test')
     (out / 'summary.json').write_text(json.dumps({'passed': True, 'ram_only': True,
         'efi_executed': False, 'mismatch_admission_enabled': args.mismatch, 'host_only': True,
-        'edid_driver': args.edid_driver, 'display_children': args.children, 'result': result,
+        'edid_driver': args.edid_driver, 'display_children': args.children, 'aggregate': args.aggregate, 'result': result,
         'rejected_images': rejected_images,
         'synthetic_input_sha256': {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in
             [capture, header, nv, prom, config, platform, fixture, *([edid] if args.edid_driver else [])]},
