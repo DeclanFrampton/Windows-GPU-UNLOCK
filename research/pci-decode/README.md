@@ -662,9 +662,11 @@ claim loss, foreign graph edges, changed driver bindings and nested entry.
 Observed data must remain unchanged by target derivation, and raw0 paired with
 cache100/200/300 is refused. Deliberately broken guards must fail assertions.
 
-This is one synthetic non-aggregate, no-EDID-driver route. Aggregate/EDID/display
-variants, complete cleanup fault qualification, and a permitted invalid-target EFI
-link fixture remain outstanding. No uncorrected physical Stop transition, new hardware support, ready
+This remains synthetic non-aggregate research: the model accepts EDID-driver
+configurations with 1–2 display children and no-EDID-driver configurations with 1–4.
+Aggregate and retained-AMD display variants, broader parent/segment coverage and
+a permitted invalid-target EFI link fixture remain outstanding. No uncorrected
+physical Stop transition, new hardware support, ready
 package or authorization to install/execute follows from these RAM results.
 
 The host-only final verifier now collects a fresh typed GPU/parent observation
@@ -714,3 +716,19 @@ same-image passives,0/63/64 passive bounds, malformed/duplicate/borrowed query
 buffers and Free failures. These observations do not lock firmware state or
 prove absence after every subsequent callback. Wider display variants and
 physical/EFI qualification remain separate outstanding work.
+
+For EDID-driver replay, pass `--edid-driver --children 2` to the same runner; omit
+the switch for no-EDID firmware and select `--children 1` through `--children 4`.
+EDID counts above 2 are rejected before output creation. `--mismatch` exercises
+both corrected and hypothetical mismatched histories in each selected topology.
+
+The model loads separate synthetic EDID/NVIDIA images with exact length checks,
+binds the EDID code range to its SHA pin and applies the actual release code's
+normal driver-profile checks. Generated capture/header/driver/PROM/config hashes
+are recorded. Truncated, extended and changed-code images must fail assertions.
+EDID tests inject partial effects followed by error/warning, SUCCESS with a stale
+child edge, parent/NVIDIA binding changes, and remaining-child path/EDID
+binding/code drift. No NVIDIA Stop, claim or MEMORY restore may follow those
+failures. Duplicate/foreign/malformed child topology is refused before EDID or
+NVIDIA release. None of these synthetic inputs constitute hardware evidence or
+LOCAL qualification.

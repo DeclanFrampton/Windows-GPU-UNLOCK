@@ -28,6 +28,41 @@ static EFI_STATUS FreeFailureStatus;
 static BOOLEAN FreeFailureInjected;
 static unsigned OwnerQueries;
 static UINTN ParentHandleStorage[8];
+static unsigned EdidStops,NvStops;
+static unsigned TopologyFault;
+#if !GU_NO_EDID_DRIVER
+static unsigned EdidFaultMode,EdidFaultChild;
+static UINT8 OriginalEdidTextByte;
+#endif
+static EFI_STATUS EFIAPI AuditDisconnect(EFI_HANDLE h,EFI_HANDLE agent,EFI_HANDLE child) {
+  if(FullMode && h==FX_RtxPci && agent==FX_NvAgent)NvStops++;
+#if !GU_NO_EDID_DRIVER
+  if(FullMode && agent==FX_EdidAgent) {
+    EdidStops++;EDGE saved={0};UINTN found=0;
+    for(UINTN i=0;i<Live.Count;i++)if(Live.Edges[i].Handle==h && Live.Edges[i].Agent==agent && GuGuidEqual(&Live.Edges[i].Protocol,&EdidGuid)) {
+      saved=Live.Edges[i];found++;
+    }
+    Check(found==1,"exact EDID child edge exists before each Stop");
+    BOOLEAN inject=EdidFaultMode && EdidStops==EdidFaultChild;
+    int scenario=FullScenario;
+    if(inject && EdidFaultMode==3)FullScenario=1;
+    if(inject && EdidFaultMode==4)FullScenario=29;
+    EFI_STATUS s=Disconnect(h,agent,child);FullScenario=scenario;
+    if(inject) {
+      if(EdidFaultMode==1)return EFI_DEVICE_ERROR; /* successful partial effect */
+      if(EdidFaultMode==2)return EFI_WARN_UNKNOWN_GLYPH;
+      if(EdidFaultMode==5)Live.Edges[Live.Count++]=saved; /* SUCCESS without release */
+      if(EdidFaultMode==6)ParentConfig[63]^=1;
+      if(EdidFaultMode==7)NvBinding.Version++;
+      if(EdidFaultMode==8){Check(AdditionalChildCount>0,"remaining child exists");AdditionalChildPaths[0][GU_RTX_DISPLAY_BYTES-8]^=1;}
+      if(EdidFaultMode==9)MouseBinding.Version++;
+      if(EdidFaultMode==10)MouseMemory[0x1000]^=1;
+    }
+    return s;
+  }
+#endif
+  return Disconnect(h,agent,child);
+}
 #define FOREIGN_OWNER ((EFI_HANDLE)(UINTN)61000)
 static UINTN SelfReferences(VOID) {
   UINTN count=0;for(UINTN i=0;i<Live.Count;i++)if(Live.Edges[i].Handle==FX_RtxPci &&
@@ -149,7 +184,8 @@ static EFI_STATUS EFIAPI AuditRead(EFI_PCI_IO_PROTOCOL *io,EFI_PCI_IO_PROTOCOL_W
   if(io!=&ParentIo)return ExtraRead(io,w,offset,n,out);
   Check(w==EfiPciIoWidthUint32 && !offset && n==64,"bounded parent full read only");
   ParentReads++;
-  if(FullMode && Phase==2 && !NvPreflightRead)NvPreflightRead=ParentReads;
+  if(FullMode && !NvPreflightRead && (GU_NO_EDID_DRIVER?Phase==2:
+     Phase==3 && Full.EdidDetached==Full.ChildCount))NvPreflightRead=ParentReads;
   if(Full.Owned) {
     if(!FirstOwnedRead){FirstOwnedRead=ParentReads;FirstOwnedCapture=ReleaseAudit.Next;}
     else if(ReleaseAudit.Next!=FirstOwnedCapture && !PreEnableRead)PreEnableRead=ParentReads;
@@ -215,12 +251,27 @@ static void AuditConsoleSetup(void) {
   LastTable->BootServices->OpenProtocol=AuditOpen;LastTable->BootServices->CloseProtocol=AuditClose;
   LastTable->BootServices->OpenProtocolInformation=AuditOwners;LastTable->BootServices->FreePool=AuditFree;
   LastTable->BootServices->RaiseTPL=AuditRaise;LastTable->BootServices->RestoreTPL=AuditRestore;
+  LastTable->BootServices->DisconnectController=AuditDisconnect;
   for(unsigned i=0;i<PassiveReferences;i++)Live.Edges[Live.Count++]=(EDGE){FX_RtxPci,(EFI_HANDLE)(UINTN)(62000+i),NULL,PciGuid,EFI_OPEN_PROTOCOL_GET_PROTOCOL,1};
   if(PreexistingSelf)Live.Edges[Live.Count++]=(EDGE){FX_RtxPci,(VOID *)9999,NULL,PciGuid,EFI_OPEN_PROTOCOL_GET_PROTOCOL,PreexistingSelf};
 }
 static void AuditFullSetup(void) {
   RtxPci.Attributes=AuditAttributes;
   LastTable->BootServices->OpenProtocol=AuditOpen;LastTable->BootServices->CloseProtocol=AuditClose;
+  if(TopologyFault==1) {
+    UINTN found=0;
+    for(UINTN i=0;i<Live.Count;i++)if(Live.Edges[i].Handle==FX_RtxPci && Live.Edges[i].Agent==FX_NvAgent &&
+      Live.Edges[i].Controller==FX_Rtx && GuGuidEqual(&Live.Edges[i].Protocol,&PathGuid)) {
+      Live.Edges[Live.Count++]=Live.Edges[i];found++;break;
+    }
+    Check(found==1,"duplicate test starts from one exact NVIDIA child edge");
+  }
+  if(TopologyFault==2 || TopologyFault==4) {
+    Check(AdditionalChildCount>0,"additional child needed for path fault");
+    if(TopologyFault==2)memcpy(AdditionalChildPaths[0],TestRtxPath,sizeof(TestRtxPath));
+    else AdditionalChildPaths[0][GU_RTX_DISPLAY_BYTES-4]^=1;
+  }
+  if(TopologyFault==3)Live.Edges[Live.Count++]=(EDGE){LastDisplayChild(),FOREIGN_OWNER,LastDisplayChild(),EdidGuid,EFI_OPEN_PROTOCOL_BY_DRIVER,1};
   if(ModelMismatch)MockAttributes=GU_DS_IO|GU_DS_MEMORY;
 }
 static EFI_STATUS AuditedRun(unsigned fault,BOOLEAN reenter) {
@@ -229,6 +280,10 @@ static EFI_STATUS AuditedRun(unsigned fault,BOOLEAN reenter) {
   Injected=FALSE;FirstOwnedRead=PreEnableRead=NvPreflightRead=0;FirstOwnedCapture=0;
   FreeFailureInjected=FALSE;
   OwnerQueries=0;
+  EdidStops=NvStops=0;
+#if !GU_NO_EDID_DRIVER
+  MouseMemory[0x1000]=OriginalEdidTextByte;
+#endif
   TplDepth=TplRaises=TplRestores=0;
   EFI_STATUS s=RunFull(0);Check(!TplDepth && TplRaises==TplRestores,"whole release restores TPL on every result");return s;
 }
@@ -246,6 +301,7 @@ static VOID FinalRefused(BOOLEAN cold) {
 }
 static VOID OwnershipDefaults(VOID) {
   OpenMode=CloseMode=OwnerFault=PreexistingSelf=PassiveReferences=FreeFailurePhase=0;
+  TopologyFault=0;
   CallbackFaultAt=CallbackFaultKind=0;AfterOverride=0;
   VerifyReenter=ParentHandleDrift=FinalRestoreDrift=FALSE;LocationFault=AttributeDevice=0;
   AttributeDelta=SupportedDelta=0;FinalSkipByte=256;FinalReadStatus=EFI_SUCCESS;
@@ -325,6 +381,53 @@ static VOID OwnershipTests(VOID) {
   }
   OwnershipDefaults();
 }
+static VOID EdidTests(VOID) {
+#if !GU_NO_EDID_DRIVER
+#ifdef GU_RELEASE_MISMATCH_RESEARCH
+  const unsigned routes=2;
+#else
+  const unsigned routes=1;
+#endif
+  for(unsigned route=0;route<routes;route++) {
+    OwnershipDefaults();ModelMismatch=(BOOLEAN)route;
+    Check(AuditedRun(0,FALSE)==EFI_SUCCESS && EdidStops==Full.ChildCount && NvStops==1,"all EDID children released before one NVIDIA Stop");
+    UINTN children=Full.ChildCount;
+    for(unsigned selected=1;selected<=children;selected++)for(unsigned mode=1;mode<=7;mode++) {
+      OwnershipDefaults();EdidFaultMode=mode;EdidFaultChild=selected;
+      EFI_STATUS s=AuditedRun(0,FALSE);
+      Check(s!=EFI_SUCCESS && !NvStops && !ClaimCalls && !EnableCalls,"EDID partial/stale/parent/binding failure prevents NVIDIA Stop and claim/write");
+      Check(EdidStops>=selected,"selected EDID fault actually reached");
+      if(mode<=5)Check(EdidStops==selected,"failed/stale EDID Stop never advances to another child");
+      if(mode==1 || mode==3)Check(s==EFI_DEVICE_ERROR,"raw EDID error preserved");
+      if(mode==2 || mode==4)Check(s==EFI_WARN_UNKNOWN_GLYPH,"raw EDID warning preserved");
+      int stops=Calls;
+      Check(GuReleaseGop(LastTable,(VOID *)9999,FullLog,NULL)==EFI_ALREADY_STARTED && Calls==stops,"EDID failure cannot retry the release transaction");
+    }
+    if(children==2)for(unsigned mode=8;mode<=10;mode++) {
+      OwnershipDefaults();EdidFaultMode=mode;EdidFaultChild=1;
+      Check(AuditedRun(0,FALSE)!=EFI_SUCCESS && EdidStops==1 && !NvStops && !ClaimCalls && !EnableCalls,
+        "remaining-child path/EDID binding/code drift blocks the second child");
+    }
+    EdidFaultMode=EdidFaultChild=0;
+    OwnershipDefaults();Check(AuditedRun(0,FALSE)==EFI_SUCCESS,"new image restores original EDID code and bindings after faults");
+  }
+  EdidFaultMode=EdidFaultChild=0;
+#endif
+}
+static VOID TopologyTests(VOID) {
+#ifdef GU_RELEASE_MISMATCH_RESEARCH
+  const unsigned routes=2;
+#else
+  const unsigned routes=1;
+#endif
+  for(unsigned route=0;route<routes;route++)for(unsigned fault=1;fault<=4;fault++) {
+    if((fault==2 || fault==4) && !AdditionalChildCount)continue;
+    OwnershipDefaults();ModelMismatch=(BOOLEAN)route;TopologyFault=fault;
+    Check(AuditedRun(0,FALSE)!=EFI_SUCCESS && !EdidStops && !NvStops && !ClaimCalls && !EnableCalls,
+      "duplicate/foreign/malformed display topology refused before EDID or NVIDIA release");
+  }
+  OwnershipDefaults();
+}
 static VOID FinalTests(VOID) {
   UINT32 originalLayout=InitialFullConfig[30],originalStatus=InitialFullConfig[32];
   InitialFullConfig[30]=0x0012b410;InitialFullConfig[32]=0x00092930;
@@ -388,10 +491,16 @@ static VOID FinalTests(VOID) {
   InitialFullConfig[30]=originalLayout;InitialFullConfig[32]=originalStatus;
 }
 int main(int argc,char **argv) {
-  Check(argc==4,"synthetic loaded nvgop, PROM and config required");
-  FILE *f=fopen(argv[1],"rb");Check(f && fread(NvMemory,1,sizeof(NvMemory),f)==sizeof(NvMemory),"loaded synthetic driver");fclose(f);
-  f=fopen(argv[2],"rb");Check(f && fread(PromMemory,1,sizeof(PromMemory),f)==sizeof(PromMemory),"synthetic PROM");fclose(f);
-  f=fopen(argv[3],"rb");Check(f && fread(InitialFullConfig,1,sizeof(InitialFullConfig),f)==sizeof(InitialFullConfig),"synthetic config");fclose(f);
+  Check(argc==(GU_NO_EDID_DRIVER?4:5),"matching synthetic driver images, PROM and config required");
+  UINTN input=1;FILE *f=NULL;
+#if !GU_NO_EDID_DRIVER
+  f=fopen(argv[input++],"rb");Check(f && fread(MouseMemory,1,sizeof(MouseMemory),f)==sizeof(MouseMemory) && fgetc(f)==EOF,"exact synthetic EDID image");fclose(f);
+  Check(GuHashMatches(MouseMemory+0x1000,GU_EDID_TEXT_BYTES,GU_EDID_TEXT_SHA256),"EDID image matches this model's code pin");
+  OriginalEdidTextByte=MouseMemory[0x1000];
+#endif
+  f=fopen(argv[input++],"rb");Check(f && fread(NvMemory,1,sizeof(NvMemory),f)==sizeof(NvMemory) && fgetc(f)==EOF,"exact loaded synthetic NVIDIA driver");fclose(f);
+  f=fopen(argv[input++],"rb");Check(f && fread(PromMemory,1,sizeof(PromMemory),f)==sizeof(PromMemory) && fgetc(f)==EOF,"exact synthetic PROM");fclose(f);
+  f=fopen(argv[input++],"rb");Check(f && fread(InitialFullConfig,1,sizeof(InitialFullConfig),f)==sizeof(InitialFullConfig) && fgetc(f)==EOF,"exact synthetic config");fclose(f);
   Check(AuditedRun(0,FALSE)==EFI_SUCCESS,"actual console, NVIDIA Stop, claim, MEMORY restore and final verify succeed");
   Check(EnableCalls==1 && ClaimCalls==1 && CloseCalls==1 && ReleaseAudit.Ready && ReleaseAudit.ReleaseUsed,"real phase integration reached");
   ReadBudget=ParentReads;
@@ -435,14 +544,15 @@ int main(int argc,char **argv) {
     Check(!Full.Owned,"failure cleanup completes");
   }
   CallbackFaultAt=preNv;CallbackFaultKind=7;
-  Check(AuditedRun(0,FALSE)!=EFI_SUCCESS && Injected && !EnableCalls && Calls==2,
+  Check(AuditedRun(0,FALSE)!=EFI_SUCCESS && Injected && !EnableCalls &&
+    (UINTN)Calls==2+(GU_NO_EDID_DRIVER?0:Full.ChildCount),
     "audit driver-binding mutation caught before NVIDIA Stop");
   CallbackFaultAt=CallbackFaultKind=0;
 #else
   ModelMismatch=TRUE;
   Check(AuditedRun(0,FALSE)!=EFI_SUCCESS && !Calls,"audit alone never admits cache300 or detaches console");
 #endif
-  OwnershipTests();FinalTests();
+  TopologyTests();EdidTests();OwnershipTests();FinalTests();
   printf("PASS release parent audit: %u parent read boundaries, %d checks; actual production phases, RAM only\n",ReadBudget,Checks);
   return 0;
 }

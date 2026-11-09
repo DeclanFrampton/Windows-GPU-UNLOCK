@@ -24,7 +24,13 @@ def main():
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--mismatch', action='store_true')
     parser.add_argument('--mutations', action='store_true')
+    parser.add_argument('--edid-driver', action='store_true', help='Replay the actual sequential EDID release stage')
+    parser.add_argument('--children', type=int, choices=(1, 2, 3, 4), default=1)
     args = parser.parse_args()
+    if args.edid_driver and args.children > 2:
+        parser.error('The existing EDID-driver policy allows at most two display children')
+    if args.mutations and not args.mismatch:
+        parser.error('--mutations requires --mismatch')
     out = args.output.resolve()
     if out.exists():
         parser.error('Output must be new')
@@ -36,18 +42,23 @@ def main():
     before = {p: hashlib.sha256((ROOT / p).read_bytes()).hexdigest() for p in sorted(set(paths))}
     data = load('release_audit_data', ROOT / 'research/profile/test_local_topology.py')
     images = load('release_audit_images', ROOT / 'research/profile/test_compatibility.py')
-    text = data.synthetic_capture(bus=0x2b, children=1, command=2, no_edid=True)
+    text = data.synthetic_capture(bus=0x2b, children=args.children, command=2, no_edid=not args.edid_driver)
     admitted = data.analyze(text)
     header = out / 'profile-local.h'
     header.write_text('/* Synthetic RAM model, not LOCAL qualification. */\n'
         '#define GU_LOCAL_PROFILE_GENERATOR 1\n#define GU_PROFILE_NAME "SYNTHETIC-PARENT-AUDIT"\n'
         '#define GU_NVGOP_TEXT_BYTES 0x24426U\n#define GU_NVGOP_TEXT_SHA256 "' +
         hashlib.sha256(bytes(0x24426)).hexdigest() + '"\n' +
+        ('#define GU_EDID_TEXT_BYTES 0x700U\n#define GU_EDID_TEXT_SHA256 "' +
+         hashlib.sha256(bytes(0x700)).hexdigest() + '"\n' if args.edid_driver else '') +
         '\n'.join(f'#define {key} {value}' for key, value in admitted['defines']) + '\n', encoding='ascii')
     capture = out / 'capture.txt'
     capture.write_text(text, encoding='ascii')
     nv = out / 'nvgop.bin'
     nv.write_bytes(images.driver_image(0x2be40, 0x280, 0x24426))
+    edid = out / 'edid.bin'
+    if args.edid_driver:
+        edid.write_bytes(images.driver_image(0x9000, 0x1000, 0x700))
     prom = out / 'prom.bin'
     prom.write_bytes(bytes(1048576))
     config = out / 'config.bin'
@@ -64,7 +75,8 @@ def main():
         return r.stdout.strip()
 
     run('fixture', [sys.executable, '-I', str(ROOT / 'internal-boot/boot/make-console-fixture.py'),
-        str(capture), '--single-rtx', '--no-igpu', '--no-edid-driver', '--no-edid-child', '--output=' + str(fixture)])
+        str(capture), '--single-rtx', '--no-igpu', *([] if args.edid_driver else ['--no-edid-driver']),
+        '--no-edid-child', '--output=' + str(fixture)])
     boot = ROOT / 'internal-boot/boot'
     overlay = out / 'overlay.json'
     overlay.write_text(json.dumps({'version': 0, 'roots': [
@@ -83,8 +95,29 @@ def main():
         flags.append('-DGU_RELEASE_MISMATCH_RESEARCH=1')
     exe = out / 'audit.exe'
     run('compile', [args.clang, *flags, *map(str, sources), '-o', str(exe)])
-    result = run('run', [str(exe), str(nv), str(prom), str(config)])
+    image_arguments = ([str(edid)] if args.edid_driver else []) + [str(nv), str(prom), str(config)]
+    result = run('run', [str(exe), *image_arguments])
     print(result)
+    rejected_images = []
+    for label, path, code_offset in [('nvidia', nv, 0x280), *([('edid', edid, 0x1000)] if args.edid_driver else [])]:
+        original = path.read_bytes()
+        changed = bytearray(original)
+        changed[code_offset] ^= 1
+        for fault, content in [('truncated', original[:-1]), ('extended', original + b'\0'), ('changed-code', changed)]:
+            bad_image = out / (label + '-' + fault + '.bin')
+            bad_image.write_bytes(content)
+            bad_arguments = [str(bad_image) if value == str(path) else value for value in image_arguments]
+            bad = subprocess.run([str(exe), *bad_arguments], cwd=ROOT, text=True, capture_output=True, timeout=30)
+            (out / (label + '-' + fault + '.log')).write_text(bad.stdout + bad.stderr, encoding='utf-8')
+            if fault in ('truncated', 'extended'):
+                expected = 'FAIL exact synthetic EDID image' if label == 'edid' else 'FAIL exact loaded synthetic NVIDIA driver'
+            elif label == 'edid':
+                expected = "FAIL EDID image matches this model's code pin"
+            else:
+                expected = 'full event=nvidia-code-profile status=800000000000001b'
+            if bad.returncode != 1 or 'FAIL ' not in bad.stderr or expected not in bad.stderr:
+                raise RuntimeError('Invalid image must fail at its length/code-pin check: ' + label + '-' + fault)
+            rejected_images.append({'image': label, 'fault': fault, 'exit': bad.returncode, 'expected_diagnostic': expected})
     guards = []
     for name, omit, add, diagnostic in [
         ('freestanding', [], ['-ffreestanding'], 'hosted research only'),
@@ -152,7 +185,7 @@ def main():
             mutant_exe = folder / 'mutant.exe'
             mutant_flags = [str(mutant_overlay) if f == str(overlay) else f for f in flags]
             run(name + '-compile', [args.clang, *mutant_flags, *map(str, sources), '-o', str(mutant_exe)])
-            bad = subprocess.run([str(mutant_exe), str(nv), str(prom), str(config)], cwd=ROOT,
+            bad = subprocess.run([str(mutant_exe), *image_arguments], cwd=ROOT,
                                  text=True, capture_output=True, timeout=30)
             (folder / 'run.log').write_text(bad.stdout + bad.stderr, encoding='utf-8')
             if bad.returncode != 1 or 'FAIL ' not in bad.stderr:
@@ -162,7 +195,11 @@ def main():
     if any(hashlib.sha256((ROOT / p).read_bytes()).hexdigest() != sha for p, sha in before.items()):
         raise RuntimeError('Source changed during test')
     (out / 'summary.json').write_text(json.dumps({'passed': True, 'ram_only': True,
-        'efi_executed': False, 'mismatch_admission_enabled': args.mismatch, 'host_only': True, 'result': result,
+        'efi_executed': False, 'mismatch_admission_enabled': args.mismatch, 'host_only': True,
+        'edid_driver': args.edid_driver, 'display_children': args.children, 'result': result,
+        'rejected_images': rejected_images,
+        'synthetic_input_sha256': {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in
+            [capture, header, nv, prom, config, platform, fixture, *([edid] if args.edid_driver else [])]},
         'compile_refusals': guards, 'compiled_mutations_detected': mutants, 'source_sha256': before}, indent=2), encoding='utf-8')
 
 
