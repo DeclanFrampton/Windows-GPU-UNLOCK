@@ -14,6 +14,14 @@ static BOOLEAN OwnRecord(EFI_HANDLE Handle,const EFI_OPEN_PROTOCOL_INFORMATION_E
 #include <IndustryStandard/Acpi.h>
 
 #define GU_HEADLESS_MAX_DISPLAY_CHILDREN 4
+#ifdef GU_AMD_RETAINED_MULTI_DISPLAY
+#if !defined(GU_FULL_UNLOCK) || !defined(GU_PROFILE_B650M_3090FE) || defined(GU_HEADLESS_RESEARCH) || defined(GU_SINGLE_RTX_CONSOLE) || GU_CONSOLE_AGGREGATE || GU_NO_EDID_DRIVER || GU_BOARD_ID != 0x220410deU
+#error AMD-retained multi-display requires the original B650M full-release path
+#endif
+#endif
+#if defined(GU_HEADLESS_RESEARCH) || defined(GU_AMD_RETAINED_MULTI_DISPLAY)
+#define GU_MULTI_DISPLAY_RELEASE 1
+#endif
 
 static EFI_GUID EdidGuid=EFI_EDID_DISCOVERED_PROTOCOL_GUID;
 static const EFI_GUID MouseFile={0xc7a7030c,0xc3d8,0x45ee,{0xbe,0xd9,0x5d,0x9e,0x76,0x76,0x29,0x53}};
@@ -26,7 +34,7 @@ typedef struct {
   EFI_ACPI_ADDRESS_SPACE_DESCRIPTOR Bar;
   UINT64 Attributes;
   BOOLEAN Captured,Released,Owned,Restored;
-#ifdef GU_HEADLESS_RESEARCH
+#ifdef GU_MULTI_DISPLAY_RELEASE
   EFI_HANDLE Children[GU_HEADLESS_MAX_DISPLAY_CHILDREN];
   UINT8 ChildPaths[GU_HEADLESS_MAX_DISPLAY_CHILDREN][GU_RTX_DISPLAY_BYTES];
   UINTN ChildCount;
@@ -305,7 +313,7 @@ static EFI_STATUS FullConsumers(const GRAPH *g) {
   Full.ChildCount=1;
   return EFI_SUCCESS;
 #endif
-#elif defined(GU_HEADLESS_RESEARCH)
+#elif defined(GU_MULTI_DISPLAY_RELEASE)
   UINTN owners=0,children=0;
   EFI_BOOT_SERVICES *bs=Full.Table->BootServices;
   for(UINTN i=0;i<g->Count;i++) {
@@ -319,6 +327,9 @@ static EFI_STATUS FullConsumers(const GRAPH *g) {
     else return EFI_ACCESS_DENIED;
   }
   if(owners!=1 || !children || Full.NvAgent==Full.Image)return EFI_ACCESS_DENIED;
+#ifdef GU_AMD_RETAINED_MULTI_DISPLAY
+  if(children>2)return EFI_ACCESS_DENIED;
+#endif
   Full.ChildCount=children;
   UINTN consoleChild=children;
   for(UINTN c=0;c<children;c++) {
@@ -368,6 +379,19 @@ static EFI_STATUS FullConsumers(const GRAPH *g) {
 #if GU_NO_EDID_DRIVER
   return Full.EdidAgent?EFI_ACCESS_DENIED:EFI_SUCCESS;
 #else
+#ifdef GU_AMD_RETAINED_MULTI_DISPLAY
+  /* The shared runtime EDID driver must retain its original AMD controller.
+   * FullExpected keeps that exact edge throughout every RTX-only detach. */
+  UINTN amdEdid=0;
+  for(UINTN i=0;i<g->Count;i++) {
+    const EDGE *e=&g->Edges[i];
+    if(e->Handle!=PreparedPlan.Amd || !GuGuidEqual(&e->Protocol,&EdidGuid))continue;
+    if(e->Agent!=Full.EdidAgent || e->Controller!=PreparedPlan.Amd ||
+       e->Attributes!=EFI_OPEN_PROTOCOL_BY_DRIVER || e->Count!=1)return EFI_ACCESS_DENIED;
+    amdEdid++;
+  }
+  if(amdEdid!=1)return EFI_ACCESS_DENIED;
+#endif
   return Full.EdidAgent!=Full.NvAgent && Full.EdidAgent!=Full.Image?EFI_SUCCESS:EFI_ACCESS_DENIED;
 #endif
 #else
@@ -447,7 +471,7 @@ static BOOLEAN FullExpected(const GRAPH *g,UINTN stage) {
   for(UINTN i=0;i<PreparedGraph->Count;i++) {
     const EDGE *e=&PreparedGraph->Edges[i];
     if(Removed(&PreparedPlan,e,2))continue;
-#ifdef GU_HEADLESS_RESEARCH
+#ifdef GU_MULTI_DISPLAY_RELEASE
     BOOLEAN removedEdid=FALSE;
     for(UINTN c=0;c<Full.EdidDetached;c++)if(e->Handle==Full.Children[c] && e->Agent==Full.EdidAgent && GuGuidEqual(&e->Protocol,&EdidGuid))removedEdid=TRUE;
     if(removedEdid)continue;
@@ -607,10 +631,16 @@ EFI_STATUS GuReleaseGop(EFI_SYSTEM_TABLE *t,EFI_HANDLE image,GU_PREPARE_LOG log,
 #ifdef GU_HEADLESS_RESEARCH
   s=Note("headless-console-pre-release-verification",s);
 #endif
+#ifdef GU_AMD_RETAINED_MULTI_DISPLAY
+  s=Note("amd-retained-console-pre-release-verification",s);
+#endif
   if(s==EFI_SUCCESS)s=Snapshot(bs,&g);
   if(s==EFI_SUCCESS)s=FullConsumers(&g);
 #ifdef GU_HEADLESS_RESEARCH
   s=Note("headless-display-child-consumers-preflight",s);
+#endif
+#ifdef GU_AMD_RETAINED_MULTI_DISPLAY
+  s=Note("amd-retained-display-child-consumers-preflight",s);
 #endif
 #if GU_NO_EDID_DRIVER
   /* Recorded so a log shows the EDID stage was skipped by design, not lost. */
@@ -623,7 +653,7 @@ EFI_STATUS GuReleaseGop(EFI_SYSTEM_TABLE *t,EFI_HANDLE image,GU_PREPARE_LOG log,
   s=Note("full-release-preflight",s);if(s!=EFI_SUCCESS)return s;
   /* Stage 3 stops the EDID driver on each display child; without one only stage 4 remains. */
   for(UINTN stage=GU_NO_EDID_DRIVER?4U:3U;stage<=4;stage++) {
-#ifdef GU_HEADLESS_RESEARCH
+#ifdef GU_MULTI_DISPLAY_RELEASE
     UINTN repeats=stage==3?Full.ChildCount:1;
     for(UINTN child=0;child<repeats;child++) {
 #endif
@@ -638,7 +668,7 @@ EFI_STATUS GuReleaseGop(EFI_SYSTEM_TABLE *t,EFI_HANDLE image,GU_PREPARE_LOG log,
     if(s==EFI_SUCCESS)s=Profile(stage==3?Full.EdidAgent:Full.NvAgent,stage==3);
     if(s==EFI_SUCCESS)s=Snapshot(bs,&g);
     if(s==EFI_SUCCESS && !FullExpected(&g,stage-1))s=EFI_NOT_READY;
-#ifdef GU_HEADLESS_RESEARCH
+#ifdef GU_MULTI_DISPLAY_RELEASE
     for(UINTN c=0;s==EFI_SUCCESS && c<Full.ChildCount;c++) {
       EFI_DEVICE_PATH_PROTOCOL *path=NULL;
       s=Interface(bs,Full.Children[c],&PathGuid,(VOID **)&path);
@@ -648,7 +678,7 @@ EFI_STATUS GuReleaseGop(EFI_SYSTEM_TABLE *t,EFI_HANDLE image,GU_PREPARE_LOG log,
 #endif
     bs->RestoreTPL(old);
     if(s!=EFI_SUCCESS)return Note("full-release-recheck-failed",s);
-#ifdef GU_HEADLESS_RESEARCH
+#ifdef GU_MULTI_DISPLAY_RELEASE
     s=bs->DisconnectController(stage==3?Full.Children[child]:PreparedPlan.RtxPci,stage==3?Full.EdidAgent:Full.NvAgent,NULL);
     if(s==EFI_SUCCESS && stage==3)Full.EdidDetached++;
 #else
@@ -660,7 +690,7 @@ EFI_STATUS GuReleaseGop(EFI_SYSTEM_TABLE *t,EFI_HANDLE image,GU_PREPARE_LOG log,
     if(s==EFI_SUCCESS)s=Snapshot(bs,&g);
     if(s==EFI_SUCCESS && !FullExpected(&g,stage))s=EFI_NOT_READY;
     s=Note(stage==3?"edid-detach-verified":"nvidia-detach-verified",s);if(s!=EFI_SUCCESS)return s;
-#ifdef GU_HEADLESS_RESEARCH
+#ifdef GU_MULTI_DISPLAY_RELEASE
     }
 #endif
   }
