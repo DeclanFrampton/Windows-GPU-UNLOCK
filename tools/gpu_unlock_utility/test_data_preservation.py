@@ -5,12 +5,14 @@ import importlib.util
 import io
 import json
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
 
 
 HERE = Path(__file__).resolve().parent
+REPO_ROOT = HERE.parents[1]
 
 
 def load(name):
@@ -290,6 +292,92 @@ class CachePreservation(unittest.TestCase):
     def test_new_empty_cache_directory_is_removed(self):
         self.assertTrue(self.run_fake())
         self.assertFalse(self.cache.exists())
+
+
+class UsbStagingPreservation(unittest.TestCase):
+    def setUp(self):
+        self.ps_text = (HERE / 'GpuUnlockUtility.ps1').read_text(encoding='utf-8-sig')
+
+    def test_staging_function_contract_enforces_opt_in(self):
+        func = self.ps_text.split('function Stage-DiagnosticProbeUsb', 1)[1].split('function Build-And-Stage-Local-Unlock', 1)[0]
+        self.assertIn('[switch]$OptIn', func)
+        self.assertIn('-not $OptIn', func)
+        self.assertIn('explicit opt-in operation', func)
+
+    def test_staging_validates_removable_usb_and_rejects_system_and_boot(self):
+        func = self.ps_text.split('function Stage-DiagnosticProbeUsb', 1)[1].split('function Build-And-Stage-Local-Unlock', 1)[0]
+        self.assertIn("$disk.BusType -ne 'USB'", func)
+        self.assertIn("$vol.FileSystem -ne 'FAT32'", func)
+        self.assertIn('$part.IsSystem', func)
+        self.assertIn('$disk.IsBoot', func)
+        self.assertIn('$part.IsBoot', func)
+        self.assertIn('Get-SystemWindowsEspGuid', func)
+        self.assertIn('staging refused', func)
+
+    def test_staging_refuses_existing_destination_files_without_overwrite(self):
+        func = self.ps_text.split('function Stage-DiagnosticProbeUsb', 1)[1].split('function Build-And-Stage-Local-Unlock', 1)[0]
+        self.assertIn('Destination file already exists', func)
+        self.assertIn('Destination file appeared during staging', func)
+        # Verify backup-and-replace is removed
+        self.assertNotIn('RTX3090-UNLOCK\\backup', func)
+        self.assertNotIn('BOOTX64-$oldSha.EFI', func)
+
+    def test_deploy_to_usb_does_not_silently_stage_probe(self):
+        deploy_func = self.ps_text.split('function Deploy-ToUsb', 1)[1].split('function Restore-WindowsFirstBootOrder', 1)[0]
+        self.assertIn("$disk.BusType -ne 'USB'", deploy_func)
+        self.assertIn('$part.IsSystem', deploy_func)
+        self.assertIn('$disk.IsBoot', deploy_func)
+        self.assertNotIn('Stage-DiagnosticProbeUsb -Letter', deploy_func)
+        self.assertIn('Please stage and boot the Diagnostic Probe USB explicitly first', deploy_func)
+
+    def test_cli_and_gui_wiring_enforce_opt_in(self):
+        # CLI param declaration
+        self.assertIn('[switch]$OptIn', self.ps_text[:2000])
+        # CLI dispatch
+        cli_stage = self.ps_text.split("'StageProbe' {", 1)[1].split("'BuildLocalUsb' {", 1)[0]
+        self.assertIn('Stage-DiagnosticProbeUsb -Letter $DriveLetter -OptIn:$OptIn', cli_stage)
+        cli_dump = self.ps_text.split("'ProbeUsb' {", 1)[1].split("'DownloadAssets' {", 1)[0]
+        self.assertIn('Stage-DiagnosticProbeUsb -Letter $DriveLetter -OptIn:$OptIn', cli_dump)
+        # GUI event handlers
+        gui_direct = self.ps_text.split('$btnStageProbeDirect.Add_Click({', 1)[1].split('$btnDeployUsb.Add_Click', 1)[0]
+        self.assertIn('Stage-DiagnosticProbeUsb -Letter $letter -OptIn', gui_direct)
+        gui_tab = self.ps_text.split('$btnStageProbeUsb.Add_Click({', 1)[1].split('$btnExportJson.Add_Click', 1)[0]
+        self.assertIn('Stage-DiagnosticProbeUsb -Letter $letter -OptIn', gui_tab)
+
+    def test_powershell_mock_regressions(self):
+        test_script = HERE / 'test_usb_staging.ps1'
+        self.assertTrue(test_script.is_file())
+        try:
+            res = subprocess.run(
+                ['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', str(test_script)],
+                capture_output=True, text=True, check=True
+            )
+            self.assertIn('All 13 USB staging safety regression tests PASSED', res.stdout)
+        except (FileNotFoundError, subprocess.CalledProcessError) as exc:
+            if isinstance(exc, FileNotFoundError):
+                self.skipTest('powershell is not available on PATH')
+            self.fail(f"test_usb_staging.ps1 failed:\n{exc.stdout}\n{exc.stderr}")
+
+
+class EfiFlushWarningPreservation(unittest.TestCase):
+    def test_gu_log_flush_rejects_warnings(self):
+        app_io = (REPO_ROOT / 'internal-boot/unlock/app_io.c').read_text(encoding='utf-8')
+        flush_block = app_io.split('VOID GuLogFlush(VOID) {', 1)[1].split('}', 1)[0]
+        self.assertIn('flush_status != EFI_SUCCESS', flush_block)
+        self.assertNotIn('((INTN)flush_status) < 0', flush_block)
+
+    def test_headless_tests_cover_flush_warning(self):
+        headless_c = (REPO_ROOT / 'internal-boot/unlock/tests/test_headless.c').read_text(encoding='utf-8')
+        self.assertIn('HeadFlush', headless_c)
+        self.assertIn('Case==16', headless_c)
+        self.assertIn('EFI_WARN_UNKNOWN_GLYPH', headless_c)
+        self.assertIn('for(int mode=0;mode<=16;mode++)', headless_c)
+
+    def test_app_tests_cover_flush_warning(self):
+        app_c = (REPO_ROOT / 'internal-boot/unlock/tests/test_app.c').read_text(encoding='utf-8')
+        self.assertIn('APP_FLUSH_WARN', app_c)
+        self.assertIn('"report-flush-warn"', app_c)
+        self.assertIn('app_mode==APP_FLUSH_WARN', app_c)
 
 
 if __name__ == '__main__':

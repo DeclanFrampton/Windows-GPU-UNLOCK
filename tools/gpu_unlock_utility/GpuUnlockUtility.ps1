@@ -42,7 +42,8 @@ param(
     [string]$ExportPath,
     [ValidateSet('en', 'ko')]
     [string]$Lang = 'en',
-    [switch]$Json
+    [switch]$Json,
+    [switch]$OptIn
 )
 
 $ErrorActionPreference = 'Stop'
@@ -471,9 +472,14 @@ function Deploy-ToUsb([string]$Letter) {
         throw "Target drive '$driveRoot' does not exist."
     }
 
-    $vol = Get-Volume -DriveLetter $cleanLetter
-    if ($vol.FileSystem -ne 'FAT32') {
-        throw "Drive $($cleanLetter): is formatted as $($vol.FileSystem). UEFI requires FAT32."
+    $part = Get-Partition -DriveLetter $cleanLetter -ErrorAction Stop
+    $disk = Get-Disk -Number $part.DiskNumber -ErrorAction Stop
+    $vol = Get-Volume -DriveLetter $cleanLetter -ErrorAction Stop
+    if ($disk.BusType -ne 'USB' -or $vol.FileSystem -ne 'FAT32' -or $part.IsSystem -or $disk.IsBoot) {
+        throw "$($cleanLetter): is not a FAT32 USB data stick."
+    }
+    if ($part.IsBoot) {
+        throw "$($cleanLetter): is a boot partition; staging refused."
     }
 
     $info = Get-GpuHardwareInfo
@@ -549,19 +555,7 @@ function Deploy-ToUsb([string]$Letter) {
         # Headless Single-RTX / Local Profile Route (e.g. Intel B460 + ASUS RTX 3090)
         $captureStatus = Get-UsbProbeCaptureStatus -Letter $cleanLetter
         if ($captureStatus.Count -lt 2) {
-            Write-Host "[!] Machine requires Headless Single-RTX / Local Profile route." -ForegroundColor Yellow
-            Write-Host "[*] Captures on USB: $($captureStatus.Count) of 2. Compiling and staging Diagnostic Probe USB..." -ForegroundColor Cyan
-            $msg = Stage-DiagnosticProbeUsb -Letter $cleanLetter
-            return [pscustomobject]@{
-                Drive        = $driveRoot
-                BootEfi      = (Join-Path $driveRoot "EFI\BOOT\BOOTX64.EFI")
-                AssetsCopied = 0
-                Status       = "Step 1: Staged read-only Diagnostic Probe ($($captureStatus.Count)/2 captures). Boot USB twice to record hardware signatures."
-                IsProbe      = $true
-                ProfileMode  = "HeadlessProbe"
-                Captures     = $captureStatus.Count
-                RequiresBoot = $true
-            }
+            throw "Machine requires Headless Single-RTX / Local Profile route with 2 hardware captures (found $($captureStatus.Count) of 2 on $($cleanLetter):). Please stage and boot the Diagnostic Probe USB explicitly first using 'StageProbe' with -OptIn."
         }
         else {
             Write-Host "[+] Found $($captureStatus.Count) hardware captures on USB. Building custom Headless Unlock package..." -ForegroundColor Green
@@ -802,26 +796,60 @@ function Export-EfiDiagnosticCaptures([string]$TargetDir, [string]$DeviceId = $n
     return ($res -join "`r`n")
 }
 
-function Stage-DiagnosticProbeUsb([string]$Letter) {
+function Stage-DiagnosticProbeUsb {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Letter,
+        [switch]$OptIn
+    )
+
+    if (-not $OptIn) {
+        throw "Staging the Diagnostic Probe is an explicit opt-in operation. Pass -OptIn to proceed."
+    }
+
     $cleanLetter = $Letter.TrimEnd(':')
     $driveRoot = "$($cleanLetter):\"
     if (-not (Test-Path -LiteralPath $driveRoot)) {
         throw "Drive '$driveRoot' does not exist."
     }
 
-    $vol = Get-Volume -DriveLetter $cleanLetter
-    if ($vol.FileSystem -ne 'FAT32') {
-        throw "Drive $($cleanLetter): is formatted as $($vol.FileSystem). UEFI requires FAT32."
+    $part = Get-Partition -DriveLetter $cleanLetter -ErrorAction Stop
+    $disk = Get-Disk -Number $part.DiskNumber -ErrorAction Stop
+    $vol = Get-Volume -DriveLetter $cleanLetter -ErrorAction Stop
+
+    if ($disk.BusType -ne 'USB' -or $vol.FileSystem -ne 'FAT32' -or $part.IsSystem -or $disk.IsBoot) {
+        throw "$($cleanLetter): is not a FAT32 USB data stick."
     }
 
-    $toolchain = Get-ClangToolchain
-    if (-not $toolchain.Available) {
-        throw "LLVM clang/lld-link compiler toolchain not found. Install LLVM or place clang.exe in C:\Program Files\LLVM\bin."
+    if ($part.IsBoot) {
+        throw "$($cleanLetter): is a boot partition; staging refused."
     }
 
     $espGuid = Get-SystemWindowsEspGuid
     if (-not $espGuid) {
         throw "Could not determine system Windows ESP partition GUID. Ensure Windows is running on a UEFI GPT disk."
+    }
+
+    if ($part.Guid -and ([guid]$part.Guid -eq $espGuid)) {
+        throw "$($cleanLetter): is the system Windows ESP partition; staging refused."
+    }
+
+    $targetBootDir = Join-Path $driveRoot "EFI\BOOT"
+    $targetPayloadDir = Join-Path $driveRoot "RTX3090-UNLOCK"
+    $targetBootFile = Join-Path $targetBootDir "BOOTX64.EFI"
+    $targetReadmeRoot = Join-Path $driveRoot "README-PROBE.TXT"
+    $targetReadmePayload = Join-Path $targetPayloadDir "README.TXT"
+
+    # Refuse existing destination files; never overwrite or replace
+    foreach ($destFile in @($targetBootFile, $targetReadmeRoot, $targetReadmePayload)) {
+        if (Test-Path -LiteralPath $destFile) {
+            throw "Destination file already exists: '$destFile'. Refusing to overwrite existing files on $($cleanLetter):."
+        }
+    }
+
+    $toolchain = Get-ClangToolchain
+    if (-not $toolchain.Available) {
+        throw "LLVM clang/lld-link compiler toolchain not found. Install LLVM or place clang.exe in C:\Program Files\LLVM\bin."
     }
 
     $buildScript = Join-Path $Script:RepoRoot "research\profile\build-probe.ps1"
@@ -845,20 +873,13 @@ function Stage-DiagnosticProbeUsb([string]$Letter) {
         throw "Compiled probe not found at $compiledProbe"
     }
 
-    $targetBootDir = Join-Path $driveRoot "EFI\BOOT"
-    $targetPayloadDir = Join-Path $driveRoot "RTX3090-UNLOCK"
     New-Item -ItemType Directory -Path $targetBootDir -Force | Out-Null
     New-Item -ItemType Directory -Path $targetPayloadDir -Force | Out-Null
 
-    $targetBootFile = Join-Path $targetBootDir "BOOTX64.EFI"
     if (Test-Path -LiteralPath $targetBootFile) {
-        $oldSha = (Get-FileHash -LiteralPath $targetBootFile -Algorithm SHA256).Hash.Substring(0, 12).ToLowerInvariant()
-        $bakDir = Join-Path $targetPayloadDir "backup"
-        New-Item -ItemType Directory -Path $bakDir -Force | Out-Null
-        Copy-Item -LiteralPath $targetBootFile -Destination (Join-Path $bakDir "BOOTX64-$oldSha.EFI") -Force
+        throw "Destination file appeared during staging: '$targetBootFile'."
     }
-
-    Copy-Item -LiteralPath $compiledProbe -Destination $targetBootFile -Force
+    Copy-Item -LiteralPath $compiledProbe -Destination $targetBootFile
 
     $readmeContent = @"
 # Windows GPU UNLOCK - Diagnostic Probe Capture USB
@@ -873,8 +894,15 @@ function Stage-DiagnosticProbeUsb([string]$Letter) {
 6. Once Windows starts, repeat once more (Full Cold Shutdown -> Boot USB) to record DIAG01.TXT.
 7. Open the GPU Unlock Utility and click 'Build & Stage Headless Unlock'!
 "@
-    Set-Content -LiteralPath (Join-Path $driveRoot "README-PROBE.TXT") -Value $readmeContent -Encoding utf8
-    Set-Content -LiteralPath (Join-Path $targetPayloadDir "README.TXT") -Value "READ-ONLY PROBE. Logs DIAGnn.TXT, PROM.BIN and IMGnn.BIN here, then starts Windows directly." -Encoding ascii
+    if (Test-Path -LiteralPath $targetReadmeRoot) {
+        throw "Destination file appeared during staging: '$targetReadmeRoot'."
+    }
+    Set-Content -LiteralPath $targetReadmeRoot -Value $readmeContent -Encoding utf8
+
+    if (Test-Path -LiteralPath $targetReadmePayload) {
+        throw "Destination file appeared during staging: '$targetReadmePayload'."
+    }
+    Set-Content -LiteralPath $targetReadmePayload -Value "READ-ONLY PROBE. Logs DIAGnn.TXT, PROM.BIN and IMGnn.BIN here, then starts Windows directly." -Encoding ascii
 
     return "Successfully compiled and staged read-only Diagnostic Probe on $($cleanLetter):."
 }
@@ -886,9 +914,14 @@ function Build-And-Stage-Local-Unlock([string]$Letter) {
         throw "Drive '$driveRoot' does not exist."
     }
 
-    $vol = Get-Volume -DriveLetter $cleanLetter
-    if ($vol.FileSystem -ne 'FAT32') {
-        throw "Drive $($cleanLetter): is formatted as $($vol.FileSystem). UEFI requires FAT32."
+    $part = Get-Partition -DriveLetter $cleanLetter -ErrorAction Stop
+    $disk = Get-Disk -Number $part.DiskNumber -ErrorAction Stop
+    $vol = Get-Volume -DriveLetter $cleanLetter -ErrorAction Stop
+    if ($disk.BusType -ne 'USB' -or $vol.FileSystem -ne 'FAT32' -or $part.IsSystem -or $disk.IsBoot) {
+        throw "$($cleanLetter): is not a FAT32 USB data stick."
+    }
+    if ($part.IsBoot) {
+        throw "$($cleanLetter): is a boot partition; staging refused."
     }
 
     $status = Get-UsbProbeCaptureStatus -Letter $cleanLetter
@@ -1072,7 +1105,7 @@ if ($Cli) {
         'StageProbe' {
             if (-not $DriveLetter) { throw "Please specify -DriveLetter (e.g. -DriveLetter E)" }
             Write-Host "`n[+] Compiling and Staging Diagnostic Probe on $DriveLetter..." -ForegroundColor Yellow
-            $msg = Stage-DiagnosticProbeUsb -Letter $DriveLetter
+            $msg = Stage-DiagnosticProbeUsb -Letter $DriveLetter -OptIn:$OptIn
             Write-Host $msg -ForegroundColor Green
         }
         'BuildLocalUsb' {
@@ -1141,7 +1174,7 @@ if ($Cli) {
                 }
                 'ProbeUsb' {
                     if (-not $DriveLetter) { throw "Please specify -DriveLetter (e.g. -DriveLetter E)" }
-                    $msg = Stage-DiagnosticProbeUsb -Letter $DriveLetter
+                    $msg = Stage-DiagnosticProbeUsb -Letter $DriveLetter -OptIn:$OptIn
                     Write-Host $msg -ForegroundColor Green
                 }
             }
@@ -2479,7 +2512,7 @@ $btnStageProbeDirect.Add_Click({
             Show-UsbProgressOverlay -Title "Staging Diagnostic Probe..." -Detail "Identifying system Windows ESP GUID, compiling tailored probe binary, and writing files to USB drive..."
             try {
                 Write-GuiLog "Compiling and staging Diagnostic Probe on $letter`:..."
-                $msg = Stage-DiagnosticProbeUsb -Letter $letter
+                $msg = Stage-DiagnosticProbeUsb -Letter $letter -OptIn
                 Write-GuiLog $msg
                 Update-UsbTabInfo
                 Hide-UsbProgressOverlay
@@ -2650,7 +2683,7 @@ $btnStageProbeUsb.Add_Click({
         if ($confirm -eq [System.Windows.MessageBoxResult]::Yes) {
             try {
                 Write-GuiLog "Staging Diagnostic Probe on $letter`:..."
-                $msg = Stage-DiagnosticProbeUsb -Letter $letter
+                $msg = Stage-DiagnosticProbeUsb -Letter $letter -OptIn
                 Write-GuiLog $msg
                 [System.Windows.MessageBox]::Show("Diagnostic Probe staged on drive $letter`:`\!`n`nTo collect hardware captures:`n1. Power off PC completely.`n2. Turn on and press Boot Menu key (F8/F12).`n3. Boot USB -> It writes captures and boots Windows.`n4. Repeat once more for 2 agreeing cold boots.`n5. Open this utility and click 'Auto-Detect on USB'!", "Probe Staged", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information) | Out-Null
             }

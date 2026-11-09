@@ -87,7 +87,7 @@ VOID GuLogText(const char *Text) {
 VOID GuLogFlush(VOID) {
   if (!Report) return;
   EFI_STATUS flush_status = Report->Flush(Report);
-  if (((INTN)flush_status) < 0)
+  if (flush_status != EFI_SUCCESS)
     LogError();
 }
 VOID GuLog(const char *Format, ...) {

@@ -341,8 +341,8 @@ The utility supports full automation through the `-Cli` parameter. This is ideal
 | Parameter | Type | Allowed Values / Description |
 | :--- | :--- | :--- |
 | `-Cli` | Switch | Enables headless command-line execution (suppresses WPF GUI). |
-| `-Action` | String | `Audit`, `Preflight`, `CheckUsb`, `DeployUsb`, `RestoreWindows`, `Telemetry`, `CheckCaptures`, `CompareReports`, `GenerateDumps`, `DownloadAssets`. |
-| `-DriveLetter` | String | Target drive letter for USB or ESP operations (e.g., `E` or `E:`). |
+| `-Action` | String | `Audit`, `Preflight`, `CheckUsb`, `DeployUsb`, `StageProbe`, `BuildLocalUsb`, `RestoreWindows`, `Telemetry`, `CheckCaptures`, `CompareReports`, `GenerateDumps`, `DownloadAssets`. |
+| `-DriveLetter` | String | Target drive letter for USB operations (e.g., `E` or `E:`). Removable USB FAT32 drives only; system and boot partitions are rejected. |
 | `-CapturePath` | String | Folder containing `DIAGnn.TXT`, `IMGnn.BIN`, `PROM.BIN` for analysis. |
 | `-DumpType` | String | For `GenerateDumps`: `Windows`, `EfiCaptures`, or `ProbeUsb`. |
 | `-DumpPath` | String | Destination path for generated diagnostic dumps. |
@@ -351,6 +351,7 @@ The utility supports full automation through the `-Cli` parameter. This is ideal
 | `-ExportPath` | String | Destination file path to save compatibility JSON output. |
 | `-Lang` | String | Language for reports and descriptions: `en` (default) or `ko`. |
 | `-Json` | Switch | Emits pure JSON string to stdout (ideal for script piping). |
+| `-OptIn` | Switch | Explicit opt-in required when staging diagnostic probe to a removable USB drive. |
 
 ---
 
@@ -402,8 +403,9 @@ The utility supports full automation through the `-Cli` parameter. This is ideal
 
 #### 9. Prepare a Diagnostic Capture Probe USB Drive
 ```powershell
-.\tools\gpu_unlock_utility\GpuUnlockUtility.ps1 -Cli -Action GenerateDumps -DumpType ProbeUsb -DriveLetter E
+.\tools\gpu_unlock_utility\GpuUnlockUtility.ps1 -Cli -Action StageProbe -DriveLetter E -OptIn
 ```
+*Compiles the read-only Diagnostic Probe targeting the system Windows ESP GUID and stages it to removable FAT32 USB drive `E:`. Explicit `-OptIn` is required, non-USB targets and system/boot partitions are rejected, and existing destination files are refused without overwrite.*
 
 #### 10. Query Real-Time GPU Telemetry & Unlock Verification Status
 ```powershell
