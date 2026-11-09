@@ -20,7 +20,7 @@
 
 #define GU_RELEASE_AUDIT_CAPTURES 32U
 typedef struct {
-  BOOLEAN Active,PrepareEntered,Used,Ready,ReleaseUsed,Failed,Mismatch,PlanReady;
+  BOOLEAN Active,PrepareEntered,Used,Ready,ReleaseUsed,Failed,Mismatch,PlanReady,Verifying;
   EFI_SYSTEM_TABLE *Table;
   EFI_BOOT_SERVICES *Boot;
   EFI_HANDLE_PROTOCOL Handle;

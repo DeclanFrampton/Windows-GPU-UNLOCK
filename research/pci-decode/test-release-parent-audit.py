@@ -105,6 +105,15 @@ def main():
         flow = boot / 'full-release.c'
         history = boot / 'release-parent-audit.h'
         changes = {
+            'skip-final-parent-comparison': (flow,
+                'if(!FinalAuditDevice(&current->Snapshot.Parents[i],&before->Parents[i],\n                        before->Parents[i].Attributes,FALSE,checkCold))',
+                'if(FALSE)'),
+            'allow-parent-status-clear': (flow,
+                'else if(observed->Config[i]!=before->Config[i])return FALSE;',
+                'else if(!VerifyConfigWord(i,before->Config[i],observed->Config[i],checkCold))return FALSE;'),
+            'skip-recursive-verify-guard': (flow,
+                'if(ReleaseAudit.Verifying)return EFI_ALREADY_STARTED;',
+                'if(FALSE)return EFI_ALREADY_STARTED;'),
             'overwrite-observed-attributes': (flow, 'Full.TargetAttributes=targetAttributes;',
                 'Full.Attributes=targetAttributes;Full.TargetAttributes=targetAttributes;'),
             'skip-effect-binding': (history, 'a->Boot->OpenProtocol!=a->Open', 'FALSE'),

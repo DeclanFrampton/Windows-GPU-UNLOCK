@@ -663,8 +663,23 @@ Observed data must remain unchanged by target derivation, and raw0 paired with
 cache100/200/300 is refused. Deliberately broken guards must fail assertions.
 
 This is one synthetic non-aggregate, no-EDID-driver route. Aggregate/EDID/display
-variants, post-child typed parent verification with the existing exact status-clear
-policy, complete cleanup fault qualification, and a permitted invalid-target EFI
-link fixture remain outstanding. Existing legacy post-child verification is not
-broadened. No uncorrected physical Stop transition, new hardware support, ready
+variants, complete cleanup fault qualification, and a permitted invalid-target EFI
+link fixture remain outstanding. No uncorrected physical Stop transition, new hardware support, ready
 package or authorization to install/execute follows from these RAM results.
+
+The host-only final verifier now collects a fresh typed GPU/parent observation
+before the existing final display/config/BAR/attribute/graph checks. It compares
+GPU identity, BDF, interface, Supported and planned attributes exactly. Only GPU
+config uses the existing `VerifyConfigWord` status-clear policy: after the child,
+the two already-recorded CED/URD status bits may clear only with its exact layout
+condition; cold checks, new bits, control changes and other words remain exact.
+Every parent metadata/config/attribute field stays exact. Neither the baseline
+nor observed snapshots are normalized to make a comparison pass.
+
+Recursive final verification is refused before diagnostic reset, capture budget
+consumption or TPL changes. Repeated legitimate handoff checks consume distinct
+observations up to the fixed budget; exhaustion refuses further callbacks. Tests
+cover both corrected and mismatch histories, all GPU/parent config words, every
+omitted parent byte, metadata/attribute drift, warnings/errors, foreign graph
+changes, recursion, TPL balance and final dispatch-drift diagnostics. These remain
+service-boundary observations, not atomicity or physical FLR qualification.

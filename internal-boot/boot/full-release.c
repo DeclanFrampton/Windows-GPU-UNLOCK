@@ -838,9 +838,45 @@ static BOOLEAN VerifyConfigWord(UINTN word,UINT32 expected,UINT32 observed,BOOLE
   return (expected & ~clearable)==(observed & ~clearable) &&
     !(observed & clearable & ~expected);
 }
+#ifdef GU_RELEASE_PARENT_AUDIT
+static BOOLEAN FinalAuditDevice(const GU_DS_DEVICE *observed,const GU_DS_DEVICE *before,
+                               UINT64 attributes,BOOLEAN gpu,BOOLEAN checkCold) {
+  if(observed->Handle!=before->Handle || observed->Interface!=before->Interface ||
+     observed->Segment!=before->Segment || observed->Bus!=before->Bus || observed->Device!=before->Device ||
+     observed->Function!=before->Function || observed->Supported!=before->Supported || observed->Attributes!=attributes)
+    return FALSE;
+  for(UINTN i=0;i<64;i++) {
+    if(gpu) {
+      if(!VerifyConfigWord(i,before->Config[i],observed->Config[i],checkCold))return FALSE;
+    } else if(observed->Config[i]!=before->Config[i])return FALSE;
+  }
+  return TRUE;
+}
+static EFI_STATUS ReleaseAuditFinal(BOOLEAN checkCold) {
+  GU_RELEASE_AUDIT_STATE *a=&ReleaseAudit;UINT64 target=0;
+  const GU_DS_SNAPSHOT *before=&a->Captures[0].Snapshot;
+  if((checkCold!=TRUE && checkCold!=FALSE) ||
+     ReleaseAuditRestoreTarget(Full.Attributes,&target)!=EFI_SUCCESS || Full.TargetAttributes!=target ||
+     !Bytes(Full.Config,before->Gpu.Config,sizeof(Full.Config)) || !ReleaseAuditBound() ||
+     a->Next>=GU_RELEASE_AUDIT_CAPTURES)return ReleaseAuditStatus(EFI_NOT_READY);
+  GU_DS_CAPTURE *current=&a->Captures[a->Next++];
+  EFI_STATUS s=GuDsEfiCapture(current,a->Boot,&a->Target);
+  /* Keep originals/target distinct; do not manufacture an observed snapshot
+   * with cleared bits or weaken the shared collector's snapshot predicates. */
+  if(s!=EFI_SUCCESS || !ReleaseAuditBound() || Full.Attributes!=before->Gpu.Attributes ||
+     Full.TargetAttributes!=target || !Bytes(Full.Config,before->Gpu.Config,sizeof(Full.Config)) ||
+     current->Snapshot.ParentCount!=before->ParentCount ||
+     !FinalAuditDevice(&current->Snapshot.Gpu,&before->Gpu,target,TRUE,checkCold))
+    return ReleaseAuditStatus(EFI_NOT_READY);
+  for(UINTN i=0;i<before->ParentCount;i++)
+    if(!FinalAuditDevice(&current->Snapshot.Parents[i],&before->Parents[i],
+                        before->Parents[i].Attributes,FALSE,checkCold))return ReleaseAuditStatus(EFI_NOT_READY);
+  return EFI_SUCCESS;
+}
+#endif
 /* No logging/console callbacks during verification. The caller reports only
  * after failure, or performs the original final fresh check after closing IO. */
-#ifdef GU_HEADLESS_RESEARCH
+#if defined(GU_HEADLESS_RESEARCH) || defined(GU_RELEASE_PARENT_AUDIT)
 static EFI_STATUS VerifyReleasedInner(EFI_SYSTEM_TABLE *t,BOOLEAN checkCold) {
 #else
 EFI_STATUS GuVerifyReleased(EFI_SYSTEM_TABLE *t,BOOLEAN checkCold) {
@@ -850,6 +886,11 @@ EFI_STATUS GuVerifyReleased(EFI_SYSTEM_TABLE *t,BOOLEAN checkCold) {
   static GRAPH g;UINT32 cfg[64],cold[9];
   EFI_STATUS s;
 #define VERIFY_STEP(label,expr) do {VerifyDiagnostic.Stage=(label);s=(expr);VerifyDiagnostic.Status=s;if(s!=EFI_SUCCESS)return s;} while(0)
+#ifdef GU_RELEASE_PARENT_AUDIT
+  /* These new callbacks precede every existing final display/config/graph
+   * check. In particular, a foreign claim created here cannot stale that check. */
+  VERIFY_STEP("verify-full-parent-history",ReleaseAuditFinal(checkCold));
+#endif
 #ifdef GU_HEADLESS_RESEARCH
   VERIFY_STEP("verify-zero-physical-gop-input",AmdOnly());
 #else
@@ -878,11 +919,30 @@ EFI_STATUS GuVerifyReleased(EFI_SYSTEM_TABLE *t,BOOLEAN checkCold) {
   return EFI_SUCCESS;
 #undef VERIFY_STEP
 }
-#ifdef GU_HEADLESS_RESEARCH
+#if defined(GU_HEADLESS_RESEARCH) || defined(GU_RELEASE_PARENT_AUDIT)
 EFI_STATUS GuVerifyReleased(EFI_SYSTEM_TABLE *t,BOOLEAN checkCold) {
+#ifdef GU_RELEASE_PARENT_AUDIT
+  if(ReleaseAudit.Verifying)return EFI_ALREADY_STARTED;
+  if(!ReleaseAudit.Ready || ReleaseAudit.Failed || ReleaseAudit.Table!=t || !ReleaseAuditBound())return EFI_NOT_READY;
+  ReleaseAudit.Verifying=TRUE;
+#ifdef GU_HEADLESS_RESEARCH
+  EFI_TPL old=ReleaseAudit.Raise(TPL_NOTIFY);
+#endif
+  EFI_STATUS s=VerifyReleasedInner(t,checkCold);
+#ifdef GU_HEADLESS_RESEARCH
+  ReleaseAudit.Restore(old);
+#endif
+  if(s==EFI_SUCCESS && !ReleaseAuditBound()) {
+    s=EFI_NOT_READY;
+    VerifyDiagnostic=(GU_VERIFY_DIAGNOSTIC){.Stage="verify-final-bindings",.Status=s};
+  }
+  ReleaseAudit.Verifying=FALSE;
+  return s;
+#else
   if(!t || !t->BootServices || !t->BootServices->RaiseTPL || !t->BootServices->RestoreTPL)return EFI_INVALID_PARAMETER;
   EFI_TPL old=t->BootServices->RaiseTPL(TPL_NOTIFY);
   EFI_STATUS s=VerifyReleasedInner(t,checkCold);
   t->BootServices->RestoreTPL(old);return s;
+#endif
 }
 #endif
