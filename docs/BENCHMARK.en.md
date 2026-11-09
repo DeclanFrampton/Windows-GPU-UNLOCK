@@ -79,6 +79,15 @@ after every trial. `comparison-complete.json` is written only after successful
 completion and binds the context and all three raw trial files by SHA256.
 These hashes detect accidental edits; they are not signed hardware evidence.
 
+The offline reader loads each required JSON file once, checks the context and
+trial SHA256 values against the completion record, and parses those same bytes.
+Edits after that snapshot cannot change the
+current comparison; a later invocation reads the files again and refuses an
+edit that no longer matches the completion record. Each file is limited to
+1 MiB. Symlinks/reparse points, nonregular files, duplicate JSON keys, malformed
+UTF-8, excessive nesting, and non-finite numbers are refused. The reader does
+not modify or reseal evidence. These checks do not authenticate its origin.
+
 Compare two completed runs from this updated runner, using Python 3.9+:
 
 ```powershell
