@@ -33,18 +33,29 @@ static BOOLEAN CheckGpuDisplayAndOwnershipOk(VOID) {
   EFI_OPEN_PROTOCOL_INFORMATION_ENTRY *entries = NULL;
   UINTN count = 0;
   s = gBS->OpenProtocolInformation(g_current_unlock_gpu->handle, &PciIoGuid, &entries, &count);
-  if (!EFI_ERROR(s) && entries) {
-    for (UINTN i = 0; i < count; i++) {
-      if ((entries[i].Attributes & EFI_OPEN_PROTOCOL_BY_DRIVER) ||
-          (entries[i].Attributes & EFI_OPEN_PROTOCOL_EXCLUSIVE)) {
-        LogWrite("[Unlock] Ownership check rejected: handle held by driver (attrib=%#x)\n",
-                 entries[i].Attributes);
-        gBS->FreePool(entries);
-        return FALSE;
-      }
-    }
+  /* UEFI 2.10 section 7.3.11 returns an allocated buffer on EFI_SUCCESS,
+   * including an empty list. Outputs on failure do not establish ownership
+   * or a valid allocation to free. Warnings are not documented successes.
+   */
+  if (s != EFI_SUCCESS || !entries) return FALSE;
+
+  /* Defensive scan limit, not a UEFI limit. Refuse oversized results before
+   * dereferencing entries; never accept an unexamined tail of the owner list.
+   */
+  if (count > 4096) {
     gBS->FreePool(entries);
+    return FALSE;
   }
+  for (UINTN i = 0; i < count; i++) {
+    if ((entries[i].Attributes & EFI_OPEN_PROTOCOL_BY_DRIVER) ||
+        (entries[i].Attributes & EFI_OPEN_PROTOCOL_EXCLUSIVE)) {
+      LogWrite("[Unlock] Ownership check rejected: handle held by driver (attrib=%#x)\n",
+               entries[i].Attributes);
+      gBS->FreePool(entries);
+      return FALSE;
+    }
+  }
+  gBS->FreePool(entries);
 
   return TRUE;
 }
