@@ -598,3 +598,30 @@ current state, mutated plans/origin, caller input/context/report edits and addit
 original-buffer aliases. These remain RAM models and invalid-target link fixtures.
 The binding neither performs nor qualifies NVIDIA Stop, obtains a claim, changes a
 production gate, or establishes physical compatibility for the hypothesis.
+
+### Production configuration-reader regression
+
+The separate `test-config-read.py` runner tests the existing production
+`ReadConfigFull` helper from `internal-boot/boot/full-release.c`. It does not link
+the correction/restoration experiments above into a boot path.
+
+The helper freezes its target interface and dispatch methods, checks exact BDF
+outputs initialized to nonmatching values, and compares two complete 64-DWORD
+reads with complementary initial fills. The caller's buffer is published only
+after agreement and the existing identity/class/BAR/BME checks. Failure leaves
+that buffer unchanged. All PCI values remain representable; no sentinel value
+is forbidden as device data. Command values with MEMORY disabled remain valid
+for the existing post-driver-release restoration checks.
+
+```powershell
+python -I research/pci-decode/test-config-read.py --clang C:\TOOLS\LLVM20\bin\clang.exe --mutations --output research/pci-decode/build/config-read-check-1
+```
+
+The RAM model covers omitted location fields/bytes, inconsistent full reads,
+warning/error statuses, changed method/service/target bindings, unchanged output
+on refusal and legitimate A5/5A/all-ones config words. Fixed profiles and synthetic
+LOCAL segment/bus variants use the actual helper; deliberate broken guards must
+fail assertions. Synthetic headers/configuration remain in the new test output;
+the runner never installs a LOCAL header, writes qualification evidence, accesses
+hardware or executes EFI. The two reads check stability at service-return
+boundaries, not atomicity or truthful behavior of arbitrary firmware.

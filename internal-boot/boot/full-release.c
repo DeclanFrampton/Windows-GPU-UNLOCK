@@ -64,15 +64,48 @@ static EFI_STATUS LogConfig(const char *label,const UINT32 *cfg) {
   return EFI_SUCCESS;
 }
 static EFI_STATUS ReadConfigFull(UINT32 *cfg) {
-  EFI_PCI_IO_PROTOCOL *io=NULL;
-  EFI_STATUS s=Interface(Full.Table->BootServices,PreparedPlan.RtxPci,&PciGuid,(VOID **)&io);
-  if(s!=EFI_SUCCESS || io!=PreparedPlan.RtxIo || !io->GetLocation || !io->Pci.Read)return EFI_NOT_READY;
-  UINTN seg=0,bus=0,dev=0,fun=0;
-  s=io->GetLocation(io,&seg,&bus,&dev,&fun);
-  if(s!=EFI_SUCCESS || seg!=GU_TARGET_SEGMENT || bus!=GU_TARGET_BUS || dev || fun)return EFI_UNSUPPORTED;
-  s=io->Pci.Read(io,EfiPciIoWidthUint32,0,64,cfg);
-  if(s==EFI_SUCCESS && (cfg[0]!=GU_BOARD_ID || cfg[11]!=GU_BOARD_SUBSYSTEM || cfg[2]!=0x030000a1 || cfg[4]!=(UINT32)GU_BAR0_BASE || (cfg[1]&4)))s=EFI_UNSUPPORTED;
-  return s;
+  EFI_SYSTEM_TABLE *table=Full.Table;
+  if(!cfg || !table || !table->BootServices)return EFI_INVALID_PARAMETER;
+  EFI_BOOT_SERVICES *boot=table->BootServices;
+  EFI_HANDLE_PROTOCOL handle=boot->HandleProtocol;
+  EFI_HANDLE target=PreparedPlan.RtxPci;EFI_PCI_IO_PROTOCOL *io=PreparedPlan.RtxIo;
+  if(!handle || !target || !io || !io->GetLocation || !io->Pci.Read)return EFI_NOT_READY;
+  EFI_PCI_IO_PROTOCOL_GET_LOCATION location=io->GetLocation;
+  EFI_PCI_IO_PROTOCOL_CONFIG read=io->Pci.Read;
+  /* Callback-boundary checks, not a firmware lock. Freeze methods before any
+   * callback and never dispatch through a method a callback has replaced. */
+#define CONFIG_BOUND (Full.Table==table && table->BootServices==boot && boot->HandleProtocol==handle && \
+  PreparedPlan.RtxPci==target && PreparedPlan.RtxIo==io && io->GetLocation==location && io->Pci.Read==read)
+  UINT32 observed[2][64];
+  for(UINTN pass=0;pass<2;pass++) {
+    EFI_PCI_IO_PROTOCOL *current=NULL;
+    EFI_STATUS s=handle(target,&PciGuid,(VOID **)&current);
+    if(s!=EFI_SUCCESS || !CONFIG_BOUND || current!=io)return EFI_NOT_READY;
+    UINTN seg=~(UINTN)0,bus=seg,dev=seg,fun=seg;
+    s=location(io,&seg,&bus,&dev,&fun);
+    if(s!=EFI_SUCCESS || !CONFIG_BOUND)return EFI_NOT_READY;
+    if(seg!=GU_TARGET_SEGMENT || bus!=GU_TARGET_BUS || dev || fun)return EFI_UNSUPPORTED;
+    /* No PCI value is reserved as a sentinel. Complementary fills plus equality
+     * reject unwritten/stale bytes while permitting legitimate all-ones data. */
+    for(UINTN i=0;i<64;i++)observed[pass][i]=pass?0x5a5a5a5aU:0xa5a5a5a5U;
+    s=read(io,EfiPciIoWidthUint32,0,64,observed[pass]);
+    if(s!=EFI_SUCCESS)return s;
+    if(!CONFIG_BOUND)return EFI_NOT_READY;
+    current=NULL;s=handle(target,&PciGuid,(VOID **)&current);
+    if(s!=EFI_SUCCESS || !CONFIG_BOUND || current!=io)return EFI_NOT_READY;
+    seg=bus=dev=fun=~(UINTN)0;
+    s=location(io,&seg,&bus,&dev,&fun);
+    if(s!=EFI_SUCCESS || !CONFIG_BOUND || seg!=GU_TARGET_SEGMENT || bus!=GU_TARGET_BUS || dev || fun)return EFI_NOT_READY;
+  }
+  EFI_PCI_IO_PROTOCOL *final=NULL;
+  EFI_STATUS finalStatus=handle(target,&PciGuid,(VOID **)&final);
+  if(finalStatus!=EFI_SUCCESS || !CONFIG_BOUND || final!=io)return EFI_NOT_READY;
+#undef CONFIG_BOUND
+  if(!Bytes(observed[0],observed[1],sizeof(observed[0])))return EFI_NOT_READY;
+  const UINT32 *v=observed[0];
+  if(v[0]!=GU_BOARD_ID || v[11]!=GU_BOARD_SUBSYSTEM || v[2]!=0x030000a1 || v[4]!=(UINT32)GU_BAR0_BASE || (v[1]&4))return EFI_UNSUPPORTED;
+  for(UINTN i=0;i<64;i++)cfg[i]=v[i];
+  return EFI_SUCCESS;
 }
 /* Shared descriptor policy for both pre-release reads and the later permit. */
 static EFI_STATUS BarDescription(const EFI_ACPI_ADDRESS_SPACE_DESCRIPTOR *d) {
