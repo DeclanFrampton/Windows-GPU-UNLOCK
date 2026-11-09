@@ -437,7 +437,7 @@ Gathers comprehensive system information and saves it into `diagnostics\GPU-UNLO
 - `README.TXT`: Diagnostic bundle manifest.
 
 ### 2. UEFI Capture Generator (`-DumpType EfiCaptures`)
-Uses `generate_captures.py` to synthesize pre-boot EFI capture artifacts (`DIAG00.TXT`, `DIAG01.TXT`, `IMG00.BIN`, `PROM.BIN`). Enables full testing of the compatibility evaluation pipeline without requiring physical EFI reboots.
+Uses `generate_captures.py` to create **synthetic software-test fixtures**, not observations from the detected GPU. The GUI uses a new, uniquely named folder under `synthetic-captures/`, never the selected hardware-capture folder. Existing destinations are refused. The generated logs, README and metadata identify the files as synthetic; no hardware was observed. They are not cold-boot, compatibility or unlock evidence and must not be used to qualify an unlock build or hardware run.
 
 ### 3. USB Diagnostic Probe (`-DumpType ProbeUsb`)
 Sets up a removable FAT32 USB drive to capture live pre-boot hardware state on cold boot without applying unlock modifications.
@@ -458,6 +458,8 @@ The `tools\gpu_unlock_utility\` directory includes dedicated helper scripts:
 ### download_assets.py (Automated Firmware Asset Acquisition)
 Downloads the pinned official NVIDIA open kernel module source archive (`610.43.03`) and `nvidia-utils` package, synthesizes the V67 signature payload, extracts Falcon microcontroller and GSP boot assets, and verifies all 5 files against `unlock\assets.json`:
 
+Cache cleanup removes only the two known source archives created during the current run. Existing archives and unrelated files are retained. An existing cache file with the wrong hash is refused; choose a new cache directory instead of overwriting it. Downloads use unique temporary files and refuse an occupied final destination. Extraction uses a private temporary child directory; the caller's cache directory and any existing `temp_extract` folder are never recursively deleted. `--keep-cache` also retains newly downloaded archives. Download, source and final asset hash checks are unchanged.
+
 ```powershell
 python .\tools\gpu_unlock_utility\download_assets.py
 ```
@@ -477,7 +479,7 @@ Validates files in `assets\` against the project's SHA-256 specification in `unl
 ```
 
 ### generate_captures.py (Synthetic EFI Captures)
-Generates mock or test pre-boot EFI capture sets for testing the compatibility engine:
+Generates labeled mock capture sets for software tests. Choose a **new** output directory; existing folders and capture files are never overwritten. `--count` accepts 1–32 synthetic records, not separate cold boots:
 
 ```powershell
 # Generate test captures for an RTX 3090 (Device ID 220410de)

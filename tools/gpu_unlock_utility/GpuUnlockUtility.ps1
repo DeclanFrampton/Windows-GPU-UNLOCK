@@ -776,9 +776,11 @@ for compatibility analysis and bug reports:
 }
 
 function Export-EfiDiagnosticCaptures([string]$TargetDir, [string]$DeviceId = $null) {
-    if (-not $TargetDir) { $TargetDir = Join-Path $Script:RepoRoot "diagnostic-captures" }
-    if (-not (Test-Path -LiteralPath $TargetDir)) {
-        New-Item -ItemType Directory -Path $TargetDir -Force | Out-Null
+    if (-not $TargetDir) {
+        $TargetDir = Join-Path $Script:RepoRoot ("synthetic-captures\fixture-" + [Guid]::NewGuid().ToString('N'))
+    }
+    if (Test-Path -LiteralPath $TargetDir) {
+        throw "Choose a new synthetic-fixture folder. Existing captures are never overwritten."
     }
 
     if (-not $DeviceId) {
@@ -794,6 +796,9 @@ function Export-EfiDiagnosticCaptures([string]$TargetDir, [string]$DeviceId = $n
 
     $genScript = Join-Path $scriptDir "generate_captures.py"
     $res = & python -I $genScript $TargetDir --device-id $DeviceId 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "Synthetic fixture generation failed. No hardware capture was collected. $($res -join ' ')"
+    }
     return ($res -join "`r`n")
 }
 
@@ -1629,7 +1634,7 @@ Add-Type -AssemblyName System.Windows.Forms
                                 <TextBlock Text="Generate comprehensive diagnostic packages for compatibility review, bug reporting, or stage the pre-boot probe to USB:" FontSize="11" Foreground="#A6ADC8" Margin="0,0,0,10" TextWrapping="Wrap"/>
                                 <WrapPanel>
                                     <Button Name="BtnGenWindowsDump" Content="Generate Windows Diag Dump" Margin="0,0,10,6" Padding="12,7" Background="#313244" Foreground="#CDD6F4"/>
-                                    <Button Name="BtnGenEfiCaptures" Content="Generate Diagnostic Captures (DIAG/PROM)" Margin="0,0,10,6" Padding="12,7" Background="#313244" Foreground="#89B4FA"/>
+                                    <Button Name="BtnGenEfiCaptures" Content="Generate Synthetic Test Fixtures" Margin="0,0,10,6" Padding="12,7" Background="#313244" Foreground="#89B4FA"/>
                                     <Button Name="BtnStageProbeUsb" Content="Prepare Diagnostic Probe USB" Margin="0,0,10,6" Padding="12,7" Background="#313244" Foreground="#A6E3A1"/>
                                 </WrapPanel>
                             </StackPanel>
@@ -2618,17 +2623,15 @@ $btnGenWindowsDump.Add_Click({
     })
 
 $btnGenEfiCaptures.Add_Click({
-        $folder = $txtCaptureFolder.Text.Trim()
-        if (-not $folder -or $folder -eq 'D:\RTX3090-UNLOCK') {
-            $folder = Join-Path $Script:RepoRoot "diagnostic-captures"
-        }
+        # Never write fixtures into the currently selected hardware capture set.
+        $folder = Join-Path $Script:RepoRoot ("synthetic-captures\fixture-" + [Guid]::NewGuid().ToString('N'))
         try {
-            Write-GuiLog "Generating pre-boot EFI diagnostic captures for detected GPU in $folder..."
+            Write-GuiLog "Generating SYNTHETIC TEST FIXTURES in $folder; no hardware is observed..."
             $msg = Export-EfiDiagnosticCaptures -TargetDir $folder
             Write-GuiLog $msg
             $txtCaptureFolder.Text = $folder
             $btnRunOfflineCheck.RaiseEvent((New-Object System.Windows.RoutedEventArgs([System.Windows.Controls.Button]::ClickEvent)))
-            [System.Windows.MessageBox]::Show("Generated pre-boot diagnostic captures (DIAG00.TXT, DIAG01.TXT, IMG00.BIN, PROM.BIN) in:`n$folder`n`nOffline compatibility check was automatically triggered.", "Diagnostic Captures Generated", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information) | Out-Null
+            [System.Windows.MessageBox]::Show("Generated SYNTHETIC TEST FIXTURES in:`n$folder`n`nNo hardware was observed. These are not compatibility or cold-boot evidence and must not be used to build/run an unlock. Offline checking is a software test only.", "Synthetic Test Fixtures", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information) | Out-Null
         }
         catch {
             Write-GuiLog "Error generating captures: $($_.Exception.Message)"
