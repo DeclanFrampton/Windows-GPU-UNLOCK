@@ -112,9 +112,17 @@ for role, protocol, controller in [
     roles[role] = records[0][1]
     block = blocks[next(h for h, i in indices.items() if i == roles[role])]
     if aggregate:
-        observed = re.findall(r'^driver image=0x([0-9a-f]+) binding=0x([0-9a-f]+)$', block, re.M)
+        # Keep legacy synthetic records, but validate every field the current
+        # diagnostic emits instead of silently accepting an arbitrary suffix.
+        driver_rows = [line for line in block.splitlines() if line.startswith('driver image=')]
+        observed = re.fullmatch(
+            r'driver image=0x([0-9a-f]+) binding=0x([0-9a-f]+)'
+            r'(?: version=0x([0-9a-f]+) stop-address=0x([0-9a-f]+))?',
+            driver_rows[0]) if len(driver_rows) == 1 else None
         binding = profile.binding_for(observed_bindings, original[roles[role]])
-        if len(observed) != 1 or tuple(int(value, 16) for value in observed[0]) != (binding['image'], binding['handle']):
+        if observed is None or tuple(int(value, 16) for value in observed.groups()[:2]) != (binding['image'], binding['handle']):
+            raise ValueError('Aggregate graph and binding image records disagree')
+        if observed[3] is not None and (int(observed[3], 16), int(observed[4], 16)) != (binding['version'], binding['stop']):
             raise ValueError('Aggregate graph and binding image records disagree')
     roles[role.removesuffix('Agent') + 'Image'] = indices[hex(int(re.search(r'driver image=(0x[0-9a-f]+)', block)[1], 16))]
 console = re.search(r'console out=(0x[0-9a-f]+) error=(0x[0-9a-f]+) input=(0x[0-9a-f]+)', text)
@@ -186,7 +194,28 @@ if aggregate:
         parent,device,base,size,code_type=(int(value,16) for value in image_rows[0])
         if (base,size,code_type)!=(binding['base'],binding['size'],binding['code-type']):
             raise ValueError('Aggregate image and binding metadata disagree')
-        image_nodes=re.findall(r'^image-file-path-node raw=([0-9a-f]+)$',image_block['raw'],re.M)
+        image_lines = image_block['raw'].splitlines()
+        image_nodes = []
+        consumed_markers = 0
+        for line_index, line in enumerate(image_lines):
+            marker = re.fullmatch(r'image-file-path-node raw=([0-9a-f]+)', line)
+            if marker:
+                image_nodes = [marker[1]]
+                consumed_markers = 1
+                for follow in image_lines[line_index + 1:]:
+                    # Path() prefixes only the first node. Existing synthetic
+                    # captures prefix every node. Preserve the terminator and
+                    # compare the complete contiguous path in either format.
+                    tail = re.fullmatch(r'(image-file-)?path-node raw=([0-9a-f]+)', follow)
+                    if not tail:
+                        break
+                    image_nodes.append(tail[2])
+                    consumed_markers += int(tail[1] is not None)
+                break
+        else:
+            raise ValueError('Aggregate driver image has no file path record')
+        if consumed_markers != sum(line.startswith('image-file-path-node') for line in image_lines):
+            raise ValueError('Aggregate driver image has ambiguous file path records')
         if image_nodes!=[node.hex() for node in binding['nodes']]:
             raise ValueError('Aggregate image file paths disagree')
         if device and hex(device) not in indices:
@@ -245,6 +274,17 @@ if child_paths:
 for role, value in roles.items():
     lines.append(f'#define FX_{role} ((EFI_HANDLE){value})')
 lines.append('static const EDGE FixtureEdges[]={')
+if aggregate:
+    # Host replay scenarios damage Live.Edges[0] expecting the reviewed target
+    # controller's BY_DRIVER PciIo ownership record (the synthetic graph's first
+    # edge). Put the captured equivalent at index 0 so the faults remain visible.
+    PCI_IO = '4cf5b200-68b8-4ca5-9eec-b23e3f50029a'
+    target_edges = [e for e in edges if e[0] == roles['RtxPci'] and e[2] == roles['RtxPci']
+                    and str(e[3]) == PCI_IO and e[4] == 16]
+    if len(target_edges) != 1:
+        raise ValueError('Aggregate fixture requires one target PciIo BY_DRIVER edge')
+    edges.remove(target_edges[0])
+    edges.insert(0, target_edges[0])
 for h, a, c, g, attrs, count in edges:
     data = g.bytes
     guid = f'{{0x{g.time_low:x},0x{g.time_mid:x},0x{g.time_hi_version:x},{{' + ','.join(f'0x{x:x}' for x in data[8:]) + '}}'
