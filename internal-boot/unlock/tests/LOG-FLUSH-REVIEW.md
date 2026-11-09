@@ -8,6 +8,11 @@ failure. A warning could therefore leave `GuLogReady()` true at the final
 ARMED logging gate. The one-line correction uses the existing `EFI_ERROR`
 policy. Normal-mode warning semantics are unchanged.
 
+The PR also removed the sticky-fault guard from `GuLogText`, and its new
+`GuLogFlush` could retry a failed file. The follow-up restores that guard and
+prevents later flush callbacks once any write, short write or flush has
+faulted. It does not attempt to recover a logger that has already failed.
+
 The host harness includes the production `app_io.c`, substitutes RAM-only file
 and console callbacks, and calls only logging functions. Unused functions are
 discarded by the host linker. It never opens a filesystem protocol, starts a GPU
@@ -23,10 +28,11 @@ python internal-boot/unlock/tests/test_log_flush.py --cc gcc
 python internal-boot/unlock/tests/test_log_flush.py --cc gcc --sanitize
 ```
 
-The unmodified PR head fails the headless warning case. The fix passes 40
-headless checks and 36 normal-mode checks covering success, four warning
-classes, three errors, sticky faults, absent report and headless console
-suppression. The runner also checks that the freestanding build is refused for
+The unmodified PR head fails the headless warning case. The first flush-status
+fix alone fails the added no-retry assertions. The complete fix passes 71
+headless checks and 62 normal-mode checks covering success, four warning
+classes, three errors, short writes, no callback retries after sticky faults,
+absent report, normal-mode console failure and headless console suppression. The runner also checks that the freestanding build is refused for
 the intended reason.
 
 Verified with GCC 14.2.0 and Python 3.12.14. AddressSanitizer and UBSan passed for
