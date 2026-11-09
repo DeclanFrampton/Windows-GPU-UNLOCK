@@ -83,3 +83,24 @@ mutation/truncation across B650M, headless and B660M, and require deliberately
 broken path/identity guards to fail assertions. Automatic UI tests use synthetic
 partition identities when no local configuration is present; they never create
 local configuration, access a partition, execute EFI or change boot settings.
+
+## Host-only typed parent and ownership research
+
+The shared `research/pci-decode/test-release-parent-audit.py` runner accepts
+`--amd-retained --edid-driver --children 1|2` with `--iomem` for a coherent
+command3/cache300 origin, or a separate `--mismatch` run for the command2
+corrected/hypothetical mismatch routes. `--mutations` checks the corresponding
+hosted release guards. An audit-only command2 run keeps the mismatch refusal.
+
+These models use a generated synthetic graph/full configuration and synthetic
+code/PROM pins inside the host fixture. The generator checks all 64 configuration
+dwords, both graph PCI records and fixed driver size/Stop/version metadata for
+agreement before compiling. They retain the original fixed B650M
+profile and the AMD GOP, text/input and exact shared EDID relation. A distinct
+parent PCI/path interface is inventoried, AMD/RTX ancestry and BDF stay separate,
+and parent observations/precise ownership checks surround the actual release
+code. Per-child and late AMD display/input faults must block subsequent effects
+or handoff. Two-child cases also run the original retained-AMD suite with the
+research bridge disabled. This adds no LOCAL admission, new board/card support,
+staging or hardware qualification. The installed manual/automatic binaries are
+not rebuilt or replaced by these tests.

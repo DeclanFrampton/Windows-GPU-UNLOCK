@@ -3,7 +3,11 @@ static void AuditConsoleSetup(void);
 static void AuditFullSetup(void);
 #define GU_RELEASE_AUDIT_TEST_CONSOLE_SETUP AuditConsoleSetup
 #define GU_RELEASE_AUDIT_TEST_FULL_SETUP AuditFullSetup
+#ifdef GU_RELEASE_AMD_MODEL
+#include "test_amd_retained.c"
+#else
 #include "test_full.c"
+#endif
 
 static EFI_PCI_IO_PROTOCOL ParentIo;
 static UINT32 ParentConfig[64];
@@ -29,6 +33,11 @@ static BOOLEAN FreeFailureInjected;
 static unsigned OwnerQueries;
 static UINTN ParentHandleStorage[8];
 static unsigned EdidStops,NvStops;
+#ifdef GU_RELEASE_AMD_MODEL
+static int AmdScenario;
+static unsigned AmdAfterEdidFault;
+static BOOLEAN AmdFinalBindingFault,AmdFinalBindingInjected;
+#endif
 static unsigned TopologyFault;
 #if !GU_NO_EDID_DRIVER
 static unsigned EdidFaultMode,EdidFaultChild;
@@ -48,6 +57,18 @@ static EFI_STATUS EFIAPI AuditDisconnect(EFI_HANDLE h,EFI_HANDLE agent,EFI_HANDL
     if(inject && EdidFaultMode==3)FullScenario=1;
     if(inject && EdidFaultMode==4)FullScenario=29;
     EFI_STATUS s=Disconnect(h,agent,child);FullScenario=scenario;
+#ifdef GU_RELEASE_AMD_MODEL
+    if(s==EFI_SUCCESS && EdidStops==1 && AmdAfterEdidFault) {
+      if(AmdAfterEdidFault<=2)for(UINTN i=0;i<Live.Count;i++)
+        if(Live.Edges[i].Handle==FX_Amd && GuGuidEqual(&Live.Edges[i].Protocol,&EdidGuid)) {
+          if(AmdAfterEdidFault==1)Live.Edges[i].Agent=FX_OutAgent;
+          else Live.Edges[i].Count++;
+        }
+      if(AmdAfterEdidFault==3)AmdMode.FrameBufferBase=0;
+      if(AmdAfterEdidFault==4)TestAmdPath[28]^=1;
+      if(AmdAfterEdidFault==5)AmdInfo.HorizontalResolution=0;
+    }
+#endif
     if(inject) {
       if(EdidFaultMode==1)return EFI_DEVICE_ERROR; /* successful partial effect */
       if(EdidFaultMode==2)return EFI_WARN_UNKNOWN_GLYPH;
@@ -238,6 +259,24 @@ static VOID EFIAPI AuditRestore(EFI_TPL previous) {
   if(FinalRestoreDrift && ReleaseAudit.Verifying && !strcmp(GuLastVerifyDiagnostic()->Stage,"verify-complete"))
     LastTable->BootServices->CloseProtocol=NULL;
 }
+#ifdef GU_RELEASE_AMD_MODEL
+static EFI_STATUS EFIAPI AmdAuditLocate(EFI_LOCATE_SEARCH_TYPE search,EFI_GUID *g,VOID *key,UINTN *n,EFI_HANDLE **out) {
+  EFI_STATUS s=Locate(search,g,key,n,out);
+  if(s==EFI_SUCCESS && search==AllHandles) {
+    EFI_HANDLE *p=realloc(*out,(*n+1)*sizeof(**out));Check(p!=NULL,"retained parent handle inventory");
+    *out=p;(*out)[(*n)++]=PARENT_HANDLE;
+  }
+  return s;
+}
+static EFI_STATUS EFIAPI AmdAuditProtocols(EFI_HANDLE h,EFI_GUID ***out,UINTN *n) {
+  if(h!=PARENT_HANDLE)return Protocols(h,out,n);
+  if(AmdFinalBindingFault && ReleaseAudit.Verifying && !strcmp(GuLastVerifyDiagnostic()->Stage,"verify-driver-graph-read")) {
+    LastTable->BootServices->CloseProtocol=NULL;AmdFinalBindingInjected=TRUE;
+  }
+  *out=malloc(2*sizeof(**out));Check(*out!=NULL,"retained parent protocol inventory");
+  *n=2;(*out)[0]=&PciGuid;(*out)[1]=&PathGuid;return EFI_SUCCESS;
+}
+#endif
 static void AuditConsoleSetup(void) {
   Check(sizeof(TestRtxPath)==36,"two PCI nodes in this synthetic fixture");
   memcpy(ControllerPath,TestRtxPath,24);memcpy(ControllerPath+24,"\x7f\xff\x04\x00",4);
@@ -254,6 +293,11 @@ static void AuditConsoleSetup(void) {
   LastTable->BootServices->OpenProtocolInformation=AuditOwners;LastTable->BootServices->FreePool=AuditFree;
   LastTable->BootServices->RaiseTPL=AuditRaise;LastTable->BootServices->RestoreTPL=AuditRestore;
   LastTable->BootServices->DisconnectController=AuditDisconnect;
+#ifdef GU_RELEASE_AMD_MODEL
+  LastTable->BootServices->LocateHandleBuffer=AmdAuditLocate;
+  LastTable->BootServices->ProtocolsPerHandle=AmdAuditProtocols;
+  Check(memcmp(ParentPath,TestAmdPath,18)!=0,"RTX parent resolver cannot capture AMD ancestry");
+#endif
   for(unsigned i=0;i<PassiveReferences;i++)Live.Edges[Live.Count++]=(EDGE){FX_RtxPci,(EFI_HANDLE)(UINTN)(62000+i),NULL,PciGuid,EFI_OPEN_PROTOCOL_GET_PROTOCOL,1};
   if(PreexistingSelf)Live.Edges[Live.Count++]=(EDGE){FX_RtxPci,(VOID *)9999,NULL,PciGuid,EFI_OPEN_PROTOCOL_GET_PROTOCOL,PreexistingSelf};
 }
@@ -287,7 +331,14 @@ static EFI_STATUS AuditedRun(unsigned fault,BOOLEAN reenter) {
   MouseMemory[0x1000]=OriginalEdidTextByte;
 #endif
   TplDepth=TplRaises=TplRestores=0;
-  EFI_STATUS s=RunFull(0);Check(!TplDepth && TplRaises==TplRestores,"whole release restores TPL on every result");return s;
+  EnableCalls=ClaimCalls=CloseCalls=0;Phase=0;FullScenario=0;
+  EFI_STATUS s=RunFull(
+#ifdef GU_RELEASE_AMD_MODEL
+    AmdScenario
+#else
+    0
+#endif
+  );Check(!TplDepth && TplRaises==TplRestores,"whole release restores TPL on every result");return s;
 }
 static VOID FinalReady(BOOLEAN mismatch) {
   ModelMismatch=mismatch;CallbackFaultAt=CallbackFaultKind=0;AfterOverride=0;
@@ -297,7 +348,11 @@ static VOID FinalReady(BOOLEAN mismatch) {
 }
 static VOID FinalRefused(BOOLEAN cold) {
   int writes=EnableCalls,stops=Calls;
-  Check(GuVerifyReleased(LastTable,cold)!=EFI_SUCCESS,"final drift/invalid observation refused");
+  EFI_STATUS status=GuVerifyReleased(LastTable,cold);
+  if(status==EFI_SUCCESS)fprintf(stderr,"unexpected final success: cold=%u skip=%u location=%u attribute-device=%u attr-delta=%llx support-delta=%llx parent-handle=%u restore-drift=%u callback-kind=%u cfg30=%x cfg32=%x\n",
+    cold,(unsigned)FinalSkipByte,LocationFault,AttributeDevice,(unsigned long long)AttributeDelta,
+    (unsigned long long)SupportedDelta,ParentHandleDrift,FinalRestoreDrift,CallbackFaultKind,MockConfig[30],MockConfig[32]);
+  Check(status!=EFI_SUCCESS,"final drift/invalid observation refused");
   Check(!ReleaseAudit.Verifying && !TplDepth && TplRaises==TplRestores,"failed final verification releases guard and TPL");
   Check(writes==EnableCalls && stops==Calls,"final verifier cannot repeat restore or stop drivers");
 }
@@ -476,9 +531,11 @@ static VOID FinalTests(VOID) {
     FinalReady((BOOLEAN)route);ParentConfig[32]&=~0x90000;FinalRefused(FALSE);ParentInitialStatus=0;
     FinalReady((BOOLEAN)route);CallbackFaultAt=ParentReads+1;CallbackFaultKind=6;
     FinalRefused(FALSE);Check(Injected,"foreign graph introduced in typed final callback reaches legacy final guard");
+#ifdef GU_HEADLESS_RESEARCH
     FinalReady((BOOLEAN)route);FinalRestoreDrift=TRUE;FinalRefused(FALSE);
     Check(!strcmp(GuLastVerifyDiagnostic()->Stage,"verify-final-bindings") && GuLastVerifyDiagnostic()->Status==EFI_NOT_READY,
       "post-RestoreTPL method drift reports the actual failure, not verify-complete");
+#endif
     FinalReady((BOOLEAN)route);VerifyReenter=TRUE;
     unsigned nested=VerifyReentries;
     Check(GuVerifyReleased(LastTable,FALSE)==EFI_SUCCESS && VerifyReentries>nested,"legitimate outer verify survives recursive attempts");
@@ -503,6 +560,9 @@ int main(int argc,char **argv) {
   f=fopen(argv[input++],"rb");Check(f && fread(NvMemory,1,sizeof(NvMemory),f)==sizeof(NvMemory) && fgetc(f)==EOF,"exact loaded synthetic NVIDIA driver");fclose(f);
   f=fopen(argv[input++],"rb");Check(f && fread(PromMemory,1,sizeof(PromMemory),f)==sizeof(PromMemory) && fgetc(f)==EOF,"exact synthetic PROM");fclose(f);
   f=fopen(argv[input++],"rb");Check(f && fread(InitialFullConfig,1,sizeof(InitialFullConfig),f)==sizeof(InitialFullConfig) && fgetc(f)==EOF,"exact synthetic config");fclose(f);
+#ifdef GU_RELEASE_AMD_MODEL
+  Check(!memcmp(InitialFullConfig,FixtureRtxConfig,sizeof(FixtureRtxConfig)),"retained graph and complete synthetic config agree");
+#endif
   Check(AuditedRun(0,FALSE)==EFI_SUCCESS,"actual console, NVIDIA Stop, claim, MEMORY restore and final verify succeed");
   Check(EnableCalls==1 && ClaimCalls==1 && CloseCalls==1 && ReleaseAudit.Ready && ReleaseAudit.ReleaseUsed,"real phase integration reached");
   ReadBudget=ParentReads;
@@ -579,6 +639,9 @@ int main(int argc,char **argv) {
     "consistent command3 keeps original300 and never derives a mismatch target");
 #endif
   TopologyTests();EdidTests();OwnershipTests();FinalTests();
+#ifdef GU_RELEASE_AMD_MODEL
+  AmdRetainedAuditTests();
+#endif
   printf("PASS release parent audit: %u parent read boundaries, %d checks; actual production phases, RAM only\n",ReadBudget,Checks);
   return 0;
 }

@@ -28,9 +28,12 @@ def main():
     parser.add_argument('--children', type=int, choices=(1, 2, 3, 4), default=1)
     parser.add_argument('--aggregate', action='store_true', help='Use the separate aggregate GOP frontend')
     parser.add_argument('--iomem', action='store_true', help='Model a coherent command3/cache300 release origin')
+    parser.add_argument('--amd-retained', action='store_true', help='Use the fixed B650M retained AMD frontend')
     args = parser.parse_args()
     if args.aggregate and not args.edid_driver:
         parser.error('The aggregate research frontend requires --edid-driver')
+    if args.amd_retained and (args.aggregate or not args.edid_driver or args.children > 2):
+        parser.error('--amd-retained requires --edid-driver, 1/2 children and no --aggregate')
     if args.iomem and args.mismatch:
         parser.error('--iomem requires a separate run without --mismatch')
     if args.edid_driver and args.children > 2:
@@ -41,17 +44,22 @@ def main():
     if out.exists():
         parser.error('Output must be new')
     out.mkdir(parents=True)
-    paths = subprocess.check_output(['git', 'ls-files', '--', 'internal-boot', 'deps', 'research/profile', 'research/pci-decode'],
+    paths = subprocess.check_output(['git', 'ls-files', '--', 'internal-boot', 'deps', 'research/profile', 'research/pci-decode', 'research/amd-retained'],
                                    cwd=ROOT, text=True).splitlines()
     paths += ['internal-boot/boot/release-parent-audit.h', 'internal-boot/boot/release-ownership-audit.h', 'internal-boot/boot/test_release_parent_audit.c',
               'research/pci-decode/test-release-parent-audit.py', 'internal-boot/boot/test_release_aggregate_audit.c',
-              'research/pci-decode/test_iomem_capture.c']
+              'research/pci-decode/test_iomem_capture.c', 'research/amd-retained/synthetic.py',
+              'internal-boot/boot/test_release_amd_audit.c']
     before = {p: hashlib.sha256((ROOT / p).read_bytes()).hexdigest() for p in sorted(set(paths))}
     data = load('release_audit_data', ROOT / 'research/profile/test_local_topology.py')
     images = load('release_audit_images', ROOT / 'research/profile/test_compatibility.py')
     command = 3 if args.iomem else 2
     text = data.synthetic_capture(bus=0x2b, children=args.children, command=command, no_edid=not args.edid_driver, aggregate=args.aggregate)
-    admitted = data.analyze(text)
+    configuration = data.configuration(command)
+    if args.amd_retained:
+        retained = load('release_audit_amd', ROOT / 'research/amd-retained/synthetic.py')
+        text, configuration = retained.capture(data, children=args.children, command=command)
+    admitted = None if args.amd_retained else data.analyze(text)
     header = out / 'profile-local.h'
     header.write_text('/* Synthetic RAM model, not LOCAL qualification. */\n'
         '#define GU_LOCAL_PROFILE_GENERATOR 1\n#define GU_PROFILE_NAME "SYNTHETIC-PARENT-AUDIT"\n'
@@ -59,18 +67,18 @@ def main():
         hashlib.sha256(bytes(0x24426)).hexdigest() + '"\n' +
         ('#define GU_EDID_TEXT_BYTES 0x700U\n#define GU_EDID_TEXT_SHA256 "' +
          hashlib.sha256(bytes(0x700)).hexdigest() + '"\n' if args.edid_driver else '') +
-        '\n'.join(f'#define {key} {value}' for key, value in admitted['defines']) + '\n', encoding='ascii')
+        '\n'.join(f'#define {key} {value}' for key, value in (admitted['defines'] if admitted else [])) + '\n', encoding='ascii')
     capture = out / 'capture.txt'
     capture.write_text(text, encoding='ascii')
     nv = out / 'nvgop.bin'
-    nv.write_bytes(images.driver_image(0x2be40, 0x280, 0x24426))
+    nv.write_bytes(images.driver_image(0x2b6e0, 0x280, 0x23d6a) if args.amd_retained else images.driver_image(0x2be40, 0x280, 0x24426))
     edid = out / 'edid.bin'
     if args.edid_driver:
-        edid.write_bytes(images.driver_image(0x9000, 0x1000, 0x700))
+        edid.write_bytes(images.driver_image(0x9000, 0x1000, 0x38f8 if args.amd_retained else 0x700))
     prom = out / 'prom.bin'
     prom.write_bytes(bytes(1048576))
     config = out / 'config.bin'
-    config.write_bytes(struct.pack('<64I', *data.configuration(command)))
+    config.write_bytes(struct.pack('<64I', *configuration))
     platform = out / 'platform-config.h'
     platform.write_text('#define GU_INTERNAL_PARTITION_INITIALIZER {0}\n#define GU_WINDOWS_PARTITION_INITIALIZER {0}\n', encoding='ascii')
     fixture = out / 'replay-fixture.h'
@@ -83,7 +91,8 @@ def main():
         return r.stdout.strip()
 
     run('fixture', [sys.executable, '-I', str(ROOT / 'internal-boot/boot/make-console-fixture.py'),
-        str(capture), '--single-rtx', '--no-igpu', *([] if args.edid_driver else ['--no-edid-driver']),
+        str(capture), *(['--amd-retained-multi'] if args.amd_retained else ['--single-rtx', '--no-igpu']),
+        *([] if args.edid_driver else ['--no-edid-driver']),
         *(['--aggregate'] if args.aggregate else []), '--no-edid-child', '--output=' + str(fixture)])
     boot = ROOT / 'internal-boot/boot'
     overlay = out / 'overlay.json'
@@ -91,7 +100,7 @@ def main():
         {'type': 'file', 'name': str(path), 'external-contents': str(source), 'use-external-name': False}
         for path, source in [(boot / 'platform-config.h', platform),
             (ROOT / 'internal-boot/unlock/profile-local.h', header), (boot / 'build/r2/replay-fixture.h', fixture),
-            (boot / 'build/aggregate/replay-fixture.h', fixture)]]}), encoding='utf-8')
+            (boot / 'build/aggregate/replay-fixture.h', fixture), (boot / 'build/console/replay-fixture.h', fixture)]]}), encoding='utf-8')
     flags = ['-std=c11', '-O1', '-Wall', '-Wextra', '-Werror', '-Wno-unused-function',
         '-D_CRT_SECURE_NO_WARNINGS', '-DGU_PROFILE_LOCAL', '-DGU_HEADLESS_RESEARCH',
         '-DGU_SINGLE_RTX_CONSOLE', '-DGU_FULL_UNLOCK', '-DGU_AUTOMATIC_BOOT',
@@ -101,7 +110,10 @@ def main():
         flags.append('-DGU_AGGREGATE_CAPTURE_FIXTURE')
     if args.iomem:
         flags.append('-DGU_RELEASE_IOMEM_MODEL')
-    sources = [boot / ('test_release_aggregate_audit.c' if args.aggregate else 'test_release_parent_audit.c'), boot / 'console-flow.c',
+    if args.amd_retained:
+        flags = [f for f in flags if f not in ('-DGU_PROFILE_LOCAL', '-DGU_HEADLESS_RESEARCH', '-DGU_SINGLE_RTX_CONSOLE')]
+        flags += ['-DGU_PROFILE_B650M_3090FE', '-DGU_AMD_RETAINED_MULTI_DISPLAY']
+    sources = [boot / ('test_release_amd_audit.c' if args.amd_retained else 'test_release_aggregate_audit.c' if args.aggregate else 'test_release_parent_audit.c'), boot / 'console-flow.c',
         *(ROOT / 'internal-boot/unlock' / p for p in ['checks.c', 'sha256.c']),
         *(ROOT / 'research/pci-decode' / p for p in ['efi-capture.c', 'snapshot.c', 'stop-transition.c'])]
     if args.mismatch:
@@ -111,6 +123,16 @@ def main():
     image_arguments = ([str(edid)] if args.edid_driver else []) + [str(nv), str(prom), str(config)]
     result = run('run', [str(exe), *image_arguments])
     print(result)
+    legacy_retained_result = None
+    if args.amd_retained and args.children == 2:
+        legacy_flags = [f for f in flags if f not in ('-DGU_RELEASE_PARENT_AUDIT=1',
+            '-DGU_DS_POST_STOP_CAPTURE=1', '-DGU_RELEASE_IOMEM_MODEL', '-DGU_RELEASE_MISMATCH_RESEARCH=1')]
+        legacy_exe = out / 'legacy-retained.exe'
+        run('legacy-retained-compile', [args.clang, *legacy_flags, str(boot / 'test_amd_retained.c'),
+            str(boot / 'console-flow.c'), str(ROOT / 'internal-boot/unlock/checks.c'),
+            str(ROOT / 'internal-boot/unlock/sha256.c'), '-o', str(legacy_exe)])
+        legacy_retained_result = run('legacy-retained-run', [str(legacy_exe), str(config)])
+        print(legacy_retained_result)
     rejected_images = []
     for label, path, code_offset in [('nvidia', nv, 0x280), *([('edid', edid, 0x1000)] if args.edid_driver else [])]:
         original = path.read_bytes()
@@ -134,11 +156,16 @@ def main():
                 raise RuntimeError('Invalid image must fail at its length/code-pin check: ' + label + '-' + fault)
             rejected_images.append({'image': label, 'fault': fault, 'exit': bad.returncode, 'expected_diagnostic': expected})
     guards = []
-    for name, omit, add, diagnostic in [
+    guard_cases = [
         ('freestanding', [], ['-ffreestanding'], 'hosted research only'),
         ('audit-zero', ['-DGU_RELEASE_PARENT_AUDIT=1'], ['-DGU_RELEASE_PARENT_AUDIT=0'], 'hosted research only'),
         ('missing-capture', ['-DGU_DS_POST_STOP_CAPTURE=1'], [], 'requires the opt-in post-Stop collector'),
-        ('standalone-mismatch', ['-DGU_RELEASE_PARENT_AUDIT=1'], ['-DGU_RELEASE_MISMATCH_RESEARCH=1'], 'requires the host-only parent audit')]:
+        ('standalone-mismatch', ['-DGU_RELEASE_PARENT_AUDIT=1'], ['-DGU_RELEASE_MISMATCH_RESEARCH=1'], 'requires the host-only parent audit')]
+    if args.amd_retained:
+        guard_cases += [
+            ('retained-headless', [], ['-DGU_HEADLESS_RESEARCH'], 'AMD-retained multi-display requires the original B650M'),
+            ('retained-other-profile', ['-DGU_PROFILE_B650M_3090FE'], ['-DGU_PROFILE_B660M_3090TI'], 'AMD-retained multi-display requires the original B650M')]
+    for name, omit, add, diagnostic in guard_cases:
         guard_flags = [f for f in flags if f not in omit and f != '-DGU_RELEASE_MISMATCH_RESEARCH=1']
         guard = subprocess.run([args.clang, *guard_flags, *add, '-fsyntax-only', str(boot / 'full-release.c')],
                                cwd=ROOT, text=True, capture_output=True, timeout=30)
@@ -221,7 +248,8 @@ def main():
         raise RuntimeError('Source changed during test')
     (out / 'summary.json').write_text(json.dumps({'passed': True, 'ram_only': True,
         'efi_executed': False, 'mismatch_admission_enabled': args.mismatch, 'host_only': True,
-        'edid_driver': args.edid_driver, 'display_children': args.children, 'aggregate': args.aggregate, 'iomem': args.iomem, 'result': result,
+        'edid_driver': args.edid_driver, 'display_children': args.children, 'aggregate': args.aggregate, 'iomem': args.iomem,
+        'amd_retained': args.amd_retained, 'result': result, 'legacy_retained_result': legacy_retained_result,
         'rejected_images': rejected_images,
         'synthetic_input_sha256': {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in
             [capture, header, nv, prom, config, platform, fixture, *([edid] if args.edid_driver else [])]},

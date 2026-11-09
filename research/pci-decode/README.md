@@ -664,7 +664,7 @@ cache100/200/300 is refused. Deliberately broken guards must fail assertions.
 
 This remains synthetic research: the non-aggregate model accepts EDID-driver
 configurations with 1–2 display children and no-EDID-driver configurations with 1–4.
-Retained-AMD display variants, broader parent/segment coverage and
+Broader parent/segment coverage and
 a permitted invalid-target EFI link fixture remain outstanding. No uncorrected
 physical Stop transition, new hardware support, ready
 package or authorization to install/execute follows from these RAM results.
@@ -778,3 +778,23 @@ IO+MEM pure predicate and read-only collector matrix over parent depths and
 segments. These synthetic histories do not demonstrate an actual driver Stop
 or authorize EFI activation. Default builders/admission and the hosted-only
 release bridge restriction are unchanged.
+
+For the fixed original B650M retained AMD frontend, add
+`--amd-retained --edid-driver --children 1` or `--children 2`, with either
+`--iomem` or the separate command2 `--mismatch` run. The audit-only command2
+run still refuses cache300 before console release. This adapter keeps the fixed
+B650M guard: it is not LOCAL admission for another motherboard or display GPU.
+
+Its graph and full configuration are generated synthetic RAM inputs, with
+separate AMD GOP/text/shared EDID relations and the fixed AMD bus12/RTX bus1
+identities. Parent resolution/inventory is independent; AMD path resolution
+delegates to the original fixture. One/two RTX child paths, precise claim cleanup,
+typed parent observations and existing final GPU status policy remain checked.
+AMD EDID owner/count, framebuffer, geometry or path changes after the first EDID
+Stop must prevent further Stop/claim/restore. Late AMD input/display or final
+graph-callback binding drift must block handoff. Nonheadless verification has no
+outer RestoreTPL callback, so its final-binding fault is injected in the last
+parent protocol inventory of the final graph scan rather than in that headless
+callback. Two-child runs also replay the original retained-AMD fixture with the
+research bridge disabled. No current hardware capture, physical support expansion
+or automatic-boot qualification follows from these synthetic observations.

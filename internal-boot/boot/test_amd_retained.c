@@ -52,7 +52,11 @@ static UINTN AmdEdges(VOID) {
   UINTN count=0;for(UINTN i=0;i<Live.Count;i++)if(Live.Edges[i].Handle==FX_Amd)count++;
   return count;
 }
+#ifdef GU_RELEASE_AMD_MODEL
+int LegacyAmdRetainedMain(int argc,char **argv) {
+#else
 int main(int argc,char **argv) {
+#endif
   Check(argc==2,"need retained historical PCI config for capability-chain model");
   FILE *file=fopen(argv[1],"rb");
   Check(file && fread(InitialFullConfig,1,sizeof(InitialFullConfig),file)==sizeof(InitialFullConfig) && fgetc(file)==EOF,
