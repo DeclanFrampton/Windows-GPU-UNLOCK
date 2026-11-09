@@ -6,6 +6,7 @@
 #ifdef GU_DS_POST_STOP_CAPTURE
 #include "stop-transition.h"
 static GU_DS_SNAPSHOT ActiveBefore;
+typedef enum {CaptureOrdinary,CaptureMismatch,CaptureReleaseOrigin,CaptureIoMemAfterStop} CAPTURE_MODE;
 #endif
 
 typedef struct {
@@ -80,7 +81,7 @@ static EFI_STATUS ReadOne(WORK *w,UINTN index,BOOLEAN first,GU_DS_DEVICE *out) {
 }
 static EFI_STATUS Capture(GU_DS_CAPTURE *c,EFI_BOOT_SERVICES *boot,const GU_DS_CAPTURE_TARGET *target
 #ifdef GU_DS_POST_STOP_CAPTURE
-  ,const GU_DS_SNAPSHOT *before,BOOLEAN releasedMismatch
+  ,const GU_DS_SNAPSHOT *before,CAPTURE_MODE mode
 #endif
 ) {
   if(!c || (boot && Overlap(c,sizeof(*c),boot,sizeof(*boot))) ||
@@ -101,9 +102,11 @@ static EFI_STATUS Capture(GU_DS_CAPTURE *c,EFI_BOOT_SERVICES *boot,const GU_DS_C
 #ifdef GU_DS_POST_STOP_CAPTURE
   if(before) {
     ActiveBefore=*before;
-    if(releasedMismatch) {
+    if(mode==CaptureMismatch) {
       if(!GuDecodeSnapshotValid(&ActiveBefore) || ActiveBefore.Gpu.Attributes!=(GU_DS_IO|GU_DS_MEMORY) ||
          !(ActiveBefore.Gpu.Supported&GU_DS_MEMORY))goto done;
+    } else if(mode==CaptureIoMemAfterStop) {
+      if(GuDsIoMemStopTransition(&ActiveBefore,&ActiveBefore)!=GU_DS_STOP_UNCHANGED)goto done;
     } else if(GuDsStopTransition(&ActiveBefore,&ActiveBefore)!=GU_DS_STOP_UNCHANGED)goto done;
   }
 #endif
@@ -127,10 +130,14 @@ static EFI_STATUS Capture(GU_DS_CAPTURE *c,EFI_BOOT_SERVICES *boot,const GU_DS_C
     if(!Caps(w))goto done;
 #ifdef GU_DS_POST_STOP_CAPTURE
     if(before) {
-      if(releasedMismatch) {
+      if(mode==CaptureMismatch) {
         GU_DS_RELEASE_PLAN plan;
         if(!GuDsPlanReleasedMismatch(&ActiveBefore,v,&plan))goto done;
+      } else if(mode==CaptureIoMemAfterStop) {
+        if(GuDsIoMemStopTransition(&ActiveBefore,v)==GU_DS_STOP_REFUSED)goto done;
       } else if(GuDsStopTransition(&ActiveBefore,v)==GU_DS_STOP_REFUSED)goto done;
+    } else if(mode==CaptureReleaseOrigin) {
+      if(!GuDsReleaseSnapshotValid(v))goto done;
     } else
 #endif
     if(!GuDecodeSnapshotValid(v))goto done;
@@ -150,7 +157,7 @@ done:
 EFI_STATUS GuDsEfiCapture(GU_DS_CAPTURE *c,EFI_BOOT_SERVICES *boot,const GU_DS_CAPTURE_TARGET *target) {
   return Capture(c,boot,target
 #ifdef GU_DS_POST_STOP_CAPTURE
-    ,NULL,FALSE
+    ,NULL,CaptureOrdinary
 #endif
   );
 }
@@ -158,11 +165,20 @@ EFI_STATUS GuDsEfiCapture(GU_DS_CAPTURE *c,EFI_BOOT_SERVICES *boot,const GU_DS_C
 EFI_STATUS GuDsEfiCaptureAfterStop(GU_DS_CAPTURE *c,EFI_BOOT_SERVICES *boot,
   const GU_DS_CAPTURE_TARGET *target,const GU_DS_SNAPSHOT *before) {
   if(!before)return EFI_INVALID_PARAMETER;
-  return Capture(c,boot,target,before,FALSE);
+  return Capture(c,boot,target,before,CaptureOrdinary);
 }
 EFI_STATUS GuDsEfiCaptureReleasedMismatch(GU_DS_CAPTURE *c,EFI_BOOT_SERVICES *boot,
   const GU_DS_CAPTURE_TARGET *target,const GU_DS_SNAPSHOT *before) {
   if(!before)return EFI_INVALID_PARAMETER;
-  return Capture(c,boot,target,before,TRUE);
+  return Capture(c,boot,target,before,CaptureMismatch);
+}
+EFI_STATUS GuDsEfiCaptureReleaseOrigin(GU_DS_CAPTURE *c,EFI_BOOT_SERVICES *boot,
+  const GU_DS_CAPTURE_TARGET *target) {
+  return Capture(c,boot,target,NULL,CaptureReleaseOrigin);
+}
+EFI_STATUS GuDsEfiCaptureIoMemAfterStop(GU_DS_CAPTURE *c,EFI_BOOT_SERVICES *boot,
+  const GU_DS_CAPTURE_TARGET *target,const GU_DS_SNAPSHOT *before) {
+  if(!before)return EFI_INVALID_PARAMETER;
+  return Capture(c,boot,target,before,CaptureIoMemAfterStop);
 }
 #endif

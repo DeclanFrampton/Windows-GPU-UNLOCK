@@ -3,7 +3,7 @@
 #include "snapshot.h"
 
 typedef enum {
-  GU_DS_STOP_REFUSED,GU_DS_STOP_UNCHANGED,GU_DS_STOP_MEMORY_OFF
+  GU_DS_STOP_REFUSED,GU_DS_STOP_UNCHANGED,GU_DS_STOP_MEMORY_OFF,GU_DS_STOP_DECODE_REDUCED
 } GU_DS_STOP_RESULT;
 
 /* Compare a corrected, complete pre-Stop baseline with a complete post-Stop
@@ -12,6 +12,12 @@ typedef enum {
  * Supplied snapshots must remain immutable throughout this pure call. */
 GU_DS_STOP_RESULT GuDsStopTransition(const GU_DS_SNAPSHOT *Before,
                                     const GU_DS_SNAPSHOT *After);
+/* Coherent raw3/cache300 origin only. Observe unchanged or a coherent subset of
+ * IO/MEM cleared; all other GPU fields and every parent must remain exact.
+ * The restore target is the original observation, never a correction to raw2.
+ * Observation alone does not authorize any write or establish Stop occurred. */
+GU_DS_STOP_RESULT GuDsIoMemStopTransition(const GU_DS_SNAPSHOT *Before,
+                                         const GU_DS_SNAPSHOT *After);
 
 /* A derived target, deliberately not a complete/observed snapshot. The actual
  * Before300 and After0 snapshots remain separate mandatory inputs at every use.

@@ -16,6 +16,15 @@ static const char *EdidInput,*NvInput,*PromInput,*ConfigInput;
 static unsigned EffectFault,EffectAt,EdidFault,EdidSelected,OwnerFault,OwnerQueries;
 static BOOLEAN Injected,StatusLayout;
 static BOOLEAN LateGraphFault,EnableIntentSeen,LateGraphInjected;
+static unsigned StopRemaining;
+static BOOLEAN LateSubsetFault,LateSubsetInjected;
+#ifdef GU_RELEASE_IOMEM_MODEL
+#define MODEL_COMMAND 3U
+#define MODEL_TARGET (GU_DS_IO|GU_DS_MEMORY)
+#else
+#define MODEL_COMMAND 2U
+#define MODEL_TARGET GU_DS_MEMORY
+#endif
 static EFI_STATUS AuditLog(VOID *context,const char *event,EFI_STATUS status) {
   if(!strcmp(event,"pci-decode-restore-intent-io-mem-only"))EnableIntentSeen=TRUE;
   return Log(context,event,status);
@@ -61,6 +70,9 @@ static EFI_STATUS EFIAPI AuditLocation(EFI_PCI_IO_PROTOCOL *io,UINTN *s,UINTN *b
   *s=GU_TARGET_SEGMENT;*b=0;*d=BridgePath[17];*f=BridgePath[16];return EFI_SUCCESS;
 }
 static EFI_STATUS EFIAPI AuditRead(EFI_PCI_IO_PROTOCOL *io,EFI_PCI_IO_PROTOCOL_WIDTH w,UINT32 at,UINTN count,VOID *out) {
+  if(LateSubsetFault && ReleaseAudit.AfterReady && Full.Owned && !LateSubsetInjected) {
+    Config[1]|=1U;Attributes|=GU_DS_IO;LateSubsetInjected=TRUE;
+  }
   if(LateGraphFault && Full.Owned && EnableIntentSeen && !LateGraphInjected) {
     Edge(PROTECTED,COMBO,PROTECTED,&PrivateGuid,EFI_OPEN_PROTOCOL_BY_DRIVER);LateGraphInjected=TRUE;
   }
@@ -85,7 +97,8 @@ static EFI_STATUS EFIAPI AuditRead(EFI_PCI_IO_PROTOCOL *io,EFI_PCI_IO_PROTOCOL_W
 }
 static EFI_STATUS EFIAPI AuditAttr(EFI_PCI_IO_PROTOCOL *io,EFI_PCI_IO_PROTOCOL_ATTRIBUTE_OPERATION op,UINT64 mask,UINT64 *out) {
   if(io!=&BridgeIo) {
-    if(op==EfiPciIoAttributeOperationEnable)Check(mask==GU_DS_MEMORY && ReleaseAudit.HeldQuery && SelfRefs()==1,"only MEMORY under precise held claim");
+    UINT64 removed=MODEL_TARGET&~((StopRemaining&1?GU_DS_IO:0)|(StopRemaining&2?GU_DS_MEMORY:0));
+    if(op==EfiPciIoAttributeOperationEnable)Check(mask==removed && ReleaseAudit.HeldQuery && SelfRefs()==1,"only missing original decode under precise held claim");
     return Attr(io,op,mask,out);
   }
   Check(!mask && out && (op==EfiPciIoAttributeOperationGet || op==EfiPciIoAttributeOperationSupported),"parent never written");
@@ -133,6 +146,9 @@ static EFI_STATUS EFIAPI AuditFree(VOID *p) {
 static EFI_STATUS EFIAPI AuditDisconnect(EFI_HANDLE h,EFI_HANDLE agent,EFI_HANDLE child) {
   BOOLEAN inject=EdidFault && agent==H(EDID) && EdidCalls+1==EdidSelected;
   EFI_STATUS s=Disconnect(h,agent,child);
+  if(agent==H(NV) && s==EFI_SUCCESS && StopRemaining) {
+    Config[1]|=StopRemaining;Attributes|=(StopRemaining&1?GU_DS_IO:0)|(StopRemaining&2?GU_DS_MEMORY:0);
+  }
   if(inject) {
     if(EdidFault==1)return EFI_DEVICE_ERROR;if(EdidFault==2)return EFI_WARN_UNKNOWN_GLYPH;
     if(EdidFault==3)BridgeConfig[63]^=1;
@@ -159,12 +175,12 @@ static void InstallParent(void) {
 static EFI_STATUS Run(unsigned mode,BOOLEAN mismatch,unsigned fault,BOOLEAN reenter) {
   /* Each call represents a new image, not an API for retrying a live release. */
   ReleaseAudit=(GU_RELEASE_AUDIT_STATE){0};Mode=mode;FaultRead=fault;Reenter=reenter;
-  BridgeReads=TplDepth=TplRaises=TplRestores=OwnerQueries=0;Injected=FALSE;EnableIntentSeen=LateGraphInjected=FALSE;
+  BridgeReads=TplDepth=TplRaises=TplRestores=OwnerQueries=0;Injected=FALSE;EnableIntentSeen=LateGraphInjected=LateSubsetInjected=FALSE;
   Setup();InstallParent();LoadExact(EdidInput,EdidMemory,sizeof(EdidMemory));LoadExact(NvInput,NvMemory,sizeof(NvMemory));LoadExact(PromInput,PromMemory,sizeof(PromMemory));
   LoadExact(ConfigInput,Config,sizeof(Config));Check(!memcmp(Config,FixtureFullRtxConfig,sizeof(Config)),"input config matches generated complete aggregate capture");
-  Check((Config[1]&0xffff)==2,"aggregate typed baseline uses raw MEMORY-only command2");
+  Check((Config[1]&0xffff)==MODEL_COMMAND,"aggregate typed baseline uses the explicit original command");
   if(StatusLayout){Config[30]=0x0012b410;Config[32]=0x00092930;} /* Explicit synthetic post-child policy vector. */
-  Attributes=mismatch?GU_DS_IO|GU_DS_MEMORY:GU_DS_MEMORY;
+  Attributes=mismatch?GU_DS_IO|GU_DS_MEMORY:MODEL_TARGET;
   if(ForeignBefore)Edge(PCI,OBSERVER,0,&PciGuid,EFI_OPEN_PROTOCOL_GET_PROTOCOL);
   EFI_STATUS s=GuPrepareConsole(&Table,AuditLog,NULL);
   Check(!Calls,"aggregate prepare performs zero Disconnect calls");
@@ -197,8 +213,12 @@ int main(int argc,char **argv) {
       EFI_STATUS s=Run(mode,(BOOLEAN)route,0,FALSE);
       if(!mode || mode==6) {
         Check(s==EFI_SUCCESS && Calls==TEST_CHILDREN+1 && EdidCalls==TEST_CHILDREN && NvCalls==1,"actual aggregate release preserves both normal and surviving virtual GOP routes");
-        Check(Enables==1 && Claims==1 && Closes==1 && !SelfRefs() && !ReleaseAudit.ClaimMayRemain && Attributes==GU_DS_MEMORY && (Config[1]&7)==2,"MEMORY-only restore and observed cleanup");
-        Check(Full.Attributes==(route?GU_DS_IO|GU_DS_MEMORY:GU_DS_MEMORY) && Full.TargetAttributes==GU_DS_MEMORY,"observed origin retained separately from target");
+        Check(Enables==1 && Claims==1 && Closes==1 && !SelfRefs() && !ReleaseAudit.ClaimMayRemain && Attributes==MODEL_TARGET && (Config[1]&7)==MODEL_COMMAND,"original decode restore and observed cleanup");
+        Check(Full.Attributes==(route?GU_DS_IO|GU_DS_MEMORY:MODEL_TARGET) && Full.TargetAttributes==MODEL_TARGET,"observed origin retained separately from target");
+#ifdef GU_RELEASE_IOMEM_MODEL
+        Check(ReleaseAudit.IoMem && !ReleaseAudit.Mismatch && !ReleaseAudit.PlanReady && ReleaseAudit.AfterReady,
+          "consistent command3 never enters mismatch correction");
+#endif
         VOID *survivor=NULL;EFI_STATUS present=AuditHandle(H(AGG),&GopGuid,&survivor);
         if(mode==6)Check(present==EFI_SUCCESS && survivor==&Aggregate && !AggregateMode.FrameBufferBase && !AggregateMode.FrameBufferSize,
           "reviewed virtual aggregate GOP actually survives without a framebuffer");
@@ -277,9 +297,22 @@ int main(int argc,char **argv) {
     BridgeConfig[32]&=~0x90000;Check(GuVerifyReleased(&Table,FALSE)!=EFI_SUCCESS,"GPU status-clear policy never applies to aggregate parent");
     StatusLayout=FALSE;
   }
-#ifndef GU_RELEASE_MISMATCH_RESEARCH
+#if !defined(GU_RELEASE_MISMATCH_RESEARCH) && !defined(GU_RELEASE_IOMEM_MODEL)
   Check(Run(0,TRUE,0,FALSE)==EFI_NOT_READY && !Calls && !Claims && !Enables,
     "aggregate audit-only refuses cache300 before any driver release");
+#endif
+#ifdef GU_RELEASE_IOMEM_MODEL
+  for(unsigned remaining=1;remaining<=3;remaining++) {
+    StopRemaining=remaining;
+    Check(Run(0,FALSE,0,FALSE)==EFI_SUCCESS && Attributes==MODEL_TARGET && (Config[1]&7U)==3U,
+      "actual source restores each coherent IO/MEM subset to original300");
+    Check(Enables==(remaining==3?0U:1U) && Claims==1 && Closes==1 && !SelfRefs(),"zero missing mask makes no Enable call while cleanup remains precise");
+    Check(GuVerifyReleased(&Table,FALSE)==EFI_SUCCESS,"partial decode restore passes actual post-child verification");
+  }
+  StopRemaining=0;LateSubsetFault=TRUE;
+  Check(Run(0,FALSE,0,FALSE)!=EFI_SUCCESS && LateSubsetInjected && !Enables && !SelfRefs(),
+    "a different coherent subset after the first post-Stop observation cannot authorize Enable");
+  LateSubsetFault=FALSE;
 #endif
   printf("PASS aggregate release audit: %u children, %u parent read budget, %u checks; actual production phases, RAM only\n",TEST_CHILDREN,readBudget,Checks);
   return 0;

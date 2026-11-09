@@ -664,7 +664,7 @@ cache100/200/300 is refused. Deliberately broken guards must fail assertions.
 
 This remains synthetic research: the non-aggregate model accepts EDID-driver
 configurations with 1–2 display children and no-EDID-driver configurations with 1–4.
-Retained-AMD display variants, consistent IO+MEM command3 histories, broader parent/segment coverage and
+Retained-AMD display variants, broader parent/segment coverage and
 a permitted invalid-target EFI link fixture remain outstanding. No uncorrected
 physical Stop transition, new hardware support, ready
 package or authorization to install/execute follows from these RAM results.
@@ -733,7 +733,7 @@ failures. Duplicate/foreign/malformed child topology is refused before EDID or
 NVIDIA release. None of these synthetic inputs constitute hardware evidence or
 LOCAL qualification.
 
-For the aggregate GOP frontend, add `--aggregate --edid-driver --children 1`
+For the default command2 aggregate GOP model, add `--aggregate --edid-driver --children 1`
 or `--children 2`. It uses a separate adapter around the existing aggregate
 production-path fixture. Preparation must make zero Disconnect calls; release
 must stop exactly the selected EDID children and then NVIDIA, restore MEMORY
@@ -751,3 +751,30 @@ parent/effect-dispatch drift, per-child EDID partial effects, remaining-child
 path/binding/code changes, late protected-graph changes before Enable, partial
 Open/Close, borrowed buffers, recursion and post-child parent/status failures.
 These are RAM models, not physical aggregate firmware evidence.
+
+The separate `--iomem` run models a coherent raw command3/cache300 release
+origin. It may be combined with `--mutations`, and supports aggregate EDID1–2,
+nonaggregate EDID1–2 and nonaggregate no-EDID1–4 children. Do not combine it with
+`--mismatch`: raw2/cache300 mismatch still derives a MEMORY-only target200;
+coherent command3 retains the original IO+MEM target300 and never enters that
+correction route. The ordinary correction validator/collector remains raw2-only.
+
+`GuDsReleaseSnapshotValid` shares structural checks while separately requiring
+raw3/cache300 and both IO/MEM capabilities for that origin. Opt-in release-origin
+and IO+MEM post-Stop collectors retain the same frozen inputs, single-use private
+workspace, reentry refusal, exact bindings and two complete matching scans.
+`GuDsIoMemStopTransition` observes only coherent raw3→0/1/2/3 with corresponding
+cache0/100/200/300; other GPU configuration/identity/support and every parent
+remain exact. The bridge freezes its first post-Stop snapshot and rejects a later
+different coherent subset. Existing restore-mask checks enable only originally
+present missing bits; no Enable occurs for a zero missing mask. Original300 and
+final target300 remain distinct fields even though their values agree.
+
+The aggregate actual-source model exercises all four post-Stop subsets, exact
+restore masks, the zero-mask path and later-subset drift before Enable. The
+nonaggregate model retains its EDID/topology/ownership/final-observation fault
+suites for command3. `test-post-stop-capture.py --mutations` also compiles the
+IO+MEM pure predicate and read-only collector matrix over parent depths and
+segments. These synthetic histories do not demonstrate an actual driver Stop
+or authorize EFI activation. Default builders/admission and the hosted-only
+release bridge restriction are unchanged.

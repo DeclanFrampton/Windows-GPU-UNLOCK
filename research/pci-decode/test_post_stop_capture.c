@@ -18,6 +18,10 @@ static void PostHook(void) {
       "ordinary entry shares post entry workspace guard");
     Check(GuDsEfiCaptureReleasedMismatch(&fresh,&M->Boot,&Target,&Before)==EFI_ALREADY_STARTED && !fresh.Used,
       "released-mismatch entry shares the same workspace guard");
+    Check(GuDsEfiCaptureReleaseOrigin(&fresh,&M->Boot,&Target)==EFI_ALREADY_STARTED && !fresh.Used,
+      "release-origin entry shares the workspace guard");
+    Check(GuDsEfiCaptureIoMemAfterStop(&fresh,&M->Boot,&Target,&Before)==EFI_ALREADY_STARTED && !fresh.Used,
+      "coherent IO+MEM entry shares the workspace guard");
     Check(M->Calls==calls,"cross entry reentry makes no service call");
   }
   if(FreezeBefore && !BeforeFrozen){BeforeFrozen=TRUE;Before.Gpu.Config[63]^=1;}
@@ -53,7 +57,11 @@ static void PostRefuse(MODEL *m) {
   PostSetup(m,2,0,TRUE);
   Check(PostCollect(m)==EFI_SUCCESS,"separate normal session after failure releases guard");ReadOnly(m);
 }
+#ifdef GU_DS_IOMEM_TEST
+int legacy_post_capture_main(void) {
+#else
 int main(void) {
+#endif
   Check(capture_fixture_main()==0,"ordinary capture suite unchanged in opt-in build");
   MODEL m;
   for(unsigned p=1;p<=15;p++)for(unsigned s=0;s<3;s++)for(unsigned off=0;off<2;off++) {

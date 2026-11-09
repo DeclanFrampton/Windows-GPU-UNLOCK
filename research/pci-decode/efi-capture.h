@@ -43,4 +43,14 @@ EFI_STATUS GuDsEfiCaptureAfterStop(GU_DS_CAPTURE *Context,EFI_BOOT_SERVICES *Boo
  * No Stop or restoration is performed or qualified by this API. */
 EFI_STATUS GuDsEfiCaptureReleasedMismatch(GU_DS_CAPTURE *Context,EFI_BOOT_SERVICES *Boot,
   const GU_DS_CAPTURE_TARGET *Target,const GU_DS_SNAPSHOT *Before);
+/* Release-only baseline; ordinary correction capture remains raw2-only. Both
+ * coherent raw3/cache300 and the prior raw2 envelope are observational inputs.
+ * Exact two-scan, frozen binding, single-use and alias rules remain unchanged. */
+EFI_STATUS GuDsEfiCaptureReleaseOrigin(GU_DS_CAPTURE *Context,EFI_BOOT_SERVICES *Boot,
+  const GU_DS_CAPTURE_TARGET *Target);
+/* Separate coherent IO+MEM origin; never interprets raw2/cache300 as raw3.
+ * Before must come from the same pinned target and remain independently frozen.
+ * Only an unchanged or coherently reduced IO/MEM subset is observed. */
+EFI_STATUS GuDsEfiCaptureIoMemAfterStop(GU_DS_CAPTURE *Context,EFI_BOOT_SERVICES *Boot,
+  const GU_DS_CAPTURE_TARGET *Target,const GU_DS_SNAPSHOT *Before);
 #endif

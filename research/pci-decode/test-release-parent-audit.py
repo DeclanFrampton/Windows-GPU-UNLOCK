@@ -27,13 +27,16 @@ def main():
     parser.add_argument('--edid-driver', action='store_true', help='Replay the actual sequential EDID release stage')
     parser.add_argument('--children', type=int, choices=(1, 2, 3, 4), default=1)
     parser.add_argument('--aggregate', action='store_true', help='Use the separate aggregate GOP frontend')
+    parser.add_argument('--iomem', action='store_true', help='Model a coherent command3/cache300 release origin')
     args = parser.parse_args()
     if args.aggregate and not args.edid_driver:
         parser.error('The aggregate research frontend requires --edid-driver')
+    if args.iomem and args.mismatch:
+        parser.error('--iomem requires a separate run without --mismatch')
     if args.edid_driver and args.children > 2:
         parser.error('The existing EDID-driver policy allows at most two display children')
-    if args.mutations and not args.mismatch:
-        parser.error('--mutations requires --mismatch')
+    if args.mutations and not (args.mismatch or args.iomem):
+        parser.error('--mutations requires --mismatch or --iomem')
     out = args.output.resolve()
     if out.exists():
         parser.error('Output must be new')
@@ -41,11 +44,13 @@ def main():
     paths = subprocess.check_output(['git', 'ls-files', '--', 'internal-boot', 'deps', 'research/profile', 'research/pci-decode'],
                                    cwd=ROOT, text=True).splitlines()
     paths += ['internal-boot/boot/release-parent-audit.h', 'internal-boot/boot/release-ownership-audit.h', 'internal-boot/boot/test_release_parent_audit.c',
-              'research/pci-decode/test-release-parent-audit.py', 'internal-boot/boot/test_release_aggregate_audit.c']
+              'research/pci-decode/test-release-parent-audit.py', 'internal-boot/boot/test_release_aggregate_audit.c',
+              'research/pci-decode/test_iomem_capture.c']
     before = {p: hashlib.sha256((ROOT / p).read_bytes()).hexdigest() for p in sorted(set(paths))}
     data = load('release_audit_data', ROOT / 'research/profile/test_local_topology.py')
     images = load('release_audit_images', ROOT / 'research/profile/test_compatibility.py')
-    text = data.synthetic_capture(bus=0x2b, children=args.children, command=2, no_edid=not args.edid_driver, aggregate=args.aggregate)
+    command = 3 if args.iomem else 2
+    text = data.synthetic_capture(bus=0x2b, children=args.children, command=command, no_edid=not args.edid_driver, aggregate=args.aggregate)
     admitted = data.analyze(text)
     header = out / 'profile-local.h'
     header.write_text('/* Synthetic RAM model, not LOCAL qualification. */\n'
@@ -65,7 +70,7 @@ def main():
     prom = out / 'prom.bin'
     prom.write_bytes(bytes(1048576))
     config = out / 'config.bin'
-    config.write_bytes(struct.pack('<64I', *data.configuration(2)))
+    config.write_bytes(struct.pack('<64I', *data.configuration(command)))
     platform = out / 'platform-config.h'
     platform.write_text('#define GU_INTERNAL_PARTITION_INITIALIZER {0}\n#define GU_WINDOWS_PARTITION_INITIALIZER {0}\n', encoding='ascii')
     fixture = out / 'replay-fixture.h'
@@ -94,6 +99,8 @@ def main():
         '-I' + str(ROOT / 'deps/edk2/MdePkg/Include'), '-I' + str(ROOT / 'deps/edk2/MdePkg/Include/X64')]
     if args.aggregate:
         flags.append('-DGU_AGGREGATE_CAPTURE_FIXTURE')
+    if args.iomem:
+        flags.append('-DGU_RELEASE_IOMEM_MODEL')
     sources = [boot / ('test_release_aggregate_audit.c' if args.aggregate else 'test_release_parent_audit.c'), boot / 'console-flow.c',
         *(ROOT / 'internal-boot/unlock' / p for p in ['checks.c', 'sha256.c']),
         *(ROOT / 'research/pci-decode' / p for p in ['efi-capture.c', 'snapshot.c', 'stop-transition.c'])]
@@ -141,8 +148,6 @@ def main():
         guards.append(name)
     mutants = []
     if args.mutations:
-        if not args.mismatch:
-            parser.error('--mutations requires --mismatch')
         flow = boot / 'full-release.c'
         history = boot / 'release-parent-audit.h'
         ownership = boot / 'release-ownership-audit.h'
@@ -170,7 +175,7 @@ def main():
                 'if(ReleaseAudit.Verifying)return EFI_ALREADY_STARTED;',
                 'if(FALSE)return EFI_ALREADY_STARTED;'),
             'overwrite-observed-attributes': (flow, 'Full.TargetAttributes=targetAttributes;',
-                'Full.Attributes=targetAttributes;Full.TargetAttributes=targetAttributes;'),
+                'Full.Attributes=targetAttributes&~GU_DS_IO;Full.TargetAttributes=targetAttributes;'),
             'skip-effect-binding': (history, 'a->Boot->OpenProtocol!=a->Open', 'FALSE'),
             'skip-active-release-guard': (flow, 'ReleaseAudit.Active || ReleaseAudit.ReleaseUsed', 'ReleaseAudit.ReleaseUsed'),
             'skip-pre-nv-audit': (flow, 'if(s==EFI_SUCCESS)s=ReleaseAuditObserve(FALSE);', '(void)0;'),
@@ -178,6 +183,18 @@ def main():
                 'if(s==EFI_SUCCESS && !FullExpected(&claimGraph,4))s=EFI_NOT_READY;\n#ifdef GU_RELEASE_PARENT_AUDIT\n  if(s==EFI_SUCCESS && !ReleaseAuditBound())s=EFI_NOT_READY;\n  if(s==EFI_SUCCESS)s=AuditOwnershipEnable(needed);',
                 'if(FALSE)s=EFI_NOT_READY;\n#ifdef GU_RELEASE_PARENT_AUDIT\n  if(s==EFI_SUCCESS && !ReleaseAuditBound())s=EFI_NOT_READY;\n  if(s==EFI_SUCCESS)s=AuditOwnershipEnable(needed);'),
         }
+        if args.iomem:
+            changes.update({
+                'misclassify-consistent-iomem': (history,
+                    'a->IoMem=(before->Snapshot.Gpu.Config[1]&0xffffU)==3U;', 'a->IoMem=FALSE;'),
+                'drop-original-io-target': (history,
+                    'if(!a->Mismatch){*target=observed;return EFI_SUCCESS;}',
+                    'if(!a->Mismatch){*target=observed&~GU_DS_IO;return EFI_SUCCESS;}'),
+            })
+            if args.aggregate:
+                changes['skip-frozen-iomem-post-state'] = (history,
+                    'if(!GuDecodeSnapshotMatches(&current->Snapshot,&a->Captures[a->ActualAfterIndex].Snapshot,FALSE))',
+                    'if(FALSE)')
         roots = json.loads(overlay.read_text(encoding='utf-8'))['roots']
         for name, (source, old, new) in changes.items():
             text_source = source.read_text(encoding='utf-8')
@@ -204,7 +221,7 @@ def main():
         raise RuntimeError('Source changed during test')
     (out / 'summary.json').write_text(json.dumps({'passed': True, 'ram_only': True,
         'efi_executed': False, 'mismatch_admission_enabled': args.mismatch, 'host_only': True,
-        'edid_driver': args.edid_driver, 'display_children': args.children, 'aggregate': args.aggregate, 'result': result,
+        'edid_driver': args.edid_driver, 'display_children': args.children, 'aggregate': args.aggregate, 'iomem': args.iomem, 'result': result,
         'rejected_images': rejected_images,
         'synthetic_input_sha256': {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in
             [capture, header, nv, prom, config, platform, fixture, *([edid] if args.edid_driver else [])]},

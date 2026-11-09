@@ -868,7 +868,7 @@ static EFI_STATUS ReleaseAuditFinal(BOOLEAN checkCold) {
      !Bytes(Full.Config,before->Gpu.Config,sizeof(Full.Config)) || !ReleaseAuditBound() ||
      a->Next>=GU_RELEASE_AUDIT_CAPTURES)return ReleaseAuditStatus(EFI_NOT_READY);
   GU_DS_CAPTURE *current=&a->Captures[a->Next++];
-  EFI_STATUS s=GuDsEfiCapture(current,a->Boot,&a->Target);
+  EFI_STATUS s=GuDsEfiCaptureReleaseOrigin(current,a->Boot,&a->Target);
   /* Keep originals/target distinct; do not manufacture an observed snapshot
    * with cleared bits or weaken the shared collector's snapshot predicates. */
   if(s!=EFI_SUCCESS || !ReleaseAuditBound() || Full.Attributes!=before->Gpu.Attributes ||

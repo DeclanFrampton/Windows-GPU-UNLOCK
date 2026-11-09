@@ -212,7 +212,8 @@ static EFI_STATUS EFIAPI AuditRead(EFI_PCI_IO_PROTOCOL *io,EFI_PCI_IO_PROTOCOL_W
 static EFI_STATUS EFIAPI AuditAttributes(EFI_PCI_IO_PROTOCOL *io,EFI_PCI_IO_PROTOCOL_ATTRIBUTE_OPERATION op,UINT64 mask,UINT64 *out) {
   if(io!=&ParentIo) {
     if(op==EfiPciIoAttributeOperationEnable) {
-      Check(mask==EFI_PCI_IO_ATTRIBUTE_MEMORY,"only MEMORY restored");
+      UINT64 expected=(InitialFullConfig[1]&1U?GU_DS_IO:0)|GU_DS_MEMORY;
+      Check(mask==expected,"only original raw decode restored");
       Check(ReleaseAudit.HeldQuery!=NULL && SelfReferences()==1,"final exact owner proof retained until Enable");
     }
     EFI_STATUS s=Attributes(io,op,mask,out);
@@ -245,7 +246,8 @@ static void AuditConsoleSetup(void) {
   ParentConfig[2]=0x06040000;ParentConfig[3]=0x00010000;ParentConfig[6]=(GU_TARGET_BUS<<16)|(GU_TARGET_BUS<<8);
   ParentConfig[32]=ParentInitialStatus;
   ParentIo=(EFI_PCI_IO_PROTOCOL){0};ParentIo.GetLocation=AuditLocation;ParentIo.Pci.Read=AuditRead;ParentIo.Attributes=AuditAttributes;
-  memcpy(MockConfig,InitialFullConfig,sizeof(MockConfig));MockAttributes=ModelMismatch?GU_DS_IO|GU_DS_MEMORY:GU_DS_MEMORY;
+  memcpy(MockConfig,InitialFullConfig,sizeof(MockConfig));
+  MockAttributes=ModelMismatch?GU_DS_IO|GU_DS_MEMORY:((InitialFullConfig[1]&1U?GU_DS_IO:0)|GU_DS_MEMORY);
   RtxPci.GetLocation=AuditLocation;RtxPci.Pci.Read=AuditRead;RtxPci.Attributes=AuditAttributes;
   LastTable->BootServices->HandleProtocol=AuditHandle;LastTable->BootServices->LocateDevicePath=AuditFind;
   LastTable->BootServices->OpenProtocol=AuditOpen;LastTable->BootServices->CloseProtocol=AuditClose;
@@ -548,9 +550,33 @@ int main(int argc,char **argv) {
     (UINTN)Calls==2+(GU_NO_EDID_DRIVER?0:Full.ChildCount),
     "audit driver-binding mutation caught before NVIDIA Stop");
   CallbackFaultAt=CallbackFaultKind=0;
-#else
+#elif !defined(GU_RELEASE_IOMEM_MODEL)
   ModelMismatch=TRUE;
   Check(AuditedRun(0,FALSE)!=EFI_SUCCESS && !Calls,"audit alone never admits cache300 or detaches console");
+#endif
+#ifdef GU_RELEASE_IOMEM_MODEL
+  Check(AuditedRun(0,FALSE)==EFI_SUCCESS,"fresh coherent origin for effect-binding observations");
+  unsigned firstOwned=FirstOwnedRead,preEnable=PreEnableRead,preNv=NvPreflightRead;
+  Check(firstOwned && preEnable>firstOwned && preNv,"coherent IO+MEM sensitive phases observed");
+  for(unsigned kind=1;kind<=5;kind++)for(unsigned at=1;at<=ReadBudget;at++) {
+    CallbackFaultAt=at;CallbackFaultKind=kind;
+    Check(AuditedRun(0,FALSE)!=EFI_SUCCESS && Injected,"coherent IO+MEM effect dispatch drift at every boundary refuses");
+    Check(!Full.Owned,"frozen coherent cleanup removes the known claim");
+  }
+  const unsigned sensitive[]={firstOwned,preEnable};
+  for(unsigned i=0;i<2;i++)for(unsigned kind=6;kind<=8;kind+=2) {
+    CallbackFaultAt=sensitive[i];CallbackFaultKind=kind;
+    Check(AuditedRun(0,FALSE)!=EFI_SUCCESS && Injected && !EnableCalls && !Full.Owned,
+      "coherent IO+MEM graph/claim drift inside typed audit prevents Enable");
+  }
+  CallbackFaultAt=preNv;CallbackFaultKind=7;
+  Check(AuditedRun(0,FALSE)!=EFI_SUCCESS && Injected && !EnableCalls &&
+    (UINTN)Calls==2+(GU_NO_EDID_DRIVER?0:Full.ChildCount),"coherent IO+MEM binding drift prevents NVIDIA Stop");
+  CallbackFaultAt=CallbackFaultKind=0;
+  Check(AuditedRun(0,FALSE)==EFI_SUCCESS,"fresh coherent origin after effect faults");
+  Check(ReleaseAudit.IoMem && ReleaseAudit.AfterReady && !ReleaseAudit.Mismatch && !ReleaseAudit.PlanReady &&
+    Full.Attributes==(GU_DS_IO|GU_DS_MEMORY) && Full.TargetAttributes==Full.Attributes && MockAttributes==Full.Attributes,
+    "consistent command3 keeps original300 and never derives a mismatch target");
 #endif
   TopologyTests();EdidTests();OwnershipTests();FinalTests();
   printf("PASS release parent audit: %u parent read boundaries, %d checks; actual production phases, RAM only\n",ReadBudget,Checks);

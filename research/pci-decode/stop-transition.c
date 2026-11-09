@@ -27,6 +27,19 @@ GU_DS_STOP_RESULT GuDsStopTransition(const GU_DS_SNAPSHOT *before,
   return missing?GU_DS_STOP_MEMORY_OFF:GU_DS_STOP_UNCHANGED;
 }
 
+GU_DS_STOP_RESULT GuDsIoMemStopTransition(const GU_DS_SNAPSHOT *before,
+                                         const GU_DS_SNAPSHOT *after) {
+  if(!GuDsReleaseSnapshotValid(before) || (before->Gpu.Config[1]&0xffffU)!=3U ||
+     !after || after->Complete!=TRUE || after->ParentCount!=before->ParentCount)
+    return GU_DS_STOP_REFUSED;
+  UINT32 missing=before->Gpu.Config[1]&~after->Gpu.Config[1]&3U;
+  UINT64 cleared=(missing&1U?GU_DS_IO:0)|(missing&2U?GU_DS_MEMORY:0);
+  if(!SameDevice(&before->Gpu,&after->Gpu,missing,cleared))return GU_DS_STOP_REFUSED;
+  for(UINTN i=0;i<before->ParentCount;i++)
+    if(!SameDevice(&before->Parents[i],&after->Parents[i],0,0))return GU_DS_STOP_REFUSED;
+  return missing?GU_DS_STOP_DECODE_REDUCED:GU_DS_STOP_UNCHANGED;
+}
+
 static BOOLEAN PlanOverlap(const VOID *a,UINTN an,const VOID *b,UINTN bn) {
   UINTN x=(UINTN)a,y=(UINTN)b;return x<=y?y-x<an:x-y<bn;
 }

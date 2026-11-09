@@ -19,6 +19,11 @@ def main():
     if out.exists():
         parser.error('Output must be a new directory')
     out.mkdir(parents=True)
+    files = ['efi-capture.c', 'efi-capture.h', 'efi-path.h', 'efi-binding.h', 'snapshot.c',
+             'snapshot.h', 'stop-transition.c', 'stop-transition.h', 'test_post_stop_capture.c',
+             'test_efi_capture.c', 'test_efi_adapter.c', 'test-post-stop-capture.py',
+             'efi-adapter.c', 'efi-adapter.h', 'decode-sync.c', 'decode-sync.h', 'test_iomem_capture.c']
+    before = {f: hashlib.sha256((HERE / f).read_bytes()).hexdigest() for f in files}
     flags = [args.clang, '-std=c11', '-O1', '-Wall', '-Wextra', '-Werror',
              '-Wno-unused-parameter', '-D_CRT_SECURE_NO_WARNINGS', '-DGU_DS_POST_STOP_CAPTURE=1',
              '-I' + str(HERE), '-I' + str(ROOT / 'deps/edk2/MdePkg/Include'),
@@ -37,7 +42,7 @@ def main():
 
     def build(name, source):
         exe = out / (name + '.exe')
-        sources = ['test_post_stop_capture.c', 'stop-transition.c', 'efi-adapter.c',
+        sources = ['test_iomem_capture.c', 'stop-transition.c', 'efi-adapter.c',
                    'decode-sync.c', 'snapshot.c']
         run(name + '-compile', [*flags, *(str(HERE / f) for f in sources), str(source), '-o', str(exe)])
         return exe
@@ -58,6 +63,9 @@ def main():
                 'if(FALSE && before && (Overlap(before,sizeof(*before),c,sizeof(*c)) ||'),
             'skip-released-mismatch-validation': ('if(!GuDsPlanReleasedMismatch(&ActiveBefore,v,&plan))goto done;', '(void)plan;'),
             'use-mutable-release-baseline': ('GuDsPlanReleasedMismatch(&ActiveBefore,v,&plan)', 'GuDsPlanReleasedMismatch(before,v,&plan)'),
+            'skip-iomem-transition': ('if(GuDsIoMemStopTransition(&ActiveBefore,v)==GU_DS_STOP_REFUSED)', 'if(FALSE)'),
+            'use-mutable-iomem-origin': ('GuDsIoMemStopTransition(&ActiveBefore,v)', 'GuDsIoMemStopTransition(before,v)'),
+            'skip-release-origin-policy': ('if(!GuDsReleaseSnapshotValid(v))goto done;', '(void)0;'),
         }
         for name, (old, new) in changes.items():
             if text.count(old) != 1:
@@ -72,13 +80,11 @@ def main():
              '-o', str(out / ('invalid-' + value + '.obj'))], failure=True)
         if 'GU_DS_POST_STOP_CAPTURE must be exactly 1 when enabled' not in (out / ('invalid-define-' + value + '.log')).read_text(encoding='utf-8'):
             raise RuntimeError('Invalid define failed for an unrelated reason')
-    files = ['efi-capture.c', 'efi-capture.h', 'efi-path.h', 'efi-binding.h', 'snapshot.c',
-             'snapshot.h', 'stop-transition.c', 'stop-transition.h', 'test_post_stop_capture.c',
-             'test_efi_capture.c', 'test_efi_adapter.c', 'test-post-stop-capture.py',
-             'efi-adapter.c', 'efi-adapter.h', 'decode-sync.c', 'decode-sync.h']
+    if any(hashlib.sha256((HERE / f).read_bytes()).hexdigest() != sha for f, sha in before.items()):
+        raise RuntimeError('Source changed during collector test')
     summary = {'ram_only': True, 'passed': True, 'result': result,
                'compiled_mutations_detected': mutations, 'stages': stages,
-               'source_sha256': {f: hashlib.sha256((HERE / f).read_bytes()).hexdigest() for f in files}}
+               'source_sha256': before}
     (out / 'summary.json').write_text(json.dumps(summary, indent=2) + '\n', encoding='utf-8')
     print('PASS ' + str(len(mutations)) + ' compiled mutations and two define rejection guards')
 

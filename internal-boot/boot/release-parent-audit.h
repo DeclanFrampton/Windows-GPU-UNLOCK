@@ -21,6 +21,7 @@
 #define GU_RELEASE_AUDIT_CAPTURES 32U
 typedef struct {
   BOOLEAN Active,PrepareEntered,Used,Ready,ReleaseUsed,Failed,Mismatch,PlanReady,Verifying;
+  BOOLEAN IoMem,AfterReady;
   EFI_SYSTEM_TABLE *Table;
   EFI_BOOT_SERVICES *Boot;
   EFI_HANDLE_PROTOCOL Handle;
@@ -91,10 +92,11 @@ static EFI_STATUS ReleaseAuditBeforeConsole(EFI_SYSTEM_TABLE *t,const PLAN *p) {
   for(UINTN i=0;i<4;i++)a->Target.Path[controller+i]=end[i];
   if(!GuDsControllerParents(a->Target.Path,a->Target.PathBytes,&parents))return ReleaseAuditStatus(EFI_UNSUPPORTED);
   GU_DS_CAPTURE *before=&a->Captures[a->Next++];
-  EFI_STATUS s=GuDsEfiCapture(before,a->Boot,&a->Target);
+  EFI_STATUS s=GuDsEfiCaptureReleaseOrigin(before,a->Boot,&a->Target);
   if(s!=EFI_SUCCESS || !ReleaseAuditBound() || before->Bindings[0].Io!=p->RtxIo)
     return ReleaseAuditStatus(EFI_NOT_READY);
-  if(before->Snapshot.Gpu.Attributes!=GU_DS_MEMORY) {
+  a->IoMem=(before->Snapshot.Gpu.Config[1]&0xffffU)==3U;
+  if(!a->IoMem && before->Snapshot.Gpu.Attributes!=GU_DS_MEMORY) {
 #ifdef GU_RELEASE_MISMATCH_RESEARCH
     if(before->Snapshot.Gpu.Attributes!=(GU_DS_IO|GU_DS_MEMORY) ||
        !(before->Snapshot.Gpu.Supported&GU_DS_MEMORY))return ReleaseAuditStatus(EFI_NOT_READY);
@@ -119,8 +121,9 @@ static EFI_STATUS ReleaseAuditObserve(BOOLEAN afterStop) {
     return ReleaseAuditStatus(EFI_NOT_READY);
   GU_DS_CAPTURE *current=&a->Captures[a->Next++];
   const GU_DS_SNAPSHOT *before=&a->Captures[0].Snapshot;
-  EFI_STATUS s=afterStop?(a->Mismatch?GuDsEfiCaptureReleasedMismatch(current,a->Boot,&a->Target,before):
-    GuDsEfiCaptureAfterStop(current,a->Boot,&a->Target,before)):GuDsEfiCapture(current,a->Boot,&a->Target);
+  EFI_STATUS s=afterStop?(a->IoMem?GuDsEfiCaptureIoMemAfterStop(current,a->Boot,&a->Target,before):
+    a->Mismatch?GuDsEfiCaptureReleasedMismatch(current,a->Boot,&a->Target,before):
+    GuDsEfiCaptureAfterStop(current,a->Boot,&a->Target,before)):GuDsEfiCaptureReleaseOrigin(current,a->Boot,&a->Target);
   if(s!=EFI_SUCCESS || !ReleaseAuditBound() ||
      (!afterStop && !GuDecodeSnapshotMatches(&current->Snapshot,before,FALSE)))
     return ReleaseAuditStatus(EFI_NOT_READY);
@@ -133,12 +136,19 @@ static EFI_STATUS ReleaseAuditObserve(BOOLEAN afterStop) {
        !GuDecodeSnapshotMatches(&current->Snapshot,&a->Captures[a->ActualAfterIndex].Snapshot,FALSE))
       return ReleaseAuditStatus(EFI_NOT_READY);
   }
+  if(afterStop && a->IoMem) {
+    if(!a->AfterReady){a->ActualAfterIndex=a->Next-1;a->AfterReady=TRUE;}
+    if(!GuDecodeSnapshotMatches(&current->Snapshot,&a->Captures[a->ActualAfterIndex].Snapshot,FALSE))
+      return ReleaseAuditStatus(EFI_NOT_READY);
+  }
   return EFI_SUCCESS;
 }
 static EFI_STATUS ReleaseAuditRestoreTarget(UINT64 observed,UINT64 *target) {
   GU_RELEASE_AUDIT_STATE *a=&ReleaseAudit;
   const GU_DS_SNAPSHOT *before=&a->Captures[0].Snapshot;
   if(!target || !a->Ready || a->Failed || observed!=before->Gpu.Attributes)return EFI_NOT_READY;
+  if(a->IoMem && (!a->AfterReady || a->ActualAfterIndex>=a->Next ||
+     GuDsIoMemStopTransition(before,&a->Captures[a->ActualAfterIndex].Snapshot)==GU_DS_STOP_REFUSED))return EFI_NOT_READY;
   if(!a->Mismatch){*target=observed;return EFI_SUCCESS;}
   if(!a->PlanReady || a->ActualAfterIndex>=a->Next ||
      !GuDsReleasePlanMatches(&a->Plan,before,&a->Captures[a->ActualAfterIndex].Snapshot))return EFI_NOT_READY;
@@ -150,7 +160,7 @@ static EFI_STATUS ReleaseAuditRestored(VOID) {
   if(ReleaseAuditRestoreTarget(a->Captures[0].Snapshot.Gpu.Attributes,&target)!=EFI_SUCCESS ||
      !ReleaseAuditBound() || a->Next>=GU_RELEASE_AUDIT_CAPTURES)return ReleaseAuditStatus(EFI_NOT_READY);
   GU_DS_CAPTURE *current=&a->Captures[a->Next++];
-  EFI_STATUS s=GuDsEfiCapture(current,a->Boot,&a->Target);
+  EFI_STATUS s=GuDsEfiCaptureReleaseOrigin(current,a->Boot,&a->Target);
   if(s!=EFI_SUCCESS || !ReleaseAuditBound() || current->Snapshot.Gpu.Attributes!=target ||
      !GuDecodeSnapshotMatches(&current->Snapshot,&a->Captures[0].Snapshot,a->Mismatch))
     return ReleaseAuditStatus(EFI_NOT_READY);
