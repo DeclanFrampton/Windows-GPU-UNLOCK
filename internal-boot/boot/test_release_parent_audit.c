@@ -23,7 +23,88 @@ static UINTN FinalSkipByte=256;
 static EFI_STATUS FinalReadStatus;
 static UINT32 ParentInitialStatus;
 static BOOLEAN FinalRestoreDrift;
-#define PARENT_HANDLE ((EFI_HANDLE)(UINTN)50001)
+static unsigned OpenMode,CloseMode,OwnerFault,PreexistingSelf,PassiveReferences,FreeFailurePhase;
+static EFI_STATUS FreeFailureStatus;
+static BOOLEAN FreeFailureInjected;
+static unsigned OwnerQueries;
+static UINTN ParentHandleStorage[8];
+#define FOREIGN_OWNER ((EFI_HANDLE)(UINTN)61000)
+static UINTN SelfReferences(VOID) {
+  UINTN count=0;for(UINTN i=0;i<Live.Count;i++)if(Live.Edges[i].Handle==FX_RtxPci &&
+    Live.Edges[i].Agent==(VOID *)9999 && GuGuidEqual(&Live.Edges[i].Protocol,&PciGuid))count+=Live.Edges[i].Count;
+  return count;
+}
+static UINTN ForeignReferences(VOID) {
+  UINTN count=0;for(UINTN i=0;i<Live.Count;i++)if(Live.Edges[i].Handle==FX_RtxPci &&
+    Live.Edges[i].Agent==FOREIGN_OWNER && GuGuidEqual(&Live.Edges[i].Protocol,&PciGuid))count+=Live.Edges[i].Count;
+  return count;
+}
+static EFI_STATUS EFIAPI AuditOpen(EFI_HANDLE h,EFI_GUID *g,VOID **out,EFI_HANDLE agent,EFI_HANDLE controller,UINT32 attrs) {
+  Check(ReleaseAudit.HeldQuery!=NULL,"final no-owner query buffer retained until Open");
+  int scenario=FullScenario;
+  if(OpenMode==1 || OpenMode==2 || OpenMode==5 || OpenMode==14)FullScenario=4;
+  EFI_STATUS s=Open(h,g,out,agent,controller,attrs);FullScenario=scenario;
+  if(OpenMode==1 || OpenMode==3)return EFI_DEVICE_ERROR;
+  if(OpenMode==2 || OpenMode==4)return EFI_WARN_UNKNOWN_GLYPH;
+  if(OpenMode==13 || OpenMode==14)return EFI_NOT_STARTED;
+  if(OpenMode==5){*out=&RtxPci;return EFI_SUCCESS;}
+  if(OpenMode==6)*out=&ParentIo;
+  if(OpenMode==7)Live.Edges[Live.Count-1].Count=2;
+  if(OpenMode==8)Live.Edges[Live.Count-1].Attributes=EFI_OPEN_PROTOCOL_GET_PROTOCOL;
+  if(OpenMode==9)Live.Edges[Live.Count++]=(EDGE){h,agent,NULL,*g,EFI_OPEN_PROTOCOL_GET_PROTOCOL,1};
+  if(OpenMode==10)Live.Edges[Live.Count++]=(EDGE){h,FOREIGN_OWNER,h,*g,EFI_OPEN_PROTOCOL_BY_DRIVER,1};
+  if(OpenMode==11)Live.Edges[Live.Count++]=(EDGE){h,FOREIGN_OWNER,NULL,*g,EFI_OPEN_PROTOCOL_GET_PROTOCOL,1};
+  return s;
+}
+static EFI_STATUS EFIAPI AuditClose(EFI_HANDLE h,EFI_GUID *g,EFI_HANDLE agent,EFI_HANDLE controller) {
+  Check(ReleaseAudit.HeldQuery!=NULL && SelfReferences()==1,"only one precisely attributed self reference may be closed");
+  int scenario=FullScenario;
+  if(CloseMode==1 || CloseMode==3 || CloseMode==5 || CloseMode==7)FullScenario=13;
+  EFI_STATUS s=Close(h,g,agent,controller);FullScenario=scenario;
+  if(CloseMode==1 || CloseMode==2)return EFI_DEVICE_ERROR;
+  if(CloseMode==3 || CloseMode==4)return EFI_WARN_UNKNOWN_GLYPH;
+  if(CloseMode==6 || CloseMode==7)return EFI_NOT_STARTED;
+  if(CloseMode==5)return EFI_SUCCESS;
+  return s;
+}
+static EFI_STATUS EFIAPI AuditOwners(EFI_HANDLE h,EFI_GUID *g,EFI_OPEN_PROTOCOL_INFORMATION_ENTRY **p,UINTN *count) {
+  OwnerQueries++;
+  EFI_STATUS s=Opens(h,g,p,count);
+  if(OwnerFault==12 && ReleaseAudit.OwnershipStarted && !ReleaseAudit.OpenInvoked && h==FX_RtxPci && GuGuidEqual(g,&PciGuid))
+    return EFI_DEVICE_ERROR;
+  if(OwnerFault && ReleaseAudit.OpenInvoked && !ReleaseAudit.CloseInvoked && h==FX_RtxPci && GuGuidEqual(g,&PciGuid)) {
+    if(OwnerFault==1)return EFI_DEVICE_ERROR;
+    if(OwnerFault==2)return EFI_WARN_UNKNOWN_GLYPH;
+    if(OwnerFault==3){*count=65;return s;}
+    if(OwnerFault==4){Check(*count==1,"duplicate fault has one real claim");(*p)[1]=(*p)[0];*count=2;return s;}
+    if(OwnerFault==11)return EFI_NOT_STARTED;
+    if(OwnerFault>=5) {
+      Free(*p);
+      if(OwnerFault==5)*p=ReleaseAudit.Passive;
+      if(OwnerFault==6)*p=NULL;
+      if(OwnerFault==7)*p=(VOID *)&ParentHandleStorage[3];
+      if(OwnerFault==8)*p=(VOID *)&ParentHandleStorage[2];
+      if(OwnerFault==9)*p=(VOID *)((UINT8 *)PreparedGraph+sizeof(UINTN));
+      if(OwnerFault==10)*p=(VOID *)((UINT8 *)&ParentHandleStorage[3]+1);
+      *count=1;return s;
+    }
+  }
+  return s;
+}
+static EFI_STATUS EFIAPI AuditFree(VOID *p) {
+  UINTN address=(UINTN)p,begin=(UINTN)&ReleaseAudit;
+  Check(address<begin || address-begin>=sizeof(ReleaseAudit),"never free borrowed private audit state");
+  begin=(UINTN)ParentHandleStorage;
+  Check(address<begin || address-begin>=sizeof(ParentHandleStorage),"never free borrowed handle token storage");
+  begin=(UINTN)PreparedGraph;
+  Check(!PreparedGraph || address<begin || address-begin>=sizeof(*PreparedGraph),"never free borrowed prepared graph");
+  BOOLEAN inject=FreeFailurePhase && !FreeFailureInjected && ReleaseAudit.HeldQuery==p &&
+    (FreeFailurePhase==1?(ReleaseAudit.OpenInvoked && !ReleaseAudit.CloseInvoked):ReleaseAudit.CloseInvoked);
+  EFI_STATUS s=Free(p);
+  if(inject){FreeFailureInjected=TRUE;return FreeFailureStatus;}
+  return s;
+}
+#define PARENT_HANDLE ((EFI_HANDLE)&ParentHandleStorage[3])
 static EFI_STATUS EFIAPI AuditHandle(EFI_HANDLE h,EFI_GUID *g,VOID **out) {
   if(h==PARENT_HANDLE || h==(EFI_HANDLE)(UINTN)50002) {
     if(GuGuidEqual(g,&PciGuid)){*out=&ParentIo;return EFI_SUCCESS;}
@@ -94,7 +175,10 @@ static EFI_STATUS EFIAPI AuditRead(EFI_PCI_IO_PROTOCOL *io,EFI_PCI_IO_PROTOCOL_W
 }
 static EFI_STATUS EFIAPI AuditAttributes(EFI_PCI_IO_PROTOCOL *io,EFI_PCI_IO_PROTOCOL_ATTRIBUTE_OPERATION op,UINT64 mask,UINT64 *out) {
   if(io!=&ParentIo) {
-    if(op==EfiPciIoAttributeOperationEnable)Check(mask==EFI_PCI_IO_ATTRIBUTE_MEMORY,"only MEMORY restored");
+    if(op==EfiPciIoAttributeOperationEnable) {
+      Check(mask==EFI_PCI_IO_ATTRIBUTE_MEMORY,"only MEMORY restored");
+      Check(ReleaseAudit.HeldQuery!=NULL && SelfReferences()==1,"final exact owner proof retained until Enable");
+    }
     EFI_STATUS s=Attributes(io,op,mask,out);
     if(s==EFI_SUCCESS && op==EfiPciIoAttributeOperationGet && Phase==4 && !EnableCalls && AfterOverride)*out=AfterOverride;
     if(s==EFI_SUCCESS && AttributeDevice==2 && out) {
@@ -128,17 +212,23 @@ static void AuditConsoleSetup(void) {
   memcpy(MockConfig,InitialFullConfig,sizeof(MockConfig));MockAttributes=ModelMismatch?GU_DS_IO|GU_DS_MEMORY:GU_DS_MEMORY;
   RtxPci.GetLocation=AuditLocation;RtxPci.Pci.Read=AuditRead;RtxPci.Attributes=AuditAttributes;
   LastTable->BootServices->HandleProtocol=AuditHandle;LastTable->BootServices->LocateDevicePath=AuditFind;
-  LastTable->BootServices->OpenProtocol=Open;LastTable->BootServices->CloseProtocol=Close;
+  LastTable->BootServices->OpenProtocol=AuditOpen;LastTable->BootServices->CloseProtocol=AuditClose;
+  LastTable->BootServices->OpenProtocolInformation=AuditOwners;LastTable->BootServices->FreePool=AuditFree;
   LastTable->BootServices->RaiseTPL=AuditRaise;LastTable->BootServices->RestoreTPL=AuditRestore;
+  for(unsigned i=0;i<PassiveReferences;i++)Live.Edges[Live.Count++]=(EDGE){FX_RtxPci,(EFI_HANDLE)(UINTN)(62000+i),NULL,PciGuid,EFI_OPEN_PROTOCOL_GET_PROTOCOL,1};
+  if(PreexistingSelf)Live.Edges[Live.Count++]=(EDGE){FX_RtxPci,(VOID *)9999,NULL,PciGuid,EFI_OPEN_PROTOCOL_GET_PROTOCOL,PreexistingSelf};
 }
 static void AuditFullSetup(void) {
   RtxPci.Attributes=AuditAttributes;
+  LastTable->BootServices->OpenProtocol=AuditOpen;LastTable->BootServices->CloseProtocol=AuditClose;
   if(ModelMismatch)MockAttributes=GU_DS_IO|GU_DS_MEMORY;
 }
 static EFI_STATUS AuditedRun(unsigned fault,BOOLEAN reenter) {
   /* Each test models a new image. Production has no reset or retry API. */
   ReleaseAudit=(GU_RELEASE_AUDIT_STATE){0};ParentReads=0;FaultRead=fault;Reenter=reenter;Full.Owned=FALSE;
   Injected=FALSE;FirstOwnedRead=PreEnableRead=NvPreflightRead=0;FirstOwnedCapture=0;
+  FreeFailureInjected=FALSE;
+  OwnerQueries=0;
   TplDepth=TplRaises=TplRestores=0;
   EFI_STATUS s=RunFull(0);Check(!TplDepth && TplRaises==TplRestores,"whole release restores TPL on every result");return s;
 }
@@ -153,6 +243,87 @@ static VOID FinalRefused(BOOLEAN cold) {
   Check(GuVerifyReleased(LastTable,cold)!=EFI_SUCCESS,"final drift/invalid observation refused");
   Check(!ReleaseAudit.Verifying && !TplDepth && TplRaises==TplRestores,"failed final verification releases guard and TPL");
   Check(writes==EnableCalls && stops==Calls,"final verifier cannot repeat restore or stop drivers");
+}
+static VOID OwnershipDefaults(VOID) {
+  OpenMode=CloseMode=OwnerFault=PreexistingSelf=PassiveReferences=FreeFailurePhase=0;
+  CallbackFaultAt=CallbackFaultKind=0;AfterOverride=0;
+  VerifyReenter=ParentHandleDrift=FinalRestoreDrift=FALSE;LocationFault=AttributeDevice=0;
+  AttributeDelta=SupportedDelta=0;FinalSkipByte=256;FinalReadStatus=EFI_SUCCESS;
+}
+static VOID OwnershipTests(VOID) {
+#ifdef GU_RELEASE_MISMATCH_RESEARCH
+  const unsigned routes=2;
+#else
+  const unsigned routes=1;
+#endif
+  for(unsigned route=0;route<routes;route++) {
+    ModelMismatch=(BOOLEAN)route;
+    const unsigned modes[]={1,2,3,4,5,6,7,8,9,10,11,13,14};
+    for(UINTN i=0;i<sizeof(modes)/sizeof(modes[0]);i++) {
+      OwnershipDefaults();OpenMode=modes[i];
+      EFI_STATUS s=AuditedRun(0,FALSE);
+      Check(s!=EFI_SUCCESS && !EnableCalls && !Full.Restored,"failed/ambiguous Open never permits MEMORY restore");
+      Check(ReleaseAudit.OpenInvoked && ClaimCalls==1,"Open attempted at most once");
+      unsigned closeExpected=OpenMode==3 || OpenMode==4 || OpenMode==6 || OpenMode==10 || OpenMode==11 || OpenMode==13;
+      Check(CloseCalls==(int)closeExpected,"cleanup requires a fresh unambiguous self reference");
+      UINTN expected=OpenMode==7 || OpenMode==9?2:OpenMode==8?1:0;
+      Check(SelfReferences()==expected,"ambiguous same-owner references preserved, attributable claim removed");
+      if(expected)Check(ReleaseAudit.ClaimMayRemain,"ambiguous claim reported as unresolved");
+      if(OpenMode==10 || OpenMode==11)Check(ForeignReferences()==1,"cleanup leaves foreign active/passive references intact");
+      if(OpenMode==1 || OpenMode==3)Check(s==EFI_DEVICE_ERROR && ReleaseAudit.OpenStatus==s,"raw Open error preserved after cleanup");
+      if(OpenMode==2 || OpenMode==4)Check(s==EFI_WARN_UNKNOWN_GLYPH && ReleaseAudit.OpenStatus==s,"raw Open warning never promoted");
+      if(OpenMode==13 || OpenMode==14)Check(s==EFI_NOT_STARTED && ReleaseAudit.OpenStatus==s,"observed NOT_STARTED distinguished from no invocation");
+      int calls=ClaimCalls;EFI_PCI_IO_PROTOCOL *io=NULL;
+      Check(AuditOwnershipAcquire(&io)==EFI_ACCESS_DENIED && ClaimCalls==calls,"fresh API invocation cannot retry spent Open");
+    }
+    for(unsigned mode=1;mode<=7;mode++) {
+      OwnershipDefaults();CloseMode=mode;
+      EFI_STATUS s=AuditedRun(0,FALSE);
+      Check(s!=EFI_SUCCESS && EnableCalls==1 && !Full.Restored,"Close failure/retained reference blocks completion after one restore");
+      Check(CloseCalls==1 && ReleaseAudit.CloseInvoked && ReleaseAudit.CleanupObserved,"one observed cleanup invocation");
+      BOOLEAN retained=mode==1 || mode==3 || mode==5 || mode==7;
+      Check(SelfReferences()==(retained?1U:0U) && ReleaseAudit.ClaimMayRemain==retained,"post-Close view records actual residual claim");
+      if(mode==1 || mode==2)Check(s==EFI_DEVICE_ERROR && ReleaseAudit.CloseStatus==s,"partial-effect Close error preserved");
+      if(mode==3 || mode==4)Check(s==EFI_WARN_UNKNOWN_GLYPH && ReleaseAudit.CloseStatus==s,"partial-effect Close warning preserved");
+      if(mode==6 || mode==7)Check(s==EFI_NOT_STARTED && ReleaseAudit.CloseStatus==s,"Close raw NOT_STARTED is observed failure");
+      unsigned queries=OwnerQueries;EFI_STATUS cleanup=ReleaseAudit.CleanupStatus;
+      Check(AuditOwnershipFinish()==EFI_ALREADY_STARTED && CloseCalls==1 && OwnerQueries==queries && ReleaseAudit.CleanupStatus==cleanup,
+        "failed cleanup is never queried/retried and its first result remains intact");
+    }
+    for(unsigned fault=1;fault<=11;fault++) {
+      OwnershipDefaults();OwnerFault=fault;
+      Check(AuditedRun(0,FALSE)!=EFI_SUCCESS && !EnableCalls && !CloseCalls,"unreliable owner query cannot attribute cleanup");
+      Check(SelfReferences()==1 && ReleaseAudit.ClaimMayRemain,"unknown query leaves claim unresolved without touching it");
+      if(fault==11)Check(ReleaseAudit.OwnerObserved && ReleaseAudit.OwnerStatus==EFI_NOT_STARTED,
+        "raw owner-query NOT_STARTED is observed failure, not missing evidence");
+    }
+    const EFI_STATUS failures[]={EFI_DEVICE_ERROR,EFI_WARN_UNKNOWN_GLYPH,EFI_NOT_STARTED};
+    for(unsigned phase=1;phase<=2;phase++)for(UINTN i=0;i<3;i++) {
+      OwnershipDefaults();FreeFailurePhase=phase;FreeFailureStatus=failures[i];
+      Check(AuditedRun(0,FALSE)==failures[i] && FreeFailureInjected,"raw query-buffer Free failure preserved");
+      Check(ReleaseAudit.PoolObserved && ReleaseAudit.PoolStatus==failures[i],"later successful Free cannot erase earlier failure");
+      Check(!SelfReferences() && CloseCalls==1 && EnableCalls==(phase==1?0:1),"pool failure never grants another write or cleanup retry");
+    }
+    for(unsigned references=1;references<=2;references++) {
+      OwnershipDefaults();PreexistingSelf=references;
+      Check(AuditedRun(0,FALSE)!=EFI_SUCCESS && !ClaimCalls && !CloseCalls && !EnableCalls,
+        "preexisting same-agent passive reference forbids new Open and cleanup");
+      Check(SelfReferences()==references,"preexisting references untouched");
+    }
+    OwnershipDefaults();OwnerFault=12;
+    Check(AuditedRun(0,FALSE)==EFI_DEVICE_ERROR && !ClaimCalls && !ReleaseAudit.OwnerBaselineReady,"failed baseline grants no acquisition authority");
+    OwnerFault=0;unsigned queries=OwnerQueries;EFI_PCI_IO_PROTOCOL *retry=NULL;
+    Check(AuditOwnershipAcquire(&retry)==EFI_ACCESS_DENIED && OwnerQueries==queries && !ClaimCalls,
+      "failed baseline cannot be retried by querying fresh state in the same transaction");
+    const unsigned counts[]={0,63,64};
+    for(UINTN i=0;i<3;i++) {
+      OwnershipDefaults();PassiveReferences=counts[i];
+      EFI_STATUS s=AuditedRun(0,FALSE);
+      if(counts[i]<64)Check(s==EFI_SUCCESS && ReleaseAudit.PassiveCount==counts[i] && CloseCalls==1,"zero/63 passive boundary with one fresh claim succeeds");
+      else Check(s!=EFI_SUCCESS && !ClaimCalls && !CloseCalls && !EnableCalls,"64 passive entries leave no bounded claim slot");
+    }
+  }
+  OwnershipDefaults();
 }
 static VOID FinalTests(VOID) {
   UINT32 originalLayout=InitialFullConfig[30],originalStatus=InitialFullConfig[32];
@@ -271,7 +442,7 @@ int main(int argc,char **argv) {
   ModelMismatch=TRUE;
   Check(AuditedRun(0,FALSE)!=EFI_SUCCESS && !Calls,"audit alone never admits cache300 or detaches console");
 #endif
-  FinalTests();
+  OwnershipTests();FinalTests();
   printf("PASS release parent audit: %u parent read boundaries, %d checks; actual production phases, RAM only\n",ReadBudget,Checks);
   return 0;
 }

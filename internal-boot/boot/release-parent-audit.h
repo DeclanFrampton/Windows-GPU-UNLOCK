@@ -30,6 +30,17 @@ typedef struct {
   EFI_CLOSE_PROTOCOL Close;
   EFI_RAISE_TPL Raise;
   EFI_RESTORE_TPL Restore;
+  EFI_OPEN_PROTOCOL_INFORMATION Owners;
+  EFI_FREE_POOL Free;
+  BOOLEAN OwnershipStarted,OwnerBaselineReady,OpenInvoked,OpenSucceeded,ClaimObserved,ClaimMayRemain,CloseInvoked;
+  BOOLEAN OwnerObserved,PoolObserved,CleanupObserved;
+  EFI_STATUS OpenStatus,CloseStatus,OwnerStatus,PoolStatus;
+  EFI_STATUS CleanupStatus;
+  EFI_OPEN_PROTOCOL_INFORMATION_ENTRY *HeldQuery;
+  EFI_HANDLE ClaimTarget,ClaimOwner;
+  EFI_PCI_IO_PROTOCOL *ClaimIo;
+  EFI_OPEN_PROTOCOL_INFORMATION_ENTRY Passive[64];
+  UINTN PassiveCount,ViewOwnCount;
   GU_DS_CAPTURE_TARGET Target;
   GU_DS_EFI_DEVICE Devices[1+GU_DS_EFI_MAX_PARENTS];
   UINTN Count,Next;
@@ -45,7 +56,8 @@ static BOOLEAN ReleaseAuditBound(VOID) {
   if(!a->Table || a->Table->BootServices!=a->Boot || a->Boot->HandleProtocol!=a->Handle ||
      a->Boot->LocateDevicePath!=a->Locate || a->Boot->DisconnectController!=a->Disconnect ||
      a->Boot->OpenProtocol!=a->Open || a->Boot->CloseProtocol!=a->Close ||
-     a->Boot->RaiseTPL!=a->Raise || a->Boot->RestoreTPL!=a->Restore)return FALSE;
+     a->Boot->RaiseTPL!=a->Raise || a->Boot->RestoreTPL!=a->Restore ||
+     a->Boot->OpenProtocolInformation!=a->Owners || a->Boot->FreePool!=a->Free)return FALSE;
   for(UINTN i=0;i<a->Count;i++) {
     const GU_DS_EFI_DEVICE *d=&a->Devices[i];
     if(d->Pin.Io->GetLocation!=d->Location || d->Pin.Io->Pci.Read!=d->Read ||
@@ -65,7 +77,8 @@ static EFI_STATUS ReleaseAuditBeforeConsole(EFI_SYSTEM_TABLE *t,const PLAN *p) {
   a->Table=t;a->Boot=t->BootServices;a->Handle=a->Boot->HandleProtocol;a->Locate=a->Boot->LocateDevicePath;
   a->Disconnect=a->Boot->DisconnectController;a->Open=a->Boot->OpenProtocol;a->Close=a->Boot->CloseProtocol;
   a->Raise=a->Boot->RaiseTPL;a->Restore=a->Boot->RestoreTPL;
-  if(!a->Handle || !a->Locate || !a->Disconnect || !a->Open || !a->Close || !a->Raise || !a->Restore)
+  a->Owners=a->Boot->OpenProtocolInformation;a->Free=a->Boot->FreePool;
+  if(!a->Handle || !a->Locate || !a->Disconnect || !a->Open || !a->Close || !a->Raise || !a->Restore || !a->Owners || !a->Free)
     return ReleaseAuditStatus(EFI_UNSUPPORTED);
   UINTN controller=0,total=0,parents=0;
   if(!GuDecodeGpuDisplayPath(p->RtxDisplayPath,sizeof(p->RtxDisplayPath),&controller,&total) ||

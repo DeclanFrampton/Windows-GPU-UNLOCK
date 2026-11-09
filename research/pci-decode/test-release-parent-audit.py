@@ -31,7 +31,7 @@ def main():
     out.mkdir(parents=True)
     paths = subprocess.check_output(['git', 'ls-files', '--', 'internal-boot', 'deps', 'research/profile', 'research/pci-decode'],
                                    cwd=ROOT, text=True).splitlines()
-    paths += ['internal-boot/boot/release-parent-audit.h', 'internal-boot/boot/test_release_parent_audit.c',
+    paths += ['internal-boot/boot/release-parent-audit.h', 'internal-boot/boot/release-ownership-audit.h', 'internal-boot/boot/test_release_parent_audit.c',
               'research/pci-decode/test-release-parent-audit.py']
     before = {p: hashlib.sha256((ROOT / p).read_bytes()).hexdigest() for p in sorted(set(paths))}
     data = load('release_audit_data', ROOT / 'research/profile/test_local_topology.py')
@@ -104,7 +104,21 @@ def main():
             parser.error('--mutations requires --mismatch')
         flow = boot / 'full-release.c'
         history = boot / 'release-parent-audit.h'
+        ownership = boot / 'release-ownership-audit.h'
         changes = {
+            'acquire-after-failed-baseline': (ownership, '!a->OwnershipStarted || !a->OwnerBaselineReady || a->OpenInvoked',
+                '!a->OwnershipStarted || a->OpenInvoked'),
+            'free-borrowed-parent-handle': (ownership, 'AuditRangeOverlap(p,bytes,a->Devices[i].Pin.Handle,1)', 'FALSE'),
+            'free-borrowed-prepared-graph': (ownership,
+                '(PreparedGraph && AuditRangeOverlap(p,bytes,PreparedGraph,sizeof(*PreparedGraph)))', 'FALSE'),
+            'accept-open-warning': (ownership, 'if(a->OpenStatus!=EFI_SUCCESS)return a->OpenStatus;',
+                'if(EFI_ERROR(a->OpenStatus))return a->OpenStatus;'),
+            'close-ambiguous-self': (ownership, '*present=own==1 && precise;', '*present=own>=1; (void)precise;'),
+            'promote-close-error': (ownership, 'if(a->CloseInvoked && a->CloseStatus!=EFI_SUCCESS)return a->CloseStatus;',
+                'if(FALSE)return a->CloseStatus;'),
+            'free-owner-proof-before-enable': (ownership,
+                'if(s==EFI_SUCCESS && needed)s=a->Devices[0].Attributes(a->ClaimIo,EfiPciIoAttributeOperationEnable,needed,NULL);\n  EFI_STATUS freed=AuditOwnerFree(held);',
+                'EFI_STATUS freed=AuditOwnerFree(held);\n  if(s==EFI_SUCCESS && needed)s=a->Devices[0].Attributes(a->ClaimIo,EfiPciIoAttributeOperationEnable,needed,NULL);'),
             'skip-final-parent-comparison': (flow,
                 'if(!FinalAuditDevice(&current->Snapshot.Parents[i],&before->Parents[i],\n                        before->Parents[i].Attributes,FALSE,checkCold))',
                 'if(FALSE)'),
@@ -120,8 +134,8 @@ def main():
             'skip-active-release-guard': (flow, 'ReleaseAudit.Active || ReleaseAudit.ReleaseUsed', 'ReleaseAudit.ReleaseUsed'),
             'skip-pre-nv-audit': (flow, 'if(s==EFI_SUCCESS)s=ReleaseAuditObserve(FALSE);', '(void)0;'),
             'skip-final-claim-graph': (flow,
-                'if(s==EFI_SUCCESS && !FullExpected(&claimGraph,4))s=EFI_NOT_READY;\n#ifdef GU_RELEASE_PARENT_AUDIT\n  if(s==EFI_SUCCESS && !ReleaseAuditBound())s=EFI_NOT_READY;\n  if(s==EFI_SUCCESS && needed)',
-                'if(FALSE)s=EFI_NOT_READY;\n#ifdef GU_RELEASE_PARENT_AUDIT\n  if(s==EFI_SUCCESS && !ReleaseAuditBound())s=EFI_NOT_READY;\n  if(s==EFI_SUCCESS && needed)'),
+                'if(s==EFI_SUCCESS && !FullExpected(&claimGraph,4))s=EFI_NOT_READY;\n#ifdef GU_RELEASE_PARENT_AUDIT\n  if(s==EFI_SUCCESS && !ReleaseAuditBound())s=EFI_NOT_READY;\n  if(s==EFI_SUCCESS)s=AuditOwnershipEnable(needed);',
+                'if(FALSE)s=EFI_NOT_READY;\n#ifdef GU_RELEASE_PARENT_AUDIT\n  if(s==EFI_SUCCESS && !ReleaseAuditBound())s=EFI_NOT_READY;\n  if(s==EFI_SUCCESS)s=AuditOwnershipEnable(needed);'),
         }
         roots = json.loads(overlay.read_text(encoding='utf-8'))['roots']
         for name, (source, old, new) in changes.items():

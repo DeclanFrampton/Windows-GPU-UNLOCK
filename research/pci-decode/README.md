@@ -683,3 +683,34 @@ cover both corrected and mismatch histories, all GPU/parent config words, every
 omitted parent byte, metadata/attribute drift, warnings/errors, foreign graph
 changes, recursion, TPL balance and final dispatch-drift diagnostics. These remain
 service-boundary observations, not atomicity or physical FLR qualification.
+
+The same host-only bridge now distinguishes Open's raw return from an observed
+claim. A frozen passive reference baseline must contain no existing reference
+from this image, including GET_PROTOCOL. Writing requires raw Open SUCCESS,
+the exact interface, unchanged passives and one fresh self-exclusive record
+with null controller and count1. Final query buffers remain held through Open,
+Enable and Close respectively, eliminating an intervening Free callback there.
+
+Cleanup uses a fresh successful bounded query for attribution, even when Open
+returned warning/error. It may close exactly our unambiguous record while leaving
+foreign references intact. Multiple/ambiguous same-image references, malformed
+or failed queries and unknown attribution are left untouched and reported with
+`ClaimMayRemain`; `Full.Owned=false` alone is not proof of cleanup. Close is invoked
+at most once. Its raw warning/error remains failure even if the reference
+disappeared, and SUCCESS with a remaining reference also fails. Cleanup reentry
+performs no further query or Close and preserves its first result.
+An unsuccessful baseline cannot be reused to acquire later in the same transaction.
+
+Observed flags distinguish an actual EFI_NOT_STARTED return from a phase that
+never ran. The first Free failure cannot be erased by later successful calls.
+Query pointers overlapping known private state, PCI interfaces, handle token
+addresses or the prepared graph are rejected without freeing borrowed storage.
+This is bounded defensive checking under the existing trusted pool/lifetime
+contract; it is not general memory provenance authentication.
+
+The actual-source RAM tests cover partial Open/Close effects, warnings/errors,
+wrong interfaces, absent/ambiguous claims, foreign+self mixtures, preexisting
+same-image passives,0/63/64 passive bounds, malformed/duplicate/borrowed query
+buffers and Free failures. These observations do not lock firmware state or
+prove absence after every subsequent callback. Wider display variants and
+physical/EFI qualification remain separate outstanding work.

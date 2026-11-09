@@ -52,6 +52,9 @@ static BOOLEAN OwnRecord(EFI_HANDLE h,const EFI_OPEN_PROTOCOL_INFORMATION_ENTRY 
   return Full.Owned && h==PreparedPlan.RtxPci && e->AgentHandle==Full.Image && !e->ControllerHandle &&
     e->Attributes==EFI_OPEN_PROTOCOL_EXCLUSIVE && e->OpenCount==1;
 }
+#ifdef GU_RELEASE_PARENT_AUDIT
+#include "release-ownership-audit.h"
+#endif
 static const UINT32 ColdOffsets[]={0,0x118128,0x118234,0x110100,0x1fa828,0x823804,0x82381c,0x823820,0x1183a4};
 static EFI_STATUS Note(const char *event,EFI_STATUS s) {
   EFI_STATUS written=Full.Log(Full.Context,event,s);return s==EFI_SUCCESS?written:s;
@@ -632,6 +635,7 @@ static EFI_STATUS RestoreDecode(VOID) {
   s=ReleaseAuditRestoreTarget(Full.Attributes,&targetAttributes);
   if(s!=EFI_SUCCESS)return s;
   Full.TargetAttributes=targetAttributes;
+  s=AuditOwnershipBegin();if(s!=EFI_SUCCESS)return Note("pci-decode-owner-baseline",s);
 #endif
 #ifdef GU_RELEASE_PARENT_AUDIT
   EFI_TPL old=ReleaseAudit.Raise(TPL_NOTIFY);
@@ -647,7 +651,7 @@ static EFI_STATUS RestoreDecode(VOID) {
   if(s==EFI_SUCCESS && !FullExpected(&claimGraph,4))s=EFI_NOT_READY;
 #ifdef GU_RELEASE_PARENT_AUDIT
   if(s==EFI_SUCCESS && !ReleaseAuditBound())s=EFI_NOT_READY;
-  if(s==EFI_SUCCESS)s=ReleaseAudit.Open(PreparedPlan.RtxPci,&PciGuid,(VOID **)&io,Full.Image,NULL,EFI_OPEN_PROTOCOL_EXCLUSIVE);
+  if(s==EFI_SUCCESS)s=AuditOwnershipAcquire(&io);
 #else
   if(s==EFI_SUCCESS)s=bs->OpenProtocol(PreparedPlan.RtxPci,&PciGuid,(VOID **)&io,Full.Image,NULL,EFI_OPEN_PROTOCOL_EXCLUSIVE);
 #endif
@@ -657,7 +661,11 @@ static EFI_STATUS RestoreDecode(VOID) {
 #else
   bs->RestoreTPL(old);
 #endif
+#ifdef GU_RELEASE_PARENT_AUDIT
+  if(s!=EFI_SUCCESS){AuditOwnershipFinish();return Note("pci-decode-claim-failed",s);}
+#else
   if(s!=EFI_SUCCESS)return s;
+#endif
   if(io!=PreparedPlan.RtxIo)s=EFI_COMPROMISED_DATA;
 #ifdef GU_RELEASE_PARENT_AUDIT
   if(s==EFI_SUCCESS)s=ReleaseAuditObserve(TRUE);
@@ -691,7 +699,7 @@ static EFI_STATUS RestoreDecode(VOID) {
   if(s==EFI_SUCCESS && !FullExpected(&claimGraph,4))s=EFI_NOT_READY;
 #ifdef GU_RELEASE_PARENT_AUDIT
   if(s==EFI_SUCCESS && !ReleaseAuditBound())s=EFI_NOT_READY;
-  if(s==EFI_SUCCESS && needed)s=ReleaseAudit.Devices[0].Attributes(io,EfiPciIoAttributeOperationEnable,needed,NULL);
+  if(s==EFI_SUCCESS)s=AuditOwnershipEnable(needed);
   ReleaseAudit.Restore(old);
 #else
   if(s==EFI_SUCCESS && needed)s=io->Attributes(io,EfiPciIoAttributeOperationEnable,needed,NULL);
@@ -708,7 +716,7 @@ static EFI_STATUS RestoreDecode(VOID) {
   if(s==EFI_SUCCESS)s=Cold(cold);
   if(s==EFI_SUCCESS && !Bytes(cold,Full.Cold,sizeof(cold)))s=EFI_NOT_READY;
 #ifdef GU_RELEASE_PARENT_AUDIT
-  EFI_STATUS closed=ReleaseAudit.Close(PreparedPlan.RtxPci,&PciGuid,Full.Image,NULL);
+  EFI_STATUS closed=AuditOwnershipFinish();
 #else
   EFI_STATUS closed=bs->CloseProtocol(PreparedPlan.RtxPci,&PciGuid,Full.Image,NULL);
 #endif
