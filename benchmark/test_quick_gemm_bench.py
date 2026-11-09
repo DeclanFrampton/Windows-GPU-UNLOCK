@@ -16,7 +16,9 @@ import quick_gemm_bench
 class TestQuickGemmBench(unittest.TestCase):
 
     def test_find_cuda_libraries_returns_tuple(self):
-        cuda, cublas = quick_gemm_bench.find_cuda_libraries()
+        with patch.object(quick_gemm_bench.sys, 'platform', 'linux'), \
+                patch.object(quick_gemm_bench.ctypes, 'CDLL', return_value=object()):
+            cuda, cublas = quick_gemm_bench.find_cuda_libraries()
         self.assertIsInstance((cuda, cublas), tuple)
 
     @patch("quick_gemm_bench.ctypes")
@@ -29,9 +31,14 @@ class TestQuickGemmBench(unittest.TestCase):
         mock_cuda.cuDeviceGet.return_value = 0
         mock_cuda.cuCtxCreate_v2.return_value = 0
         mock_cublas.cublasCreate_v2.return_value = 0
+        for name in ('cuDeviceGetName', 'cuMemAlloc_v2', 'cuCtxSynchronize',
+                     'cuMemFree_v2', 'cuCtxDestroy_v2'):
+            getattr(mock_cuda, name).return_value = 0
+        for name in ('cublasSetMathMode', 'cublasGemmEx', 'cublasDestroy_v2'):
+            getattr(mock_cublas, name).return_value = 0
 
         # Simulate time duration
-        mock_time.time.side_effect = [100.0, 101.0]
+        mock_time.perf_counter.side_effect = [100.0, 101.0]
 
         res = quick_gemm_bench.run_gemm_benchmark(
             mock_cuda, mock_cublas, device_index=0, matrix_size=1024, runs=5

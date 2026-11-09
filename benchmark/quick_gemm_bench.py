@@ -1,11 +1,13 @@
-"""Zero-dependency GEMM benchmark for Windows GPU unlock verification.
+"""Experimental compiler-free GEMM timings, not validated unlock evidence.
 
 Uses system CUDA driver (nvcuda.dll) and cuBLAS (cublas64_*.dll) via ctypes.
 Runs 4096 GEMM without requiring MSVC, nvcc compiler, or full CUDA Toolkit.
+Inputs and numerical results are not verified by this experimental runner.
 """
 
 import argparse
 import ctypes
+import math
 import os
 from pathlib import Path
 import sys
@@ -67,94 +69,89 @@ def find_cuda_libraries():
     return cuda_lib, cublas_lib
 
 
+def checked(status, operation):
+    """Never turn failed CUDA/cuBLAS operations into timing results."""
+    if status != 0:
+        raise RuntimeError(f"{operation} failed (status {status})")
+
+
+def validate_parameters(device_index, matrix_size, runs):
+    if type(device_index) is not int or device_index < 0:
+        raise ValueError("Device index must be a non-negative integer")
+    # Existing ctypes calls pass Python allocation sizes as C int. Refuse sizes
+    # that could truncate until the full API gains explicit ABI declarations.
+    maximum = math.isqrt(((1 << 31) - 1) // 4)
+    if type(matrix_size) is not int or not 1 <= matrix_size <= maximum:
+        raise ValueError(f"Matrix dimension must be an integer from 1 to {maximum}")
+    if type(runs) is not int or runs < 1:
+        raise ValueError("Benchmark iterations must be a positive integer")
+
+
 def run_gemm_benchmark(cuda, cublas, device_index=0, matrix_size=4096, runs=10):
-    """Run GEMM benchmark on specified GPU device and return TFLOPS."""
+    """Return timing only after successful calls; numerical verification is absent."""
+    validate_parameters(device_index, matrix_size, runs)
     dev = ctypes.c_int()
-    if cuda.cuDeviceGet(ctypes.byref(dev), device_index) != 0:
-        raise RuntimeError(f"cuDeviceGet failed for index {device_index}")
-
+    checked(cuda.cuDeviceGet(ctypes.byref(dev), device_index), "cuDeviceGet")
     name_buf = ctypes.create_string_buffer(256)
-    cuda.cuDeviceGetName(name_buf, 256, dev)
+    checked(cuda.cuDeviceGetName(name_buf, 256, dev), "cuDeviceGetName")
     device_name = name_buf.value.decode("utf-8", errors="replace")
-
-    ctx = ctypes.c_void_p()
-    if cuda.cuCtxCreate_v2(ctypes.byref(ctx), 0, dev) != 0:
-        raise RuntimeError(f"cuCtxCreate failed on {device_name}")
-
+    resources = []
     try:
+        ctx = ctypes.c_void_p()
+        checked(cuda.cuCtxCreate_v2(ctypes.byref(ctx), 0, dev), "cuCtxCreate_v2")
+        resources.append((cuda.cuCtxDestroy_v2, ctx, "cuCtxDestroy_v2"))
         handle = ctypes.c_void_p()
-        if cublas.cublasCreate_v2(ctypes.byref(handle)) != 0:
-            raise RuntimeError(f"cublasCreate failed on {device_name}")
+        checked(cublas.cublasCreate_v2(ctypes.byref(handle)), "cublasCreate_v2")
+        resources.append((cublas.cublasDestroy_v2, handle, "cublasDestroy_v2"))
+        checked(cublas.cublasSetMathMode(handle, 1), "cublasSetMathMode")
 
-        try:
-            cublas.cublasSetMathMode(handle, 1)  # CUBLAS_TENSOR_OP_MATH
+        n = matrix_size
+        d_a, d_b, d_c = ctypes.c_uint64(), ctypes.c_uint64(), ctypes.c_uint64()
+        for pointer, size in ((d_a, n * n * 2), (d_b, n * n * 2), (d_c, n * n * 4)):
+            checked(cuda.cuMemAlloc_v2(ctypes.byref(pointer), size), "cuMemAlloc_v2")
+            resources.append((cuda.cuMemFree_v2, pointer, "cuMemFree_v2"))
+        alpha, beta = ctypes.c_float(1.0), ctypes.c_float(0.0)
 
-            n = matrix_size
-            elem_count = n * n
-            bytes_f16 = elem_count * 2
-            bytes_f32 = elem_count * 4
-            flops = 2 * (n ** 3)
+        def gemm():
+            checked(cublas.cublasGemmEx(
+                handle, 0, 0, n, n, n,
+                ctypes.byref(alpha), d_a, 2, n, d_b, 2, n,
+                ctypes.byref(beta), d_c, 0, n, 68, -1), "cublasGemmEx")
 
-            cublas_compute_32f = 68
-            cuda_r_16f = 2
-            cuda_r_32f = 0
-            alpha = ctypes.c_float(1.0)
-            beta = ctypes.c_float(0.0)
-
-            d_a = ctypes.c_uint64()
-            d_b = ctypes.c_uint64()
-            d_c = ctypes.c_uint64()
-
-            cuda.cuMemAlloc_v2(ctypes.byref(d_a), bytes_f16)
-            cuda.cuMemAlloc_v2(ctypes.byref(d_b), bytes_f16)
-            cuda.cuMemAlloc_v2(ctypes.byref(d_c), bytes_f32)
-
-            try:
-                # Warmup
-                for _ in range(3):
-                    cublas.cublasGemmEx(
-                        handle, 0, 0, n, n, n,
-                        ctypes.byref(alpha),
-                        d_a, cuda_r_16f, n,
-                        d_b, cuda_r_16f, n,
-                        ctypes.byref(beta),
-                        d_c, cuda_r_32f, n,
-                        cublas_compute_32f, -1
-                    )
-                cuda.cuCtxSynchronize()
-
-                # Timed runs
-                t0 = time.time()
-                for _ in range(runs):
-                    cublas.cublasGemmEx(
-                        handle, 0, 0, n, n, n,
-                        ctypes.byref(alpha),
-                        d_a, cuda_r_16f, n,
-                        d_b, cuda_r_16f, n,
-                        ctypes.byref(beta),
-                        d_c, cuda_r_32f, n,
-                        cublas_compute_32f, -1
-                    )
-                cuda.cuCtxSynchronize()
-                t1 = time.time()
-
-                avg_sec = (t1 - t0) / runs
-                tflops = (flops / avg_sec) / 1e12
-                return {
-                    "device_index": device_index,
-                    "device_name": device_name,
-                    "matrix_size": matrix_size,
-                    "avg_ms": avg_sec * 1000.0,
-                    "tflops": tflops,
-                }
-            finally:
-                cuda.cuMemFree_v2(d_a)
-                cuda.cuMemFree_v2(d_b)
-                cuda.cuMemFree_v2(d_c)
-        finally:
-            cublas.cublasDestroy_v2(handle)
+        for _ in range(3):
+            gemm()
+        checked(cuda.cuCtxSynchronize(), "cuCtxSynchronize (warmup)")
+        t0 = time.perf_counter()
+        for _ in range(runs):
+            gemm()
+        checked(cuda.cuCtxSynchronize(), "cuCtxSynchronize (timed)")
+        elapsed = time.perf_counter() - t0
+        if not math.isfinite(elapsed) or elapsed <= 0:
+            raise RuntimeError("Non-positive or non-finite benchmark duration")
+        avg_sec = elapsed / runs
+        tflops = (2 * n ** 3 / avg_sec) / 1e12
+        if not math.isfinite(tflops) or tflops <= 0:
+            raise RuntimeError("Non-positive or non-finite benchmark throughput")
+        return {
+            "device_index": device_index,
+            "device_name": device_name,
+            "matrix_size": matrix_size,
+            "avg_ms": avg_sec * 1000.0,
+            "tflops": tflops,
+            "reference_checked": False,
+        }
     finally:
-        cuda.cuCtxDestroy_v2(ctx)
+        # Release every successfully acquired resource, even after one cleanup
+        # fails. Preserve an earlier operation error rather than masking it.
+        primary_error = sys.exc_info()[1]
+        cleanup_errors = []
+        for function, argument, operation in reversed(resources):
+            try:
+                checked(function(argument), operation)
+            except Exception as error:
+                cleanup_errors.append(str(error))
+        if cleanup_errors and primary_error is None:
+            raise RuntimeError("Cleanup failed: " + "; ".join(cleanup_errors))
 
 
 def main():
@@ -163,11 +160,17 @@ def main():
     parser.add_argument("--size", type=int, default=4096, help="Matrix dimension N")
     parser.add_argument("--runs", type=int, default=10, help="Benchmark iterations")
     args = parser.parse_args()
+    try:
+        if args.device < -1:
+            raise ValueError("Device must be -1 (all) or a non-negative index")
+        validate_parameters(0 if args.device == -1 else args.device, args.size, args.runs)
+    except ValueError as error:
+        parser.error(str(error))
 
     cuda, cublas = find_cuda_libraries()
     if not cuda or not cublas:
         print("[ERROR] Could not load CUDA driver or cuBLAS library.")
-        print("        Ensure NVIDIA drivers are installed.")
+        print("        An NVIDIA driver and a compatible cuBLAS library are required.")
         return 1
 
     if cuda.cuInit(0) != 0:
@@ -175,22 +178,32 @@ def main():
         return 1
 
     count = ctypes.c_int()
-    cuda.cuDeviceGetCount(ctypes.byref(count))
+    try:
+        checked(cuda.cuDeviceGetCount(ctypes.byref(count)), "cuDeviceGetCount")
+    except RuntimeError as error:
+        print(f"[ERROR] {error}")
+        return 1
     if count.value < 1:
         print("[ERROR] No NVIDIA devices found.")
         return 1
 
+    if args.device >= count.value:
+        print("[ERROR] Requested device index is outside the enumerated GPU set.")
+        return 1
     devices_to_test = range(count.value) if args.device < 0 else [args.device]
 
     print(f"Running {args.size}x{args.size} GEMM on {len(devices_to_test)} GPU(s)...")
+    print("[LIMIT] Timing only: inputs/results are not numerically verified; this is not unlock evidence.")
+    failed = False
     for idx in devices_to_test:
         try:
             res = run_gemm_benchmark(cuda, cublas, device_index=idx, matrix_size=args.size, runs=args.runs)
             print(f"GPU {res['device_index']} [{res['device_name']}]: "
                   f"{res['avg_ms']:.2f} ms | {res['tflops']:.2f} TFLOPS")
         except Exception as e:
+            failed = True
             print(f"GPU {idx} benchmark failed: {e}")
-    return 0
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":
