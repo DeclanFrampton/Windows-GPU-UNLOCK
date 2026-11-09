@@ -281,7 +281,13 @@ static EFI_STATUS FullLog(VOID *ctx,const char *event,EFI_STATUS status) {
   return EFI_SUCCESS;
 }
 static EFI_STATUS RunFull(int scenario) {
-  FullMode=FALSE;Check(Run(scenario==21?23:scenario==22?24:0)==EFI_SUCCESS,"hardware-validated Stage2A replay prerequisite");
+  FullMode=FALSE;
+  EFI_STATUS prepared=Run(scenario==21?23:scenario==22?24:0);
+#ifdef GU_RELEASE_AUDIT_TEST_CONSOLE_SETUP
+  if(prepared!=EFI_SUCCESS)return prepared;
+#else
+  Check(prepared==EFI_SUCCESS,"hardware-validated Stage2A replay prerequisite");
+#endif
   FullScenario=scenario;EnableCalls=ClaimCalls=CloseCalls=0;Phase=2;ColdCalls=0;LateChildDrift=FALSE;
 #ifdef GU_MULTI_DISPLAY_RELEASE
 #ifdef FX_EXTRA_DISPLAY_CHILD_COUNT
@@ -318,6 +324,9 @@ static EFI_STATUS RunFull(int scenario) {
   if(scenario==17)MouseMemory[0x1000]^=1;
 #endif
   FullMode=TRUE;
+#ifdef GU_RELEASE_AUDIT_TEST_FULL_SETUP
+  GU_RELEASE_AUDIT_TEST_FULL_SETUP();
+#endif
 #ifdef GU_AMD_RETAINED_MULTI_DISPLAY
   EFI_STATUS s=GuReleaseGop(LastTable,(VOID *)9999,AmdRetainedTestLog,NULL);
 #else

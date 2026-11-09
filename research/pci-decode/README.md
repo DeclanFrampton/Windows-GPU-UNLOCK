@@ -113,7 +113,7 @@ change GPU/parent state after an earlier read. Finite rechecks cannot exclude ev
 such window. Caller serialization, continued claim/lifetime retention and trusted
 firmware API behavior remain necessary; passing mocks does not prove physical safety.
 
-Production integration is still unresolved: full-release's CapturePermit rejects
+Shipped integration is still unresolved: default full-release's CapturePermit rejects
 the real mismatch before NVIDIA Stop, whereas its exclusive claim is acquired
 after Stop in RestoreDecode. A self-exclusive adapter cannot simply replace the
 contributor pre-step while NVIDIA still owns the protocol. This change does not
@@ -307,7 +307,7 @@ timed stability. It does not authenticate a previously unknown device or authori
 an unlock. The returned binding array and snapshot can feed GuDsEfiInitialize only
 after its independent held-claim/lifetime/serialization requirements are met.
 The composition test does this against RAM EFIAPI mocks; no firmware code executes.
-The production pre-NVIDIA-Stop integration issue described above is unchanged.
+The shipped pre-NVIDIA-Stop integration issue described above is unchanged.
 
 The collector uses bounded private per-image scratch rather than large automatic
 WORK/snapshot arrays. A guard rejects callback reentry even through a fresh context
@@ -556,7 +556,7 @@ Its derived target is not passed into `GuDsEfiInitializeRestore`, whose
 corrected-observed-before contract still applies. The separate initializer below
 retains the actual observations and explicitly derived target before reusing the
 research-only held-claim restoration algorithm.
-Production CapturePermit, Full.Attributes, RestoreDecode, final verification,
+Default CapturePermit, Full.Attributes, RestoreDecode, final verification,
 profile/proven admission and handoff are unchanged. Relaxing only CapturePermit
 would be incorrect: the existing restoration/final verification would still
 expect the original300 attributes. Exact driver/console-release qualification
@@ -625,3 +625,46 @@ fail assertions. Synthetic headers/configuration remain in the new test output;
 the runner never installs a LOCAL header, writes qualification evidence, accesses
 hardware or executes EFI. The two reads check stability at service-return
 boundaries, not atomicity or truthful behavior of arbitrary firmware.
+
+### Host-only bridge through actual release phases
+
+`GU_RELEASE_PARENT_AUDIT=1` connects typed parent observations to the actual
+`GuPrepareConsole` and `GuReleaseGop` source paths. It requires hosted compilation
+and `GU_DS_POST_STOP_CAPTURE=1`; freestanding EFI builds are rejected. No shipped
+builder, LOCAL admission or staging path enables it.
+
+The baseline is captured before the first console Disconnect, not after console
+preparation. Fresh full GPU/parent observations precede console/EDID/NVIDIA
+release, exclusive acquisition and MEMORY restoration. Audits run before the
+existing final console/code/config/graph/ownership checks, so their callbacks do
+not silently replace those checks. Effect dispatch is frozen, including cleanup.
+Shared operation guards reject nested preparation/release before static state
+can be reset, and each observation uses a distinct bounded single-use collector.
+
+The additional `GU_RELEASE_MISMATCH_RESEARCH=1` models actual raw2/cache300 before
+release, actual raw0/cache0 after NVIDIA release, and planned raw2/cache200 after
+MEMORY-only restoration. Complete original observations stay separate from the
+derived plan. `Full.Attributes` remains the actual300; `Full.TargetAttributes`
+becomes200 only after the actual released observation passes the plan predicate.
+The pair is rechecked before/after the claim and before Enable. A fresh restored
+GPU/parent observation must match the frozen original with only cached IO removed.
+Audit without this additional switch continues to refuse cache300 before any
+console release. This prototype does not invoke Disable(IO) or enable IO/BME.
+
+```powershell
+python -I research/pci-decode/test-release-parent-audit.py --clang C:\TOOLS\LLVM20\bin\clang.exe --mismatch --mutations --output research/pci-decode/build/release-parent-check-1
+```
+
+With a configured host compiler environment, this replays the actual production
+functions using synthetic LOCAL metadata, driver/PROM buffers and a parent PCI
+interface. Tests inject parent drift at each read, changed effect dispatch,
+claim loss, foreign graph edges, changed driver bindings and nested entry.
+Observed data must remain unchanged by target derivation, and raw0 paired with
+cache100/200/300 is refused. Deliberately broken guards must fail assertions.
+
+This is one synthetic non-aggregate, no-EDID-driver route. Aggregate/EDID/display
+variants, post-child typed parent verification with the existing exact status-clear
+policy, complete cleanup fault qualification, and a permitted invalid-target EFI
+link fixture remain outstanding. Existing legacy post-child verification is not
+broadened. No uncorrected physical Stop transition, new hardware support, ready
+package or authorization to install/execute follows from these RAM results.

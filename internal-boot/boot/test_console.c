@@ -251,6 +251,9 @@ static EFI_STATUS Run(int scenario) {
   if(scenario==8)OutBinding.Version=0x11;
   t.BootServices=&bs;t.ConsoleOutHandle=FX_Console;t.StandardErrorHandle=FX_Error;t.ConsoleInHandle=FX_Input;
   t.ConOut=&Text;t.StdErr=&Text;t.ConIn=&Keys;
+#ifdef GU_RELEASE_AUDIT_TEST_CONSOLE_SETUP
+  GU_RELEASE_AUDIT_TEST_CONSOLE_SETUP();
+#endif
   return GuPrepareConsole(&t,Log,NULL);
 }
 typedef struct {
