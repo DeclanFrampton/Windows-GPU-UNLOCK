@@ -15,6 +15,7 @@ import struct
 import subprocess
 import sys
 import tarfile
+import tempfile
 import urllib.request
 import zlib
 
@@ -75,38 +76,53 @@ def sha256_bytes(data: bytes) -> str:
 
 def download_with_progress(url: str, dest: Path, expected_hash: str = None) -> Path:
     dest.parent.mkdir(parents=True, exist_ok=True)
+    if dest.is_symlink():
+        raise ValueError('Refusing a symlinked cache file; choose a new cache directory.')
     if dest.exists():
         if expected_hash and sha256_file(dest) == expected_hash.lower():
             print(f"[*] Found verified cached: {dest.name}")
             return dest
         else:
-            print(f"[*] Cached file {dest.name} missing or invalid, re-downloading...")
-            dest.unlink(missing_ok=True)
+            raise ValueError('Existing cache file does not match the pinned archive; choose a new cache directory.')
 
     print(f"[+] Downloading {url} -> {dest.name}...")
     req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
-    tmp = dest.with_suffix('.download')
+    tmp = None
     try:
-        with urllib.request.urlopen(req, timeout=120) as resp, tmp.open('wb') as out:
-            total = int(resp.headers.get('Content-Length', 0))
-            downloaded = 0
-            while chunk := resp.read(1024 * 1024):
-                downloaded += len(chunk)
-                out.write(chunk)
-                if total > 0:
-                    pct = downloaded * 100 // total
-                    print(f"\r    Progress: {downloaded / 1024 / 1024:.1f} MB / {total / 1024 / 1024:.1f} MB ({pct}%)", end="", flush=True)
-                else:
-                    print(f"\r    Progress: {downloaded / 1024 / 1024:.1f} MB downloaded", end="", flush=True)
+        with tempfile.NamedTemporaryFile(mode='wb', prefix=dest.name + '.', suffix='.download',
+                                         dir=dest.parent, delete=False) as out:
+            tmp = Path(out.name)
+            with urllib.request.urlopen(req, timeout=120) as resp:
+                total = int(resp.headers.get('Content-Length', 0))
+                downloaded = 0
+                while chunk := resp.read(1024 * 1024):
+                    downloaded += len(chunk)
+                    out.write(chunk)
+                    if total > 0:
+                        pct = downloaded * 100 // total
+                        print(f"\r    Progress: {downloaded / 1024 / 1024:.1f} MB / {total / 1024 / 1024:.1f} MB ({pct}%)", end="", flush=True)
+                    else:
+                        print(f"\r    Progress: {downloaded / 1024 / 1024:.1f} MB downloaded", end="", flush=True)
         print()
         if expected_hash:
             h = sha256_file(tmp)
             if h != expected_hash.lower():
                 raise ValueError(f"Checksum mismatch for {dest.name}: expected {expected_hash}, got {h}")
-        tmp.replace(dest)
+        # Exclusive creation also refuses a destination created while downloading.
+        # The final path is never opened with truncation or replace semantics.
+        created = False
+        try:
+            with dest.open('xb') as target:
+                created = True
+                with tmp.open('rb') as verified:
+                    shutil.copyfileobj(verified, target)
+        except BaseException:
+            if created:
+                dest.unlink(missing_ok=True)
+            raise
         return dest
     finally:
-        if tmp.exists():
+        if tmp is not None:
             tmp.unlink(missing_ok=True)
 
 
@@ -243,7 +259,15 @@ def acquire_all_assets(target_dir: Path, cache_dir: Path = None, keep_cache: boo
     target_dir.mkdir(parents=True, exist_ok=True)
     if cache_dir is None:
         cache_dir = REPO_ROOT / '.cache' / 'gpu_unlock_downloads'
+    cache_created = not cache_dir.exists()
     cache_dir.mkdir(parents=True, exist_ok=True)
+    owned_downloads = []
+
+    def acquire_archive(url, path, digest):
+        existed = path.exists() or path.is_symlink()
+        download_with_progress(url, path, digest)
+        if not existed:
+            owned_downloads.append(path)
 
     print("==========================================================")
     print(" Windows GPU UNLOCK - Automated Asset Acquisition")
@@ -261,7 +285,7 @@ def acquire_all_assets(target_dir: Path, cache_dir: Path = None, keep_cache: boo
     # 2. Download and extract NVIDIA kernel module source
     print("\n[2/4] Acquiring NVIDIA open kernel module source archive...")
     src_archive = cache_dir / "NVIDIA-kernel-module-source-610.43.03.tar.xz"
-    download_with_progress(SRC_URL, src_archive, SRC_SHA256)
+    acquire_archive(SRC_URL, src_archive, SRC_SHA256)
     boot_assets = extract_kernel_module_assets(src_archive)
     for name, data in boot_assets.items():
         (target_dir / name).write_bytes(data)
@@ -270,15 +294,12 @@ def acquire_all_assets(target_dir: Path, cache_dir: Path = None, keep_cache: boo
     # 3. Download and extract nvidia-utils
     print("\n[3/4] Acquiring nvidia-utils package for GSP firmware...")
     utils_pkg = cache_dir / "nvidia-utils-610.43.03-1-x86_64_v3.pkg.tar.zst"
-    download_with_progress(UTILS_URL, utils_pkg, UTILS_SHA256)
-    temp_extract = cache_dir / "temp_extract"
-    temp_extract.mkdir(parents=True, exist_ok=True)
-    try:
-        gsp_data = extract_gsp_from_pkg(utils_pkg, temp_extract)
+    acquire_archive(UTILS_URL, utils_pkg, UTILS_SHA256)
+    # Never reuse/delete a caller's fixed temp_extract directory.
+    with tempfile.TemporaryDirectory(prefix='gpu-unlock-extract-', dir=cache_dir) as temporary:
+        gsp_data = extract_gsp_from_pkg(utils_pkg, Path(temporary))
         (target_dir / "gsp_ga10x.bin").write_bytes(gsp_data)
         print("    Wrote gsp_ga10x.bin")
-    finally:
-        shutil.rmtree(temp_extract, ignore_errors=True)
 
     # 4. Final Verification against assets.json
     print("\n[4/4] Verifying all assets against unlock/assets.json specification...")
@@ -299,8 +320,14 @@ def acquire_all_assets(target_dir: Path, cache_dir: Path = None, keep_cache: boo
             all_ok = False
 
     if not keep_cache:
-        print("\n[*] Cleaning up download cache to save disk space...")
-        shutil.rmtree(cache_dir, ignore_errors=True)
+        print("\n[*] Removing only source archives created by this run...")
+        for path in owned_downloads:
+            path.unlink(missing_ok=True)
+        if cache_created:
+            try:
+                cache_dir.rmdir()  # Remove only our directory, and only if empty.
+            except OSError:
+                pass
 
     if all_ok:
         print("\n==========================================================")
