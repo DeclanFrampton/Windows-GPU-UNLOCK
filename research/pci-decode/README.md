@@ -61,7 +61,30 @@ firmware, boot setting or physical media is accessed. Passing this model grants
 no hardware support, LOCAL write evidence or permission to run a correction.
 The optional mutation checks compile twenty-one deliberately broken copies in the ignored
 output directory and require the host tests to reject them. A compile failure does
-not count as detecting a broken guard. Original source files remain unchanged.
+not count as detecting a broken guard. Each mutant must exit with the host
+assertion code 1, no stdout, and exactly its pinned `FAIL <assertion>` stderr line.
+Crashes, other exit codes, missing/wrong assertions and extra output do not count.
+Original source files remain unchanged. Synthetic runner regressions can be run
+without compiling anything (capture regressions launch only the existing Python interpreter):
+
+```text
+python -I -B research/pci-decode/test_runner_evidence.py
+```
+
+The summary records each detected assertion and bounded runner-input identity:
+repository-relative hashes for local C/header files, the runner and shared GPU-path
+header; selected compiler-command hash, raw version-output hashes, explicit
+runner flags, host OS and Python version. Repository paths in flags use `<repo>`.
+Compiler version output is hashed, never copied into the summary, because even
+its first line can include private paths or values. Assertion evidence requires a
+final newline and normalizes CRLF only, not lone CR or Unicode line separators.
+Mutant output is captured and logged as raw bytes, before any text conversion.
+These observations do not cover all transitive headers, SDK/libraries/linker,
+environment or compiler wrapper internals. A wrapper hash identifies the wrapper,
+not its delegated compiler or injected flags. This is not complete build provenance.
+The Windows wrapper continues to add its separate family-test result; it does not
+turn a Linux run into native Windows validation. No new hardware/EFI or Windows
+qualification is implied by these evidence fields.
 
 ## Research UEFI adapter
 
