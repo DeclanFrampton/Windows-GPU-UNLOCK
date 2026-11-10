@@ -11,7 +11,7 @@ static UINT8 config[256];
 static UINT32 registers[0x1000000/4];
 static struct {
   UINTN allocs, frees, maps, unmaps, writes, pciwrites, pcireads, reads, delay;
-  int alloc_fail, map_fail, short_map, high_map, unaligned_map, unmap_fail, free_fail;
+  int exact_dma, alloc_fail, map_fail, short_map, high_map, unaligned_map, unmap_fail, free_fail;
   int mem_fail, config_fail, lost_after_flr, flr_seen, config_too_early, flr_write_error;
   UINT64 next_dma;
 } fake;
@@ -23,7 +23,15 @@ static EFI_STATUS EFIAPI allocate(EFI_PCI_IO_PROTOCOL *P, EFI_ALLOCATE_TYPE T,
  EFI_MEMORY_TYPE M, UINTN N, VOID **C, UINT64 A) {
   (void)P;(void)T;(void)M;assert(!A); fake.allocs++;
   if(fake.alloc_fail)return EFI_OUT_OF_RESOURCES;
-  *C=_aligned_malloc(N*4096,4096);return *C?EFI_SUCCESS:EFI_OUT_OF_RESOURCES;
+  *C=_aligned_malloc(N*4096,4096);
+  if(*C && fake.exact_dma && (UINT64)(UINTN)*C==fake.next_dma) {
+    /* Exact-boundary tests must move the CPU buffer, not the device address.
+     * Keep the colliding allocation live so its replacement cannot reuse it. */
+    VOID *collision=*C;
+    *C=_aligned_malloc(N*4096,4096);
+    _aligned_free(collision);
+  }
+  return *C?EFI_SUCCESS:EFI_OUT_OF_RESOURCES;
 }
 static EFI_STATUS EFIAPI freebuffer(EFI_PCI_IO_PROTOCOL *P, UINTN N, VOID *C) {
   (void)P;assert(N);fake.frees++;if(fake.free_fail)return EFI_DEVICE_ERROR;
@@ -114,10 +122,11 @@ int main(void) {
   assert(!EFI_ERROR(GuDmaFree(cpu,dma)) && fake.unmaps==1 && fake.frees==1);
   /* A CPU allocation address is not the device DMA address. Exercise the
    * actual rounded buffer end at the 32-bit device-address boundary. */
-  setup();fake.next_dma=0xfffff000ULL;
+  setup();fake.exact_dma=1;fake.next_dma=0xfffff000ULL;
   assert(!EFI_ERROR(GuDmaAllocate(4096,&cpu,&dma)) && dma==0xfffff000ULL);
+  assert(cpu && dma!=(UINT64)(UINTN)cpu);
   assert(!EFI_ERROR(GuDmaFree(cpu,dma)) && fake.unmaps==1 && fake.frees==1);
-  setup();fake.next_dma=0xfffff000ULL;cpu=NULL;dma=0;
+  setup();fake.exact_dma=1;fake.next_dma=0xfffff000ULL;cpu=NULL;dma=0;
   assert(EFI_ERROR(GuDmaAllocate(4097,&cpu,&dma)) && !cpu && !dma);
   assert(fake.maps==1 && fake.unmaps==1 && fake.frees==1 && !Gu.allocations);
   assert(!fake.writes && !fake.pciwrites && !fake.reads);
