@@ -73,7 +73,7 @@ VOID GuLogText(const char *Text) {
 #ifndef GU_HEADLESS_RESEARCH
   GuConsole(Text);
 #endif
-  if (!Report) {
+  if (!Report || LogFault) {
     LogError();
     return;
   }
@@ -85,7 +85,7 @@ VOID GuLogText(const char *Text) {
   }
 }
 VOID GuLogFlush(VOID) {
-  if (!Report) return;
+  if (!Report || LogFault) return;
   EFI_STATUS flush_status = Report->Flush(Report);
   if (flush_status != EFI_SUCCESS)
     LogError();
