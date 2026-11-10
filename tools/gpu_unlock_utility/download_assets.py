@@ -263,6 +263,21 @@ def acquire_all_assets(target_dir: Path, cache_dir: Path = None, keep_cache: boo
     cache_dir.mkdir(parents=True, exist_ok=True)
     owned_downloads = []
 
+    # Fast path: if all target assets are already present and verified, avoid redundant downloads
+    if ASSETS_JSON.exists():
+        try:
+            specs = json.loads(ASSETS_JSON.read_text())
+            if specs and all(
+                (target_dir / s['Name']).is_file()
+                and (target_dir / s['Name']).stat().st_size == s['Bytes']
+                and sha256_file(target_dir / s['Name']) == s['Sha256'].lower()
+                for s in specs
+            ):
+                print(f"[+] All {len(specs)} required firmware assets are already present and verified in {target_dir}.")
+                return True
+        except Exception:
+            pass
+
     def acquire_archive(url, path, digest):
         existed = path.exists() or path.is_symlink()
         download_with_progress(url, path, digest)
@@ -291,15 +306,33 @@ def acquire_all_assets(target_dir: Path, cache_dir: Path = None, keep_cache: boo
         (target_dir / name).write_bytes(data)
         print(f"    Wrote {name} ({len(data)} bytes)")
 
-    # 3. Download and extract nvidia-utils
-    print("\n[3/4] Acquiring nvidia-utils package for GSP firmware...")
-    utils_pkg = cache_dir / "nvidia-utils-610.43.03-1-x86_64_v3.pkg.tar.zst"
-    acquire_archive(UTILS_URL, utils_pkg, UTILS_SHA256)
-    # Never reuse/delete a caller's fixed temp_extract directory.
-    with tempfile.TemporaryDirectory(prefix='gpu-unlock-extract-', dir=cache_dir) as temporary:
-        gsp_data = extract_gsp_from_pkg(utils_pkg, Path(temporary))
-        (target_dir / "gsp_ga10x.bin").write_bytes(gsp_data)
-        print("    Wrote gsp_ga10x.bin")
+    # 3. Download and extract nvidia-utils (skip if gsp_ga10x.bin is already verified)
+    gsp_file = target_dir / "gsp_ga10x.bin"
+    gsp_spec = None
+    if ASSETS_JSON.exists():
+        try:
+            specs = json.loads(ASSETS_JSON.read_text())
+            gsp_spec = next((s for s in specs if s['Name'] == 'gsp_ga10x.bin'), None)
+        except Exception:
+            pass
+    gsp_valid = (
+        gsp_file.is_file()
+        and gsp_spec
+        and gsp_file.stat().st_size == gsp_spec['Bytes']
+        and sha256_file(gsp_file) == gsp_spec['Sha256'].lower()
+    )
+
+    if gsp_valid:
+        print("\n[3/4] gsp_ga10x.bin is already present and verified in target; skipping package download.")
+    else:
+        print("\n[3/4] Acquiring nvidia-utils package for GSP firmware...")
+        utils_pkg = cache_dir / "nvidia-utils-610.43.03-1-x86_64_v3.pkg.tar.zst"
+        acquire_archive(UTILS_URL, utils_pkg, UTILS_SHA256)
+        # Never reuse/delete a caller's fixed temp_extract directory.
+        with tempfile.TemporaryDirectory(prefix='gpu-unlock-extract-', dir=cache_dir) as temporary:
+            gsp_data = extract_gsp_from_pkg(utils_pkg, Path(temporary))
+            gsp_file.write_bytes(gsp_data)
+            print("    Wrote gsp_ga10x.bin")
 
     # 4. Final Verification against assets.json
     print("\n[4/4] Verifying all assets against unlock/assets.json specification...")

@@ -505,13 +505,9 @@ function Deploy-ToUsb([string]$Letter) {
         Copy-Item -LiteralPath $Script:ReleaseEfi -Destination (Join-Path $targetBootDir "BOOTX64.EFI") -Force
 
         # Ensure Assets are present; auto-download if missing
-        $localAssets = if (Test-Path -LiteralPath $Script:AssetsPath) { @(Get-ChildItem -LiteralPath $Script:AssetsPath -Filter "*.bin" -File) } else { @() }
-        if ($localAssets.Count -lt 5) {
+        if (-not (Test-FirmwareAssetsVerified)) {
             Write-Host "[*] Firmware assets missing from assets/. Automatically acquiring now..." -ForegroundColor Yellow
-            $downScript = Join-Path $scriptDir "download_assets.py"
-            if (Test-Path -LiteralPath $downScript) {
-                & python -I $downScript --output $Script:AssetsPath
-            }
+            Invoke-DownloadAssets | Out-Null
         }
 
         # Copy Assets
@@ -940,7 +936,9 @@ function Build-And-Stage-Local-Unlock([string]$Letter) {
     }
 
     # Ensure firmware assets exist
-    Invoke-DownloadAssets | Out-Null
+    if (-not (Test-FirmwareAssetsVerified)) {
+        Invoke-DownloadAssets | Out-Null
+    }
 
     $newMachineScript = Join-Path $Script:RepoRoot "research\profile\new-machine.ps1"
     Write-Host "[*] Generating local profile, running host verification tests, and building Headless USB package..." -ForegroundColor Cyan
@@ -1049,15 +1047,36 @@ function Invoke-CompareCompatibilityReports {
     return ($res -join "`r`n")
 }
 
+function Test-FirmwareAssetsVerified {
+    if (-not (Test-Path -LiteralPath $Script:AssetsJson)) { return $false }
+    try {
+        $specs = Get-Content -LiteralPath $Script:AssetsJson -Raw | ConvertFrom-Json
+        foreach ($spec in $specs) {
+            $f = Join-Path $Script:AssetsPath $spec.Name
+            if (-not (Test-Path -LiteralPath $f)) { return $false }
+            if ((Get-Sha256Hash $f) -ne $spec.Sha256.ToLowerInvariant()) { return $false }
+        }
+        return $true
+    }
+    catch {
+        return $false
+    }
+}
+
 function Invoke-DownloadAssets {
+    if (Test-FirmwareAssetsVerified) {
+        Write-Host "[+] All 5 required firmware assets are already present and verified in assets/." -ForegroundColor Green
+        return "All 5 required GA102 firmware assets verified in assets/."
+    }
     $script = Join-Path $scriptDir "download_assets.py"
     if (-not (Test-Path -LiteralPath $script)) {
         throw "download_assets.py not found at $script"
     }
     Write-Host "[+] Executing automated firmware asset download and extraction..." -ForegroundColor Yellow
-    & python -I $script --output $Script:AssetsPath
+    $res = & python -I $script --output $Script:AssetsPath 2>&1
     if ($LASTEXITCODE -ne 0) {
-        throw "Automated asset acquisition exited with code $LASTEXITCODE."
+        $detail = ($res -join " ")
+        throw "Automated asset acquisition failed: $detail"
     }
     return "All 5 firmware assets downloaded, verified, and placed into assets/."
 }
