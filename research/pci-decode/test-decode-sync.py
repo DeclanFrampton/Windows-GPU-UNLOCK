@@ -66,6 +66,7 @@ def main():
     flags = [args.clang, '-std=c11', '-O1', '-Wall', '-Wextra', '-Werror', '-D_CRT_SECURE_NO_WARNINGS',
              '-I', str(ROOT / 'deps/edk2/MdePkg/Include'), '-I', str(ROOT / 'deps/edk2/MdePkg/Include/X64'), '-I', str(HERE)]
     identity = collect_identity(args.clang, flags)
+    identity['stage_extra_flags'] = {'workspace-compile': ['-DGU_DS_HOST_WORKSPACE_TEST']}
     commands = [
         [*flags, str(HERE / 'test_decode_sync.c'), str(HERE / 'decode-sync.c'), str(HERE / 'snapshot.c'), '-o', str(executable)],
         [str(executable)],
@@ -75,9 +76,15 @@ def main():
         [*flags, str(HERE / 'test_efi_capture.c'), str(HERE / 'efi-capture.c'), str(HERE / 'efi-adapter.c'),
          str(HERE / 'decode-sync.c'), str(HERE / 'snapshot.c'), '-o', str(output / 'efi-capture-host.exe')],
         [str(output / 'efi-capture-host.exe')],
+        [*flags, str(HERE / 'test_efi_owned.c'), str(HERE / 'efi-owned.c'), str(HERE / 'efi-capture.c'),
+         str(HERE / 'efi-adapter.c'), str(HERE / 'decode-sync.c'), str(HERE / 'snapshot.c'), '-o', str(output / 'efi-owned-host.exe')],
+        [str(output / 'efi-owned-host.exe')],
+        [*flags, '-DGU_DS_HOST_WORKSPACE_TEST', str(HERE / 'test_efi_adapter.c'), str(HERE / 'efi-adapter.c'),
+         str(HERE / 'decode-sync.c'), str(HERE / 'snapshot.c'), '-o', str(output / 'workspace-host.exe')],
+        [str(output / 'workspace-host.exe')],
     ]
     results = []
-    for name, command in zip(('compile', 'run', 'adapter-compile', 'adapter-run','capture-compile','capture-run'), commands):
+    for name, command in zip(('compile', 'run', 'adapter-compile', 'adapter-run','capture-compile','capture-run','owned-compile','owned-run','workspace-compile','workspace-run'), commands):
         result = subprocess.run(command, capture_output=True, text=True, cwd=ROOT, timeout=30)
         (output / f'{name}.log').write_text(result.stdout + result.stderr)
         if result.returncode:
@@ -94,8 +101,8 @@ def main():
             'compare-only-first-config-dword': [('for(UINTN i=0;i<64;i++)if(a->Config[i]!=b->Config[i])return FALSE;',
                                                 'if(a->Config[0]!=b->Config[0])return FALSE;')],
             'do-not-record-write-attempt': [('t->Attempted=TRUE;', 't->Attempted=FALSE;')],
-            'ignore-final-log-failure': [('if(o.Log(o.Context,"decode-verify-full-snapshot")!=TRUE)return Finish(t,GU_DS_LOG_FAILED);',
-                                         '(void)o.Log(o.Context,"decode-verify-full-snapshot");')],
+            'ignore-final-log-failure': [('if(o->Log(o->Context,"decode-verify-full-snapshot")!=TRUE)return Finish(t,GU_DS_LOG_FAILED);',
+                                         '(void)o->Log(o->Context,"decode-verify-full-snapshot");')],
         }
         readonly_names={'ignore-parent-bus-cycles','ignore-late-parent-drift','compare-only-first-config-dword'}
         mutation_specs = [(name, 'snapshot.c' if name in readonly_names else 'decode-sync.c', 'test_decode_sync.c',
@@ -134,11 +141,25 @@ def main():
                                [str(HERE / 'efi-adapter.c'),str(HERE / 'decode-sync.c')],
                                [('if(!GuDsMsi3080Ti(s))return FALSE;', 'if(!GuDsMsi3080Ti(s) && FALSE)return FALSE;')]))
         expected_assertions = {
+            'accept-managed-before-exclusive': 'unsafe preclaim view never calls EXCLUSIVE',
+            'free-passive-view-before-open': 'no callback between passive view and Open',
+            'ignore-close-error': 'every service warning/error prevents successful lifecycle',
+            'ignore-final-passive-count': 'managing/borrowed/partial/close/state failure refuses',
+            'omit-final-postcapture-owner-view': 'managing/borrowed/partial/close/state failure refuses',
+            'forget-earlier-postclose-failure': 'every service warning/error prevents successful lifecycle',
+            'allow-owned-run-reuse': 'completed transaction cannot repeat',
+            'allow-fresh-core-workspace-reentry': 'attempt recorded before write callback',
+            'allow-fresh-adapter-run': 'fresh context and transaction cannot reenter active adapter',
+            'allow-fresh-adapter-init': 'fresh initializer cannot enter shared adapter workspace',
+            'free-private-adapter-context': 'only a query-owned allocation is freed exactly once',
+            'free-private-read-disable-scratch': 'only a query-owned allocation is freed exactly once',
+            'free-private-core-policy': 'only a query-owned allocation is freed exactly once',
+
             'accept-capture-interface-replacement': 'invalid or changed capture is refused',
             'accept-managing-co-owner': 'fault refuses successful correction',
             'accept-missing-self-claim': 'fault refuses successful correction',
             'accept-partial-locate-consumption': 'fault refuses successful correction',
-            'allow-adapter-reinitialization': 'Init cannot reset a running adapter',
+            'allow-adapter-reinitialization': 'spent adapter cannot be initialized outside callbacks',
             'broaden-msi-identity': 'MSI near-miss refuses before protocol or write callbacks',
             'check-only-last-capture-capability': 'invalid or changed capture is refused',
             'compare-only-first-config-dword': 'unsafe snapshot or callback result rejected',
@@ -156,6 +177,29 @@ def main():
             'same-sentinel-in-both-scans': 'fault refuses successful correction',
             'warning-as-success': 'unsafe snapshot or callback result rejected',
         }
+        owned_changes={
+            'accept-managed-before-exclusive': [('if(e->Attributes!=1 && e->Attributes!=2 && e->Attributes!=4)', 'if(FALSE)')],
+            'free-passive-view-before-open': [('r->OpenInvoked=TRUE;r->ClaimMayRemain=TRUE;', 'Drop(w,held);held=NULL;\n  r->OpenInvoked=TRUE;r->ClaimMayRemain=TRUE;')],
+            'ignore-close-error': [('if(r->CloseStatus!=EFI_SUCCESS && (result==GU_DO_FIXED || result==GU_DO_ALREADY_CONSISTENT))result=GU_DO_CLOSE_FAILED;', '(void)r->CloseStatus;')],
+            'ignore-final-passive-count': [('Key(e,&w->Passive[j]) && e->OpenCount==w->Passive[j].OpenCount', 'Key(e,&w->Passive[j])')],
+            'omit-final-postcapture-owner-view': [('s=View(w,1,FALSE,&held);r->ClaimMayRemain=s!=EFI_SUCCESS;', '')],
+            'forget-earlier-postclose-failure': [('beforeAfterStatus!=EFI_SUCCESS || ', ''),('EFI_STATUS beforeAfterStatus=s;', 'EFI_STATUS beforeAfterStatus=s;(void)beforeAfterStatus;')],
+            'allow-owned-run-reuse': [('Busy || t->Started!=FALSE', 'Busy')],
+        }
+        mutation_specs += [(name,'efi-owned.c','test_efi_owned.c',[str(HERE / filename) for filename in
+            ('efi-capture.c','efi-adapter.c','decode-sync.c','snapshot.c')],replacements) for name,replacements in owned_changes.items()]
+        mutation_specs.append(('allow-fresh-core-workspace-reentry','decode-sync.c','test_decode_sync.c',
+            [str(HERE/'snapshot.c')],[('Busy || t->Started!=FALSE','t->Started!=FALSE')]))
+        workspace_changes={
+            'allow-fresh-adapter-run': [('  if(c && t && WorkspaceBusy)return GU_DS_REUSED;\n','')],
+            'allow-fresh-adapter-init': [('  if(WorkspaceBusy)return EFI_ALREADY_STARTED;\n','')],
+            'free-private-adapter-context': [('Overlap(p,n,c,sizeof(*c)) || ','')],
+            'free-private-read-disable-scratch': [('Overlap(p,n,ReadSnapshots,sizeof(ReadSnapshots)) || Overlap(p,n,&DisableSnapshot,sizeof(DisableSnapshot)) ||\n','')],
+            'free-private-core-policy': [('GuDecodeWorkspaceOverlap(p,n) ||\n','')],
+        }
+        workspace_names=set(workspace_changes)
+        mutation_specs += [(name,'efi-adapter.c','test_efi_adapter.c',
+            [str(HERE/'decode-sync.c'),str(HERE/'snapshot.c')],replacements) for name,replacements in workspace_changes.items()]
         for name, source_file, test_file, support, replacements in mutation_specs:
             broken = (HERE / source_file).read_text()
             for before, after in replacements:
@@ -167,7 +211,8 @@ def main():
             mutated = folder / source_file
             mutated.write_text(broken)
             binary = folder / 'broken-host.exe'
-            compiled = subprocess.run([*flags, str(HERE / test_file), str(mutated), *support, '-o', str(binary)],
+            extra=['-DGU_DS_HOST_WORKSPACE_TEST'] if name in workspace_names else []
+            compiled = subprocess.run([*flags, *extra, str(HERE / test_file), str(mutated), *support, '-o', str(binary)],
                                       capture_output=True, text=True, cwd=ROOT, timeout=30)
             (folder / 'compile.log').write_text(compiled.stdout + compiled.stderr)
             if compiled.returncode:
@@ -177,7 +222,8 @@ def main():
                 evidence = require_mutation_detection(compiled, tested, expected_assertions[name])
             except RuntimeError as error:
                 raise RuntimeError(f'{name}: {error}') from error
-            mutations.append({'name': name, 'compiled': True, 'detected': True, **evidence})
+            mutations.append({'name': name, 'compiled': True, 'detected': True,
+                              'extra_flags': extra, **evidence})
         print(f'PASS {len(mutations)} compiled guard mutations detected')
     (output / 'summary.json').write_text(json.dumps({
         'research_only': True, 'hardware_access': False, 'efi_executed': False,
